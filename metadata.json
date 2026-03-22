@@ -1,0 +1,5 @@
+{
+  "name": "Structured Credit CRM",
+  "description": "A CRM system to centralize information, monitoring, and events for structured credit operations, built with React and Tailwind CSS.",
+  "requestFramePermissions": []
+}
