@@ -197,29 +197,46 @@ const OriginationPipelinePage: React.FC<OriginationPipelinePageProps> = ({ onNav
           showToast('Por favor, selecione um Master Group', 'error');
           return;
         }
+        
+        const tempId = Date.now();
+        const mgName = masterGroups.find(m => m.id === data.masterGroupId)?.name || 'N/A';
+        const tempOp: StructuringOperation = {
+          ...data,
+          id: tempId,
+          masterGroupId: data.masterGroupId,
+          masterGroupName: mgName,
+          temperature: data.temperature || 'Morno',
+          risk: data.risk || 'High Yield',
+          isActive: true,
+          stages: STAGES.map((s, i) => ({ id: Math.random(), name: s, order_index: i, isCompleted: false })),
+          series: data.series || [],
+        };
+        
+        setOperations(prev => [tempOp, ...prev]);
+        setIsFormOpen(false);
+        setOperationToEdit(null);
+        showToast('Criando operação...', 'success');
+
         const response = await fetch(`${apiUrl}/api/master-groups/${data.masterGroupId}/structuring-operations`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(data),
         });
-        if (!response.ok) throw new Error('Falha ao criar operação');
+        if (!response.ok) {
+           setOperations(prev => prev.filter(o => o.id !== tempId));
+           throw new Error('Falha ao criar operação');
+        }
         await fetchOperations();
         showToast('Operação criada com sucesso', 'success');
       }
-      setIsFormOpen(false);
-      setOperationToEdit(null);
     } catch (error) {
       showToast('Erro ao salvar operação', 'error');
     }
   };
 
   const handleSaveMasterGroup = async (data: Omit<MasterGroup, 'id' | 'operations' | 'structuringOperations' | 'contacts' | 'events'>) => {
-    const tempId = Date.now();
     try {
-      setMasterGroups(prev => [...prev, { id: tempId, name: data.name }]);
-      setIsMasterGroupFormOpen(false);
-      showToast('Master Group adicionado. Sincronizando...', 'success');
-
+      showToast('Criando Master Group...', 'success');
       const response = await fetch(`${apiUrl}/api/master-groups`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -228,11 +245,12 @@ const OriginationPipelinePage: React.FC<OriginationPipelinePageProps> = ({ onNav
       if (!response.ok) throw new Error('Falha ao criar Master Group');
       const responseData = await response.json();
       
-      setMasterGroups(prev => prev.map(mg => mg.id === tempId ? { id: responseData.id || tempId, name: data.name } : mg));
+      setMasterGroups(prev => [...prev, { id: responseData.id, name: data.name }]);
+      setIsMasterGroupFormOpen(false);
+      showToast('Master Group adicionado.', 'success');
     } catch (error) {
       showToast('Erro ao criar Master Group', 'error');
-      setMasterGroups(prev => prev.filter(mg => mg.id !== tempId));
-      fetchMasterGroups();
+      setIsMasterGroupFormOpen(false);
     }
   };
 

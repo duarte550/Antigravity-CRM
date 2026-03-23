@@ -290,8 +290,8 @@ def add_structuring_operation(mg_id):
     try:
         data = request.json
         with conn.cursor() as cursor:
-            cursor.execute("INSERT INTO cri_cra_dev.crm.structuring_operations (master_group_id, name, stage, liquidation_date, risk, temperature) VALUES (?, ?, ?, ?, ?, ?)",
-                           (mg_id, data.get('name'), data.get('stage', 'Conversa Inicial'), parse_iso_date(data.get('liquidationDate')), data.get('risk'), data.get('temperature')))
+            cursor.execute("INSERT INTO cri_cra_dev.crm.structuring_operations (master_group_id, name, stage, liquidation_date, risk, temperature, analyst, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                           (mg_id, data.get('name'), data.get('stage', 'Conversa Inicial'), parse_iso_date(data.get('liquidationDate')), data.get('risk'), data.get('temperature'), data.get('analyst'), True))
             cursor.execute("SELECT id FROM cri_cra_dev.crm.structuring_operations ORDER BY id DESC LIMIT 1")
             new_id = cursor.fetchone().id
             
@@ -324,7 +324,9 @@ def get_structuring_operations():
                 so['masterGroupName'] = so.get('master_group_name')
                 so['risk'] = so.get('risk')
                 so['temperature'] = so.get('temperature')
-                so['isActive'] = bool(so.get('is_active', True))
+                so['analyst'] = so.get('analyst')
+                is_active_val = so.get('is_active')
+                so['isActive'] = True if is_active_val is None else bool(is_active_val)
                 
                 cursor.execute("SELECT * FROM cri_cra_dev.crm.structuring_operation_stages WHERE structuring_operation_id = ? ORDER BY order_index", (so['id'],))
                 so['stages'] = [format_row(r, cursor) for r in cursor.fetchall()]
@@ -385,7 +387,9 @@ def manage_structuring_operation(so_id):
                 so['masterGroupName'] = so.get('master_group_name')
                 so['risk'] = so.get('risk')
                 so['temperature'] = so.get('temperature')
-                so['isActive'] = bool(so.get('is_active', True))
+                so['analyst'] = so.get('analyst')
+                is_active_val = so.get('is_active')
+                so['isActive'] = True if is_active_val is None else bool(is_active_val)
                 
                 cursor.execute("SELECT * FROM cri_cra_dev.crm.structuring_operation_stages WHERE structuring_operation_id = ? ORDER BY order_index", (so_id,))
                 so['stages'] = [format_row(r, cursor) for r in cursor.fetchall()]
@@ -432,18 +436,42 @@ def manage_structuring_operation(so_id):
         elif request.method == 'PUT':
             data = request.json
             with conn.cursor() as cursor:
+                user_name = data.get('userName', 'Sistema')
+                cursor.execute("SELECT risk, temperature, analyst FROM cri_cra_dev.crm.structuring_operations WHERE id=?", (so_id,))
+                old_row = cursor.fetchone()
+                old_op = format_row(old_row, cursor) if old_row else {}
+                
+                cursor.execute("SELECT SUM(volume) as total_vol FROM cri_cra_dev.crm.structuring_operation_series WHERE structuring_operation_id=?", (so_id,))
+                old_vol_row = cursor.fetchone()
+                old_vol = float(old_vol_row.total_vol) if old_vol_row and old_vol_row.total_vol else 0.0
+
                 is_active_val = data.get('isActive')
                 if is_active_val is None:
                     is_active_val = True
 
-                cursor.execute("UPDATE cri_cra_dev.crm.structuring_operations SET name=?, stage=?, liquidation_date=?, risk=?, temperature=?, is_active=? WHERE id=?",
-                               (data.get('name'), data.get('stage'), parse_iso_date(data.get('liquidationDate')), data.get('risk'), data.get('temperature'), is_active_val, so_id))
+                cursor.execute("UPDATE cri_cra_dev.crm.structuring_operations SET name=?, stage=?, liquidation_date=?, risk=?, temperature=?, is_active=?, analyst=? WHERE id=?",
+                               (data.get('name'), data.get('stage'), parse_iso_date(data.get('liquidationDate')), data.get('risk'), data.get('temperature'), is_active_val, data.get('analyst'), so_id))
                                
                 cursor.execute("DELETE FROM cri_cra_dev.crm.structuring_operation_series WHERE structuring_operation_id=?", (so_id,))
                 series = data.get('series', [])
+                new_vol = 0.0
                 for s in series:
+                    vol = float(s.get('volume', 0.0) or 0.0)
+                    new_vol += vol
                     cursor.execute("INSERT INTO cri_cra_dev.crm.structuring_operation_series (structuring_operation_id, name, rate, indexer, volume, fund) VALUES (?, ?, ?, ?, ?, ?)",
-                                   (so_id, s.get('name', 'Série Única'), s.get('rate'), s.get('indexer'), s.get('volume'), s.get('fund')))
+                                   (so_id, s.get('name', 'Série Única'), s.get('rate'), s.get('indexer'), vol, s.get('fund')))
+                
+                # generate change list
+                changes = []
+                if old_op.get('risk') != data.get('risk'): changes.append(f"Risco: {old_op.get('risk') or 'N/A'} -> {data.get('risk') or 'N/A'}")
+                if old_op.get('temperature') != data.get('temperature'): changes.append(f"Temperatura: {old_op.get('temperature') or 'N/A'} -> {data.get('temperature') or 'N/A'}")
+                if old_op.get('analyst') != data.get('analyst'): changes.append(f"Analista: {old_op.get('analyst') or 'N/A'} -> {data.get('analyst') or 'N/A'}")
+                if old_vol != new_vol: changes.append(f"Volume: R$ {old_vol} -> R$ {new_vol}")
+                
+                if changes:
+                    msg = "Alterações detectadas: " + " | ".join(changes)
+                    cursor.execute("INSERT INTO cri_cra_dev.crm.events (structuring_operation_id, date, type, title, description, is_origination, registered_by) VALUES (?, ?, 'Atualização Automática', 'Alteração de Atributos', ?, ?, ?)", 
+                                   (so_id, datetime.now(), msg, True, user_name))
                                    
                 # Update task rules
                 if 'taskRules' in data:

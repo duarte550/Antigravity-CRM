@@ -146,6 +146,20 @@ const StructuringOperationDetailsPage: React.FC<StructuringOperationDetailsPageP
     }
   };
 
+  const handleDeleteOperation = async () => {
+    if (!confirm('Tem certeza que deseja DELETAR esta operação estruturada? Esta ação não pode ser desfeita.')) return;
+    try {
+       const response = await fetch(`${apiUrl}/api/structuring-operations/${operationId}`, {
+         method: 'DELETE',
+       });
+       if (!response.ok) throw new Error('Falha ao deletar operação');
+       showToast('Operação deletada', 'success');
+       onNavigate(Page.ORIGINATION_PIPELINE);
+    } catch (e) {
+       showToast('Erro ao deletar operação', 'error');
+    }
+  };
+
   const handleSaveStages = async () => {
     try {
       const response = await fetch(`${apiUrl}/api/structuring-operations/${operationId}/stages`, {
@@ -307,7 +321,17 @@ const StructuringOperationDetailsPage: React.FC<StructuringOperationDetailsPageP
           </div>
         </div>
         
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 p-6 bg-gray-50 dark:bg-gray-800/50">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 p-6 bg-gray-50 dark:bg-gray-800/50">
+          <div>
+            <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Analista</p>
+            <input
+              type="text"
+              placeholder="Ex: João Silva"
+              value={operation.analyst || ''}
+              onChange={(e) => handleUpdateOperation({ analyst: e.target.value })}
+              className="mt-1 w-full text-sm border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+            />
+          </div>
           <div>
             <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Risco</p>
             <select
@@ -348,6 +372,20 @@ const StructuringOperationDetailsPage: React.FC<StructuringOperationDetailsPageP
               {operation.stages?.filter(s => s.isCompleted).length || 0} / {operation.stages?.length || 0}
             </p>
           </div>
+        </div>
+        <div className="bg-gray-50 dark:bg-gray-800/50 px-6 pb-6 pt-0 border-b border-gray-200 dark:border-gray-700 flex justify-end gap-3">
+             {operation.isActive !== false ? (
+                 <button onClick={() => handleUpdateOperation({ isActive: false })} className="text-sm px-3 py-1.5 border border-red-200 text-red-600 hover:bg-red-50 rounded transition-colors dark:border-red-900/50 dark:text-red-400 dark:hover:bg-red-900/20">
+                     Inativar Operação (Cair)
+                 </button>
+             ) : (
+                 <button onClick={() => handleUpdateOperation({ isActive: true })} className="text-sm px-3 py-1.5 border border-green-200 text-green-600 hover:bg-green-50 rounded transition-colors dark:border-green-900/50 dark:text-green-400 dark:hover:bg-green-900/20">
+                     Reativar Operação
+                 </button>
+             )}
+             <button onClick={handleDeleteOperation} className="text-sm px-3 py-1.5 bg-red-600 text-white hover:bg-red-700 rounded transition-colors shadow-sm font-medium">
+                 Deletar Operação Definitivamente
+             </button>
         </div>
       </div>
 
