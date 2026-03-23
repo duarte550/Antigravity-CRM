@@ -203,6 +203,28 @@ const StructuringOperationDetailsPage: React.FC<StructuringOperationDetailsPageP
           if (!response.ok) throw new Error('Falha ao atualizar etapas');
           await fetchOperation();
       }
+
+      // Auto-generate event if stage is being completed
+      if (!stage.isCompleted) {
+        const eventPayload = {
+          title: `Etapa Concluída: ${stage.name}`,
+          description: `A etapa '${stage.name}' foi marcada como concluída no Kanban.`,
+          type: 'Atualização de Pipeline',
+          date: new Date().toISOString(),
+          isOrigination: true
+        };
+        if (pushToGenericQueue) {
+            pushToGenericQueue(`${apiUrl}/api/structuring-operations/${operationId}/events`, 'POST', eventPayload);
+            setOperation(prev => prev ? { ...prev, events: [{...eventPayload, id: Date.now()} as any, ...(prev.events || [])] } : null);
+        } else {
+            fetch(`${apiUrl}/api/structuring-operations/${operationId}/events`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(eventPayload),
+            }).then(() => fetchOperation()).catch(console.error);
+        }
+        showToast(`Evento automático gerado: Etapa ${stage.name}`, 'success');
+      }
     } catch (e) {
       showToast('Erro ao marcar etapa', 'error');
       // Rollback (simplified)
@@ -358,13 +380,23 @@ const StructuringOperationDetailsPage: React.FC<StructuringOperationDetailsPageP
             </select>
           </div>
           <div>
-            <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Volume Total</p>
-            <p className="mt-1 font-semibold text-gray-900 dark:text-white text-lg">
-               {operation.series && operation.series.length > 0 
-                 ? `R$ ${(operation.series.reduce((acc, s) => acc + (s.volume || 0), 0) / 1000000).toFixed(2)}M`
-                 : 'N/A'
-               }
-            </p>
+            <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Volume Total (R$)</p>
+            {operation.series && operation.series.length > 0 ? (
+                <p className="mt-1 font-semibold text-gray-900 dark:text-white text-lg">
+                  R$ {(operation.series.reduce((acc, s) => acc + (s.volume || 0), 0) / 1000000).toFixed(2)}M
+                </p>
+            ) : (
+                <input
+                  type="number"
+                  value={''}
+                  onChange={(e) => {
+                     const newVol = Number(e.target.value);
+                     handleUpdateOperation({ series: [{ name: 'Série Única', volume: newVol }] });
+                  }}
+                  className="mt-1 w-full text-sm border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                  placeholder="Ex: 50000000"
+                />
+            )}
           </div>
           <div>
             <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Etapas Concluídas</p>
@@ -389,6 +421,50 @@ const StructuringOperationDetailsPage: React.FC<StructuringOperationDetailsPageP
         </div>
       </div>
 
+      {/* Secão Separada para Eventos Gerais */}
+      <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 mb-6">
+          <div className="flex justify-between items-center mb-4">
+              <h2 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                 <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" /></svg>
+                 Eventos Gerais / Ad-hoc
+              </h2>
+              <div className="flex gap-2">
+                 <button onClick={() => { setSelectedStageId(null); setIsTaskModalOpen(true); }} className="text-xs font-semibold px-3 py-1.5 border border-indigo-200 text-indigo-700 bg-indigo-50 dark:bg-indigo-900/30 dark:border-indigo-800 dark:text-indigo-400 rounded hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition-colors uppercase">
+                    + Tarefa
+                 </button>
+                 <button onClick={() => { setSelectedStageId(null); setIsEventModalOpen(true); }} className="text-xs font-semibold px-3 py-1.5 border border-emerald-200 text-emerald-700 bg-emerald-50 dark:bg-emerald-900/30 dark:border-emerald-800 dark:text-emerald-400 rounded hover:bg-emerald-100 dark:hover:bg-emerald-900/50 transition-colors uppercase">
+                    + Evento
+                 </button>
+              </div>
+          </div>
+          <div className="space-y-3">
+              {(() => {
+                  const generalEvents = operation.events?.filter(e => !e.structuringOperationStageId) || [];
+                  if (generalEvents.length === 0) return <div className="text-center py-4 text-gray-400 text-sm">Nenhum evento geral registrado.</div>;
+                  return generalEvents.map(event => (
+                      <div key={event.id} className="bg-gray-50 dark:bg-gray-800/50 p-3 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm relative group flex flex-col md:flex-row gap-4 items-start md:items-center justify-between">
+                           <div className="flex-1">
+                               <div className="flex items-center gap-2 mb-1">
+                                   <span className={`text-[10px] font-bold px-2 py-0.5 uppercase tracking-wider rounded-sm ${event.completedTaskId ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400' : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'}`}>
+                                       {event.completedTaskId ? 'Tarefa Concluída' : event.type}
+                                   </span>
+                                   <time className="text-xs text-gray-500 dark:text-gray-400 font-medium">{new Date(event.date).toLocaleDateString()}</time>
+                               </div>
+                               <h4 className="font-semibold text-gray-800 dark:text-gray-200 text-sm leading-tight">{event.title}</h4>
+                               <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">{event.description}</p>
+                           </div>
+                           {(event.attentionPoints || event.nextSteps) && (
+                               <div className="md:w-1/3 flex flex-col gap-1.5 w-full">
+                                   {event.attentionPoints && <div className="text-[11px] bg-amber-50 dark:bg-amber-900/20 text-amber-800 dark:text-amber-400 p-1.5 rounded"><span className="font-semibold">Alerta:</span> {event.attentionPoints}</div>}
+                                   {event.nextSteps && <div className="text-[11px] bg-blue-50 dark:bg-blue-900/20 text-blue-800 dark:text-blue-400 p-1.5 rounded"><span className="font-semibold">Próx. Passo:</span> {event.nextSteps}</div>}
+                               </div>
+                           )}
+                      </div>
+                  ));
+              })()}
+          </div>
+      </div>
+
       {/* Kanban Pipeline */}
       <div className="flex flex-col space-y-4">
         <div className="flex justify-between items-center bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700">
@@ -399,6 +475,7 @@ const StructuringOperationDetailsPage: React.FC<StructuringOperationDetailsPageP
         </div>
         
         <div className="flex overflow-x-auto pb-4 space-x-4 min-h-[500px]">
+
             {operation.stages?.sort((a,b) => (a.order_index || 0) - (b.order_index || 0)).map((stage, idx) => {
                 const stageEvents = operation.events?.filter(e => e.structuringOperationStageId === stage.id) || [];
                 return (
