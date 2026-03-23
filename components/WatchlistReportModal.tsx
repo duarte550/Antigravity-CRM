@@ -114,6 +114,37 @@ const WatchlistReportModal: React.FC<WatchlistReportModalProps> = ({ operations,
         return { entries, worsenings, improvements, updates, summary };
     }, [operations]);
 
+    const handleGeneratePDF = async () => {
+        if (!reportRef.current) return;
+        try {
+            const html2canvas = (await import('html2canvas')).default;
+            const { jsPDF } = await import('jspdf');
+
+            const canvas = await html2canvas(reportRef.current, {
+                scale: 2,
+                useCORS: true,
+                backgroundColor: '#ffffff'
+            });
+
+            const imgData = canvas.toDataURL('image/png');
+            const imgWidth = canvas.width / 2;
+            const imgHeight = canvas.height / 2;
+            const orientation = imgWidth > imgHeight ? 'landscape' : 'portrait';
+
+            const pdf = new jsPDF({
+                orientation: orientation,
+                unit: 'px',
+                format: [imgWidth, imgHeight]
+            });
+
+            pdf.addImage(imgData, 'PNG', 0, 0, imgWidth, imgHeight);
+            pdf.save(`Relatorio_Watchlist_${monthName.replace(/ /g, '_')}.pdf`);
+        } catch (error) {
+            console.error('Failed to generate PDF:', error);
+            alert('Falha ao gerar o PDF do relatório.');
+        }
+    };
+
     const handleCopyHtml = () => {
         if (reportRef.current) {
             // Clone the node to manipulate it before copying
@@ -178,20 +209,28 @@ const WatchlistReportModal: React.FC<WatchlistReportModalProps> = ({ operations,
                         const event = item.op.events.find((e: any) => e.id === item.event.eventId);
                         return (
                             <li key={idx} style={{ backgroundColor: '#f9fafb', padding: '16px', borderRadius: '8px', border: '1px solid #e5e7eb', marginBottom: '16px' }}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
-                                    <strong style={{ color: '#111827', fontSize: '16px' }}>{item.op.name}</strong>
-                                    {type !== 'update' ? (
-                                        <span style={{ fontSize: '14px', fontWeight: 500, color: '#4b5563', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                            {renderStatusTag(item.from)} 
-                                            <span style={{ color: '#9ca3af' }}>&rarr;</span> 
-                                            {renderStatusTag(item.to)}
-                                        </span>
-                                    ) : (
-                                        <span style={{ fontSize: '14px', fontWeight: 500, color: '#4b5563', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                            Mantido em {renderStatusTag(item.status)}
-                                        </span>
-                                    )}
-                                </div>
+                                <table width="100%" cellPadding={0} cellSpacing={0} style={{ marginBottom: '8px' }}>
+                                    <tbody>
+                                        <tr>
+                                            <td align="left" valign="top">
+                                                <strong style={{ color: '#111827', fontSize: '16px' }}>{item.op.name}</strong>
+                                            </td>
+                                            <td align="right" valign="top">
+                                                {type !== 'update' ? (
+                                                    <span style={{ fontSize: '14px', fontWeight: 500, color: '#4b5563', whiteSpace: 'nowrap' }}>
+                                                        {renderStatusTag(item.from)} 
+                                                        <span style={{ color: '#9ca3af', margin: '0 8px' }}>&rarr;</span> 
+                                                        {renderStatusTag(item.to)}
+                                                    </span>
+                                                ) : (
+                                                    <span style={{ fontSize: '14px', fontWeight: 500, color: '#4b5563', whiteSpace: 'nowrap' }}>
+                                                        Mantido em {renderStatusTag(item.status)}
+                                                    </span>
+                                                )}
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
                                 {event ? (
                                     <div style={{ fontSize: '14px', color: '#374151', marginTop: '8px' }} dangerouslySetInnerHTML={{ __html: event.description }} />
                                 ) : (
@@ -223,58 +262,77 @@ const WatchlistReportModal: React.FC<WatchlistReportModalProps> = ({ operations,
         return (
             <div style={{ marginBottom: '32px' }}>
                 <h3 style={{ fontSize: '18px', fontWeight: 'bold', color: '#1f2937', marginBottom: '16px', textAlign: 'center' }}>Resumo de Movimentações</h3>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
-                    {statuses.map(status => {
-                        const data = reportData.summary[status];
-                        const colors = statusColors[status];
-                        return (
-                            <div key={status} style={{ backgroundColor: colors.bg, border: `1px solid ${colors.border}`, borderRadius: '8px', padding: '16px' }}>
-                                <h4 style={{ fontSize: '16px', fontWeight: 'bold', color: colors.text, marginBottom: '12px', borderBottom: `1px solid ${colors.border}`, paddingBottom: '8px' }}>
-                                    {statusTitles[status]}
-                                </h4>
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                                    <div>
-                                        <div style={{ fontSize: '12px', fontWeight: 600, color: colors.text, textTransform: 'uppercase', marginBottom: '4px', opacity: 0.8 }}>Entradas ({data.entries.length})</div>
-                                        {data.entries.length > 0 ? (
-                                            <ul style={{ margin: 0, paddingLeft: '16px', fontSize: '13px', color: colors.text }}>
-                                                {data.entries.map((op, i) => <li key={i}>{op}</li>)}
-                                            </ul>
-                                        ) : (
-                                            <span style={{ fontSize: '13px', color: colors.text, opacity: 0.6 }}>-</span>
-                                        )}
-                                    </div>
-                                    <div>
-                                        <div style={{ fontSize: '12px', fontWeight: 600, color: colors.text, textTransform: 'uppercase', marginBottom: '4px', opacity: 0.8 }}>Saídas ({data.exits.length})</div>
-                                        {data.exits.length > 0 ? (
-                                            <ul style={{ margin: 0, paddingLeft: '16px', fontSize: '13px', color: colors.text }}>
-                                                {data.exits.map((op, i) => <li key={i}>{op}</li>)}
-                                            </ul>
-                                        ) : (
-                                            <span style={{ fontSize: '13px', color: colors.text, opacity: 0.6 }}>-</span>
-                                        )}
-                                    </div>
-                                </div>
-                            </div>
-                        );
-                    })}
-                </div>
+                <table width="100%" cellPadding={0} cellSpacing={0} style={{ tableLayout: 'fixed', width: '100%' }}>
+                    <tbody>
+                        <tr>
+                            {statuses.map((status, index) => {
+                                const data = reportData.summary[status];
+                                const colors = statusColors[status];
+                                return (
+                                    <td key={status} valign="top" style={{ width: '25%', padding: index === 0 ? '0 8px 0 0' : index === statuses.length - 1 ? '0 0 0 8px' : '0 8px' }}>
+                                        <div style={{ backgroundColor: colors.bg, border: `1px solid ${colors.border}`, borderRadius: '8px', padding: '16px', height: '100%' }}>
+                                            <h4 style={{ margin: '0 0 12px 0', fontSize: '16px', fontWeight: 'bold', color: colors.text, borderBottom: `1px solid ${colors.border}`, paddingBottom: '8px' }}>
+                                                {statusTitles[status]}
+                                            </h4>
+                                            
+                                            <div style={{ marginBottom: '12px' }}>
+                                                <div style={{ fontSize: '12px', fontWeight: 600, color: colors.text, textTransform: 'uppercase', marginBottom: '4px', opacity: 0.8 }}>Entradas ({data.entries.length})</div>
+                                                {data.entries.length > 0 ? (
+                                                    <ul style={{ margin: 0, paddingLeft: '16px', fontSize: '13px', color: colors.text }}>
+                                                        {data.entries.map((op, i) => <li key={i}>{op}</li>)}
+                                                    </ul>
+                                                ) : (
+                                                    <span style={{ fontSize: '13px', color: colors.text, opacity: 0.6 }}>-</span>
+                                                )}
+                                            </div>
+                                            <div>
+                                                <div style={{ fontSize: '12px', fontWeight: 600, color: colors.text, textTransform: 'uppercase', marginBottom: '4px', opacity: 0.8 }}>Saídas ({data.exits.length})</div>
+                                                {data.exits.length > 0 ? (
+                                                    <ul style={{ margin: 0, paddingLeft: '16px', fontSize: '13px', color: colors.text }}>
+                                                        {data.exits.map((op, i) => <li key={i}>{op}</li>)}
+                                                    </ul>
+                                                ) : (
+                                                    <span style={{ fontSize: '13px', color: colors.text, opacity: 0.6 }}>-</span>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </td>
+                                );
+                            })}
+                        </tr>
+                    </tbody>
+                </table>
             </div>
         );
     };
 
     return (
-        <Modal isOpen={true} onClose={onClose} title={`Relatório de Watchlist - ${monthName.charAt(0).toUpperCase() + monthName.slice(1)}`}>
+        <Modal 
+            isOpen={true} 
+            onClose={onClose} 
+            title={`Relatório de Watchlist - ${monthName.charAt(0).toUpperCase() + monthName.slice(1)}`}
+            maxWidth="max-w-5xl"
+        >
             <div className="flex justify-between items-center mb-4">
                 <p className="text-sm text-gray-500 dark:text-gray-400">
-                    Clique no botão abaixo para copiar o relatório formatado para o seu e-mail.
+                    Gere o PDF do relatório ou copie o conteúdo formatado para colar direto no seu e-mail.
                 </p>
-                <button 
-                    onClick={handleCopyHtml}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors shadow-sm font-medium flex items-center gap-2"
-                >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" /></svg>
-                    Copiar para E-mail
-                </button>
+                <div className="flex gap-3">
+                    <button 
+                        onClick={handleGeneratePDF}
+                        className="px-4 py-2 border border-blue-600 bg-white dark:bg-gray-800 text-blue-600 dark:text-blue-400 rounded-md hover:bg-blue-50 dark:hover:bg-blue-900/40 transition-colors shadow-sm font-medium flex items-center gap-2"
+                    >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+                        Gerar PDF
+                    </button>
+                    <button 
+                        onClick={handleCopyHtml}
+                        className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors shadow-sm font-medium flex items-center gap-2"
+                    >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" /></svg>
+                        Copiar para E-mail
+                    </button>
+                </div>
             </div>
             
             <div className="max-h-[70vh] overflow-y-auto border border-gray-200 dark:border-gray-700 rounded-lg p-4 bg-gray-50 dark:bg-gray-900/50">
@@ -369,21 +427,20 @@ const WatchlistReportModal: React.FC<WatchlistReportModalProps> = ({ operations,
                                                         <td key={idx} style={{ padding: '12px 8px', borderBottom: '1px solid #e5e7eb', textAlign: 'center' }}>
                                                             {status ? (
                                                                 <div style={{ 
-                                                                    width: '16px', 
-                                                                    height: '16px', 
-                                                                    borderRadius: '50%', 
-                                                                    backgroundColor: statusColors[status],
+                                                                    color: statusColors[status],
+                                                                    fontSize: '22px',
+                                                                    lineHeight: '16px',
                                                                     margin: '0 auto',
-                                                                    border: '1px solid rgba(0,0,0,0.1)'
-                                                                }} title={status}></div>
+                                                                    textAlign: 'center'
+                                                                }} title={status}>&#9679;</div>
                                                             ) : (
                                                                 <div style={{ 
-                                                                    width: '8px', 
-                                                                    height: '8px', 
-                                                                    borderRadius: '50%', 
-                                                                    backgroundColor: '#d1d5db',
-                                                                    margin: '0 auto'
-                                                                }} title="Sem dados"></div>
+                                                                    color: '#d1d5db',
+                                                                    fontSize: '14px',
+                                                                    lineHeight: '16px',
+                                                                    margin: '0 auto',
+                                                                    textAlign: 'center'
+                                                                }} title="Sem dados">&#9679;</div>
                                                             )}
                                                         </td>
                                                     ))}
