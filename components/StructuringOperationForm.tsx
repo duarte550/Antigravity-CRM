@@ -24,6 +24,7 @@ const StructuringOperationForm: React.FC<StructuringOperationFormProps> = ({ onC
   );
   const [risk, setRisk] = useState(initialData?.risk || 'High Yield');
   const [temperature, setTemperature] = useState(initialData?.temperature || 'Morno');
+  const [analyst, setAnalyst] = useState(initialData?.analyst || '');
   const [initialVolume, setInitialVolume] = useState<number | ''>('');
   const [initialIndexer, setInitialIndexer] = useState<string>(INDEXERS[0]);
 
@@ -74,6 +75,7 @@ const StructuringOperationForm: React.FC<StructuringOperationFormProps> = ({ onC
         stage,
         risk,
         temperature,
+        analyst,
         liquidationDate: liquidationDate ? new Date(liquidationDate + 'T12:00:00').toISOString() : undefined,
         series: payloadSeries,
         ...(masterGroups && !initialData && masterGroupId && { masterGroupId }),
@@ -144,6 +146,10 @@ const StructuringOperationForm: React.FC<StructuringOperationFormProps> = ({ onC
               <option value="Morno">Morno</option>
               <option value="Frio">Frio</option>
             </Select>
+          </div>
+          <div>
+            <Label htmlFor="analyst">Analista</Label>
+            <Input id="analyst" type="text" value={analyst} onChange={e => setAnalyst(e.target.value)} required />
           </div>
         </FormRow>
 

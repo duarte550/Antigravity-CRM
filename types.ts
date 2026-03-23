@@ -247,6 +247,7 @@ export interface StructuringOperation {
   recentEvents?: Event[];
   risk?: string;
   temperature?: string;
+  analyst?: string;
   stages?: StructuringOperationStage[];
   isActive?: boolean;
   taskRules?: TaskRule[];

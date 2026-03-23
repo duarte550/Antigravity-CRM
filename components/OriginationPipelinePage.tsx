@@ -94,13 +94,13 @@ const OriginationPipelinePage: React.FC<OriginationPipelinePageProps> = ({ onNav
 
   const analysts = Array.from(
     new Set(
-      activeOperations.flatMap(op => op.recentEvents?.map(e => e.registeredBy).filter(Boolean) || [])
+      activeOperations.flatMap(op => [op.analyst, ...(op.recentEvents?.map(e => e.registeredBy) || [])]).filter(Boolean)
     )
   ).filter(Boolean) as string[];
 
   const filteredOperations = activeOperations.filter(op => {
     if (!selectedAnalyst) return true;
-    return op.recentEvents?.some(e => e.registeredBy === selectedAnalyst);
+    return op.analyst === selectedAnalyst || op.recentEvents?.some(e => e.registeredBy === selectedAnalyst);
   });
   
   const allOriginationTasks = useMemo(() => {
@@ -214,18 +214,25 @@ const OriginationPipelinePage: React.FC<OriginationPipelinePageProps> = ({ onNav
   };
 
   const handleSaveMasterGroup = async (data: Omit<MasterGroup, 'id' | 'operations' | 'structuringOperations' | 'contacts' | 'events'>) => {
+    const tempId = Date.now();
     try {
+      setMasterGroups(prev => [...prev, { id: tempId, name: data.name }]);
+      setIsMasterGroupFormOpen(false);
+      showToast('Master Group adicionado. Sincronizando...', 'success');
+
       const response = await fetch(`${apiUrl}/api/master-groups`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
       });
       if (!response.ok) throw new Error('Falha ao criar Master Group');
-      await fetchMasterGroups();
-      showToast('Master Group criado com sucesso!', 'success');
-      setIsMasterGroupFormOpen(false);
+      const responseData = await response.json();
+      
+      setMasterGroups(prev => prev.map(mg => mg.id === tempId ? { id: responseData.id || tempId, name: data.name } : mg));
     } catch (error) {
       showToast('Erro ao criar Master Group', 'error');
+      setMasterGroups(prev => prev.filter(mg => mg.id !== tempId));
+      fetchMasterGroups();
     }
   };
 
@@ -306,7 +313,7 @@ const OriginationPipelinePage: React.FC<OriginationPipelinePageProps> = ({ onNav
               operationId: op.id,
               operationName: op.name,
               liquidationDate: op.liquidationDate,
-              analyst: op.recentEvents?.[0]?.registeredBy || 'Analista N/D',
+              analyst: op.analyst || op.recentEvents?.[0]?.registeredBy || 'Analista N/D',
               seriesName: s.name,
               fund: s.fund || 'N/D',
               volume: s.volume || 0,
@@ -565,7 +572,7 @@ const OriginationPipelinePage: React.FC<OriginationPipelinePageProps> = ({ onNav
                                             </div>
                                             <div className="flex justify-between items-center mb-1">
                                                 <span className="text-gray-500">Resp:</span>
-                                                <span className="font-medium text-gray-900 dark:text-white truncate max-w-[120px]">{op.recentEvents?.[0]?.registeredBy || 'Analista N/D'}</span>
+                                                <span className="font-medium text-gray-900 dark:text-white truncate max-w-[120px]">{op.analyst || op.recentEvents?.[0]?.registeredBy || 'Analista N/D'}</span>
                                             </div>
                                             <div className="border-t border-gray-200 dark:border-gray-700 my-2"></div>
                                             <div className="flex justify-between items-center">

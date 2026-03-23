@@ -13,10 +13,16 @@ const MasterGroupForm: React.FC<MasterGroupFormProps> = ({ onClose, onSave, init
   const [name, setName] = useState(initialData?.name || '');
   const [sector, setSector] = useState(initialData?.sector || '');
   const [rating, setRating] = useState<Rating | ''>(initialData?.rating || '');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    onSave({ name, sector, rating: rating as Rating });
+    setIsSubmitting(true);
+    try {
+      await onSave({ name, sector, rating: rating as Rating });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -46,11 +52,13 @@ const MasterGroupForm: React.FC<MasterGroupFormProps> = ({ onClose, onSave, init
         </FormRow>
 
         <div className="flex justify-end gap-3 mt-6">
-          <button type="button" onClick={onClose} className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-600 dark:hover:bg-gray-700">
+          <button type="button" onClick={onClose} disabled={isSubmitting} className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-600 dark:hover:bg-gray-700 disabled:opacity-50">
             Cancelar
           </button>
-          <button type="submit" className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700">
-            Salvar
+          <button type="submit" disabled={isSubmitting} className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2">
+            {isSubmitting ? (
+              <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div> Salvando...</>
+            ) : "Salvar"}
           </button>
         </div>
       </form>

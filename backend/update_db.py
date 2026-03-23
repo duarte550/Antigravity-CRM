@@ -42,7 +42,8 @@ def update_schema():
                     rate STRING,
                     indexer STRING,
                     volume FLOAT,
-                    fund STRING
+                    fund STRING,
+                    analyst STRING
                 )
             """)
             print("Table structuring_operations checked/created.")
@@ -60,6 +61,9 @@ def update_schema():
                 cursor.execute("ALTER TABLE cri_cra_dev.crm.structuring_operations ADD COLUMN is_active BOOLEAN")
                 cursor.execute("UPDATE cri_cra_dev.crm.structuring_operations SET is_active = TRUE WHERE is_active IS NULL")
                 print("Added is_active column.")
+            if 'analyst' not in so_cols_all:
+                cursor.execute("ALTER TABLE cri_cra_dev.crm.structuring_operations ADD COLUMN analyst STRING")
+                print("Added analyst column.")
 
             print("Ensuring structuring_operation_series table exists...")
             cursor.execute("""

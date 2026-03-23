@@ -115,3 +115,10 @@ CREATE TABLE IF NOT EXISTS cri_cra_dev.crm.structuring_operation_stages (
     order_index INT NOT NULL,
     is_completed BOOLEAN
 );
+
+-- ====================================================================
+-- Tabela: structuring_operations
+-- Adicionando a coluna analyst obrigatória para as operações estruturadas
+-- ====================================================================
+ALTER TABLE cri_cra_dev.crm.structuring_operations ADD COLUMN IF NOT EXISTS analyst STRING;
+

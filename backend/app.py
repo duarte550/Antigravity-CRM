@@ -23,7 +23,8 @@ logging.basicConfig(level=logging.INFO)
 update_db.update_schema()
 
 # Configuração de CORS para permitir requisições de qualquer origem.
-CORS(app, supports_credentials=True)
+CORS(app, supports_credentials=True, origins = ["https://front-crm-cri.azurewebsites.net"])
+
 
 # Regras de negócio centralizadas
 RATING_TO_POLITICA_FREQUENCY = {
