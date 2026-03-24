@@ -12,11 +12,13 @@ import json
 import logging
 
 from master_groups import master_groups_bp
+from fund_simulator import fund_simulator_bp
 
 # Configurações básicas de logging
 # Serve static files from 'dist' folder in production
 app = Flask(__name__, static_folder='../dist', static_url_path='')
 app.register_blueprint(master_groups_bp)
+app.register_blueprint(fund_simulator_bp)
 logging.basicConfig(level=logging.INFO)
 
 # Run schema updates on startup

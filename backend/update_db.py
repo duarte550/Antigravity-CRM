@@ -349,6 +349,17 @@ def update_schema():
                 )
             """)
             
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS cri_cra_dev.crm.fund_allocation_inputs (
+                    fund_name STRING PRIMARY KEY,
+                    emission FLOAT DEFAULT 0.0,
+                    prepayment FLOAT DEFAULT 0.0,
+                    repurchases FLOAT DEFAULT 0.0,
+                    new_repo FLOAT DEFAULT 0.0,
+                    updated_at TIMESTAMP
+                )
+            """)
+
             # Seed Patch notes
             cursor.execute("SELECT COUNT(*) as count FROM cri_cra_dev.crm.patch_notes")
             if cursor.fetchone().count == 0:

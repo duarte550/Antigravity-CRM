@@ -4,6 +4,7 @@ import StructuringOperationForm from './StructuringOperationForm';
 import EventForm from './EventForm';
 import MasterGroupForm from './MasterGroupForm';
 import OriginationTasksPage from './OriginationTasksPage';
+import PorFundoTab from './PorFundoTab';
 import type { Task, TaskRule } from '../types';
 import { TaskStatus } from '../types';
 
@@ -26,7 +27,7 @@ const OriginationPipelinePage: React.FC<OriginationPipelinePageProps> = ({ onNav
   const [operationForEvent, setOperationForEvent] = useState<StructuringOperation | null>(null);
   
   const [selectedAnalyst, setSelectedAnalyst] = useState<string>('');
-  const [activeTab, setActiveTab] = useState<'kanban' | 'table' | 'tasks' | 'resumo'>('kanban');
+  const [activeTab, setActiveTab] = useState<'kanban' | 'table' | 'tasks' | 'resumo' | 'por-fundo'>('resumo');
 
   const [masterGroups, setMasterGroups] = useState<{ id: number, name: string }[]>([]);
   const [isMasterGroupFormOpen, setIsMasterGroupFormOpen] = useState(false);
@@ -34,6 +35,9 @@ const OriginationPipelinePage: React.FC<OriginationPipelinePageProps> = ({ onNav
   // Table Sorting and Searching
   const [searchTerm, setSearchTerm] = useState('');
   const [sortConfig, setSortConfig] = useState<{ key: string, desc: boolean }>({ key: 'liquidationDate', desc: false });
+
+  const [resumoSearchTerm, setResumoSearchTerm] = useState('');
+  const [resumoSortConfig, setResumoSortConfig] = useState<{ key: string, desc: boolean }>({ key: 'createdAt', desc: true });
 
 
 
@@ -369,6 +373,58 @@ const OriginationPipelinePage: React.FC<OriginationPipelinePageProps> = ({ onNav
       setSortConfig(prev => ({ key, desc: prev.key === key ? !prev.desc : false }));
   };
 
+  const sortedAndFilteredResumoOps = useMemo(() => {
+        let ops = filteredOperations.map(op => {
+            const totalVol = op.series?.reduce((acc, s) => acc + (s.volume || 0), 0) || 0;
+            const rates = op.series?.map(s => parseFloat((s.rate || '').replace(/[^0-9.-]/g, ''))).filter(r => !isNaN(r)) || [];
+            const avgRateVal = rates.length > 0 ? (rates.reduce((a,b)=>a+b,0) / rates.length) : -999;
+            const avgRateStr = rates.length > 0 ? avgRateVal.toFixed(2) + '%' : '-';
+            const lastEvent = op.recentEvents && op.recentEvents.length > 0 ? op.recentEvents[0].title : '-';
+
+            return {
+                ...op,
+                _totalVol: totalVol,
+                _avgRateVal: avgRateVal,
+                _avgRateStr: avgRateStr,
+                _lastEvent: lastEvent
+            };
+        });
+
+        if (resumoSearchTerm) {
+            const lower = resumoSearchTerm.toLowerCase();
+            ops = ops.filter(op => 
+                op.name.toLowerCase().includes(lower) || 
+                (op.originator || '').toLowerCase().includes(lower) ||
+                (op.modality || '').toLowerCase().includes(lower) ||
+                (op.analyst || '').toLowerCase().includes(lower) ||
+                (op.stage || '').toLowerCase().includes(lower) ||
+                (op._lastEvent || '').toLowerCase().includes(lower)
+            );
+        }
+
+        ops.sort((a, b) => {
+            let valA: any = a[resumoSortConfig.key as keyof typeof a] || '';
+            let valB: any = b[resumoSortConfig.key as keyof typeof b] || '';
+
+            if (resumoSortConfig.key === '_totalVol') { valA = a._totalVol; valB = b._totalVol; }
+            if (resumoSortConfig.key === '_avgRateVal') { valA = a._avgRateVal; valB = b._avgRateVal; }
+            if (resumoSortConfig.key === 'createdAt') {
+                valA = valA ? new Date(valA).getTime() : 0;
+                valB = valB ? new Date(valB).getTime() : 0;
+            }
+
+            if (valA < valB) return resumoSortConfig.desc ? 1 : -1;
+            if (valA > valB) return resumoSortConfig.desc ? -1 : 1;
+            return 0;
+        });
+
+        return ops;
+  }, [filteredOperations, resumoSearchTerm, resumoSortConfig]);
+
+  const toggleResumoSort = (key: string) => {
+      setResumoSortConfig(prev => ({ key, desc: prev.key === key ? !prev.desc : false }));
+  };
+
   // Aggregated Summaries
   const summaries = useMemo(() => {
       const liqOps = filteredOperations.filter(o => getActiveColumn(o) === 'Liquidação');
@@ -430,6 +486,18 @@ const OriginationPipelinePage: React.FC<OriginationPipelinePageProps> = ({ onNav
             </button>
             <div className="bg-gray-100 dark:bg-gray-700 p-1 rounded-lg flex text-sm font-medium">
                 <button 
+                  onClick={() => setActiveTab('resumo')}
+                  className={`px-4 py-2 rounded-md transition-colors ${activeTab === 'resumo' ? 'bg-white dark:bg-gray-800 text-blue-600 dark:text-blue-400 shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}`}
+                >
+                    Resumo
+                </button>
+                <button 
+                  onClick={() => setActiveTab('por-fundo')}
+                  className={`px-4 py-2 rounded-md transition-colors ${activeTab === 'por-fundo' ? 'bg-white dark:bg-gray-800 text-blue-600 dark:text-blue-400 shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}`}
+                >
+                    Por Fundo
+                </button>
+                <button 
                   onClick={() => setActiveTab('kanban')}
                   className={`px-4 py-2 rounded-md transition-colors ${activeTab === 'kanban' ? 'bg-white dark:bg-gray-800 text-blue-600 dark:text-blue-400 shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}`}
                 >
@@ -440,12 +508,6 @@ const OriginationPipelinePage: React.FC<OriginationPipelinePageProps> = ({ onNav
                   className={`px-4 py-2 rounded-md transition-colors ${activeTab === 'table' ? 'bg-white dark:bg-gray-800 text-blue-600 dark:text-blue-400 shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}`}
                 >
                     Liquidações
-                </button>
-                <button 
-                  onClick={() => setActiveTab('resumo')}
-                  className={`px-4 py-2 rounded-md transition-colors ${activeTab === 'resumo' ? 'bg-white dark:bg-gray-800 text-blue-600 dark:text-blue-400 shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}`}
-                >
-                    Resumo
                 </button>
                 <button 
                   onClick={() => setActiveTab('tasks')}
@@ -541,53 +603,94 @@ const OriginationPipelinePage: React.FC<OriginationPipelinePageProps> = ({ onNav
             </div>
 
             {activeTab === 'resumo' && (
-                <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden flex-1 overflow-x-auto mt-2 h-full">
-                    <table className="min-w-full text-sm text-left text-gray-500 dark:text-gray-400">
-                        <thead className="text-xs text-gray-700 uppercase bg-gray-50 dark:bg-gray-700 dark:text-gray-300">
-                            <tr>
-                                <th scope="col" className="px-4 py-3 border-b dark:border-gray-700">Operação em estruturação</th>
-                                <th scope="col" className="px-4 py-3 border-b dark:border-gray-700">Originador</th>
-                                <th scope="col" className="px-4 py-3 border-b dark:border-gray-700">Modalidade</th>
-                                <th scope="col" className="px-4 py-3 border-b dark:border-gray-700">Criação</th>
-                                <th scope="col" className="px-4 py-3 border-b dark:border-gray-700">Analista</th>
-                                <th scope="col" className="px-4 py-3 border-b dark:border-gray-700">Temp.</th>
-                                <th scope="col" className="px-4 py-3 border-b dark:border-gray-700 text-right">Volume</th>
-                                <th scope="col" className="px-4 py-3 border-b dark:border-gray-700 text-right">Taxa (Média)</th>
-                                <th scope="col" className="px-4 py-3 border-b dark:border-gray-700">Status pipeline</th>
-                                <th scope="col" className="px-4 py-3 border-b dark:border-gray-700">Último evento</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {filteredOperations.map(op => {
-                                const totalVol = op.series?.reduce((acc, s) => acc + (s.volume || 0), 0) || 0;
-                                const rates = op.series?.map(s => parseFloat((s.rate || '').replace(/[^0-9.-]/g, ''))).filter(r => !isNaN(r)) || [];
-                                const avgRate = rates.length > 0 ? (rates.reduce((a,b)=>a+b,0) / rates.length).toFixed(2) + '%' : '-';
-                                const lastEvent = op.recentEvents && op.recentEvents.length > 0 ? op.recentEvents[0].title : '-';
-                                return (
-                                <tr key={op.id} className="bg-white border-b dark:bg-gray-800 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors cursor-pointer" onClick={() => onNavigate(Page.STRUCTURING_OPERATION_DETAIL, op.id)}>
-                                    <th scope="row" className="px-4 py-3 font-medium text-gray-900 whitespace-nowrap dark:text-white">
-                                        {op.name}
+                <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden flex-1 flex flex-col mt-2 h-full">
+                    <div className="p-3 border-b border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/80">
+                        <input 
+                            type="text" 
+                            placeholder="Pesquisar operações..." 
+                            value={resumoSearchTerm}
+                            onChange={e => setResumoSearchTerm(e.target.value)}
+                            className="w-full max-w-sm px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-sm focus:ring-blue-500 focus:border-blue-500 text-gray-900 dark:text-gray-100"
+                        />
+                    </div>
+                    <div className="overflow-x-auto flex-1 h-full">
+                        <table className="min-w-full text-sm text-left text-gray-500 dark:text-gray-400">
+                            <thead className="text-xs text-gray-700 uppercase bg-gray-50 dark:bg-gray-700 dark:text-gray-300">
+                                <tr>
+                                    <th scope="col" className="px-4 py-3 border-b dark:border-gray-700 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600" onClick={() => toggleResumoSort('name')}>
+                                        Operação em estruturação {resumoSortConfig.key === 'name' && (resumoSortConfig.desc ? '↓' : '↑')}
                                     </th>
-                                    <td className="px-4 py-3">{op.originator || '-'}</td>
-                                    <td className="px-4 py-3">{op.modality || '-'}</td>
-                                    <td className="px-4 py-3">{op.createdAt ? new Date(op.createdAt).toLocaleDateString('pt-BR') : '-'}</td>
-                                    <td className="px-4 py-3">{op.analyst || '-'}</td>
-                                    <td className="px-4 py-3">
-                                        <span className={`px-2 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider ${op.temperature === 'Quente' ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400' : op.temperature === 'Morno' ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400' : 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400'}`}>
-                                            {op.temperature || 'N/D'}
-                                        </span>
-                                    </td>
-                                    <td className="px-4 py-3 text-right">R$ {(totalVol / 1000000).toFixed(2)}M</td>
-                                    <td className="px-4 py-3 text-right">{avgRate}</td>
-                                    <td className="px-4 py-3 text-sm font-medium">{op.stage}</td>
-                                    <td className="px-4 py-3 text-xs text-gray-500 dark:text-gray-400 truncate max-w-[150px]" title={lastEvent}>{lastEvent}</td>
+                                    <th scope="col" className="px-4 py-3 border-b dark:border-gray-700 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600" onClick={() => toggleResumoSort('originator')}>
+                                        Originador {resumoSortConfig.key === 'originator' && (resumoSortConfig.desc ? '↓' : '↑')}
+                                    </th>
+                                    <th scope="col" className="px-4 py-3 border-b dark:border-gray-700 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600" onClick={() => toggleResumoSort('modality')}>
+                                        Modalidade {resumoSortConfig.key === 'modality' && (resumoSortConfig.desc ? '↓' : '↑')}
+                                    </th>
+                                    <th scope="col" className="px-4 py-3 border-b dark:border-gray-700 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600" onClick={() => toggleResumoSort('createdAt')}>
+                                        Criação {resumoSortConfig.key === 'createdAt' && (resumoSortConfig.desc ? '↓' : '↑')}
+                                    </th>
+                                    <th scope="col" className="px-4 py-3 border-b dark:border-gray-700 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600" onClick={() => toggleResumoSort('analyst')}>
+                                        Analista {resumoSortConfig.key === 'analyst' && (resumoSortConfig.desc ? '↓' : '↑')}
+                                    </th>
+                                    <th scope="col" className="px-4 py-3 border-b dark:border-gray-700 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600" onClick={() => toggleResumoSort('temperature')}>
+                                        Temp. {resumoSortConfig.key === 'temperature' && (resumoSortConfig.desc ? '↓' : '↑')}
+                                    </th>
+                                    <th scope="col" className="px-4 py-3 border-b dark:border-gray-700 text-right cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600" onClick={() => toggleResumoSort('_totalVol')}>
+                                        Volume {resumoSortConfig.key === '_totalVol' && (resumoSortConfig.desc ? '↓' : '↑')}
+                                    </th>
+                                    <th scope="col" className="px-4 py-3 border-b dark:border-gray-700 text-right cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600" onClick={() => toggleResumoSort('_avgRateVal')}>
+                                        Taxa (Média) {resumoSortConfig.key === '_avgRateVal' && (resumoSortConfig.desc ? '↓' : '↑')}
+                                    </th>
+                                    <th scope="col" className="px-4 py-3 border-b dark:border-gray-700 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600" onClick={() => toggleResumoSort('stage')}>
+                                        Status pipeline {resumoSortConfig.key === 'stage' && (resumoSortConfig.desc ? '↓' : '↑')}
+                                    </th>
+                                    <th scope="col" className="px-4 py-3 border-b dark:border-gray-700 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600" onClick={() => toggleResumoSort('_lastEvent')}>
+                                        Último evento {resumoSortConfig.key === '_lastEvent' && (resumoSortConfig.desc ? '↓' : '↑')}
+                                    </th>
                                 </tr>
-                            )})}
-                        </tbody>
-                    </table>
-                    {filteredOperations.length === 0 && (
-                        <div className="text-center py-8 text-gray-500">Nenhuma operação encontrada com os filtros atuais.</div>
-                    )}
+                            </thead>
+                            <tbody>
+                                {sortedAndFilteredResumoOps.map(op => {
+                                    return (
+                                    <tr key={op.id} className="bg-white border-b dark:bg-gray-800 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors cursor-pointer" onClick={() => onNavigate(Page.STRUCTURING_OPERATION_DETAIL, op.id)}>
+                                        <th scope="row" className="px-4 py-3 font-medium text-gray-900 whitespace-nowrap dark:text-white">
+                                            {op.name}
+                                        </th>
+                                        <td className="px-4 py-3">{op.originator || '-'}</td>
+                                        <td className="px-4 py-3">{op.modality || '-'}</td>
+                                        <td className="px-4 py-3">{op.createdAt ? new Date(op.createdAt).toLocaleDateString('pt-BR') : '-'}</td>
+                                        <td className="px-4 py-3">{op.analyst || '-'}</td>
+                                        <td className="px-4 py-3">
+                                            <span className={`px-2 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider ${op.temperature === 'Quente' ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400' : op.temperature === 'Morno' ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400' : 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400'}`}>
+                                                {op.temperature || 'N/D'}
+                                            </span>
+                                        </td>
+                                        <td className="px-4 py-3 text-right">R$ {(op._totalVol / 1000000).toFixed(2)}M</td>
+                                        <td className="px-4 py-3 text-right">{op._avgRateStr}</td>
+                                        <td className="px-4 py-3 text-sm font-medium">{op.stage}</td>
+                                        <td className="px-4 py-3 text-xs text-gray-500 dark:text-gray-400 truncate max-w-[150px]" title={op._lastEvent}>{op._lastEvent}</td>
+                                    </tr>
+                                )})}
+                            </tbody>
+                        </table>
+                        {sortedAndFilteredResumoOps.length === 0 && (
+                            <div className="text-center py-8 text-gray-500">Nenhuma operação encontrada com os filtros atuais.</div>
+                        )}
+                    </div>
+                </div>
+            )}
+
+            {activeTab === 'por-fundo' && (
+                <div className="flex-1 w-full bg-gray-50 dark:bg-gray-900 rounded-xl mt-2 overflow-y-auto">
+                    <PorFundoTab 
+                        operations={filteredOperations} 
+                        apiUrl={apiUrl} 
+                        showToast={showToast} 
+                        onEditOperation={(op) => {
+                            setOperationToEdit(op);
+                            setIsFormOpen(true);
+                        }}
+                    />
                 </div>
             )}
 
