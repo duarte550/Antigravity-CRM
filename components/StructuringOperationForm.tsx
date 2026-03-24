@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { StructuringOperation, StructuringOperationSeries } from '../types';
+import { StructuringOperation, StructuringOperationSeries, Area, areaOptions } from '../types';
 import Modal from './Modal';
 import { Label, Input, Select, FormRow } from './UI';
 
@@ -17,6 +17,7 @@ const INDEXERS = ['CDI', 'IPCA', 'IGPM', 'Pré', 'Outro'];
 const StructuringOperationForm: React.FC<StructuringOperationFormProps> = ({ onClose, onSave, initialData, masterGroups, onOpenNewMasterGroup }) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [name, setName] = useState(initialData?.name || '');
+  const [area, setArea] = useState<Area | ''>(initialData?.area || '');
   const [stage, setStage] = useState(initialData?.stage || STAGES[0]);
   const [liquidationDate, setLiquidationDate] = useState(initialData?.liquidationDate ? new Date(initialData.liquidationDate).toISOString().split('T')[0] : '');
   const [masterGroupNameInput, setMasterGroupNameInput] = useState<string>(
@@ -25,6 +26,8 @@ const StructuringOperationForm: React.FC<StructuringOperationFormProps> = ({ onC
   const [risk, setRisk] = useState(initialData?.risk || 'High Yield');
   const [temperature, setTemperature] = useState(initialData?.temperature || 'Morno');
   const [analyst, setAnalyst] = useState(initialData?.analyst || '');
+  const [originator, setOriginator] = useState(initialData?.originator || '');
+  const [modality, setModality] = useState(initialData?.modality || '');
   const [initialVolume, setInitialVolume] = useState<number | ''>('');
   const [initialIndexer, setInitialIndexer] = useState<string>(INDEXERS[0]);
 
@@ -63,6 +66,11 @@ const StructuringOperationForm: React.FC<StructuringOperationFormProps> = ({ onC
       alert("Por favor, selecione um Master Group válido da lista ou crie um novo.");
       return;
     }
+    
+    if (!area) {
+      alert("Por favor, selecione a Área.");
+      return;
+    }
 
     const payloadSeries = !initialData && initialVolume !== ''
       ? [{ name: 'A Definir', rate: '', indexer: initialIndexer, volume: Number(initialVolume) * 1000000, fund: '' }]
@@ -72,10 +80,13 @@ const StructuringOperationForm: React.FC<StructuringOperationFormProps> = ({ onC
     try {
       await onSave({
         name,
+        area: area as Area,
         stage,
         risk,
         temperature,
         analyst,
+        originator,
+        modality,
         liquidationDate: liquidationDate ? new Date(liquidationDate + 'T12:00:00').toISOString() : undefined,
         series: payloadSeries,
         ...(masterGroups && !initialData && masterGroupId && { masterGroupId }),
@@ -118,11 +129,18 @@ const StructuringOperationForm: React.FC<StructuringOperationFormProps> = ({ onC
           </FormRow>
         )}
         <FormRow>
-          <div>
+          <div className="flex-[2]">
             <Label htmlFor="name">Nome da Operação</Label>
             <Input id="name" type="text" value={name} onChange={e => setName(e.target.value)} required />
           </div>
-          <div>
+          <div className="flex-[1]">
+            <Label htmlFor="area">Área</Label>
+            <Select id="area" value={area} onChange={e => setArea(e.target.value as Area)} required>
+              <option value="" disabled>Selecione...</option>
+              {areaOptions.map(a => <option key={a} value={a}>{a}</option>)}
+            </Select>
+          </div>
+          <div className="flex-[1]">
             <Label htmlFor="stage">Estágio</Label>
             <Select id="stage" value={stage} onChange={e => setStage(e.target.value)}>
               {STAGES.map(s => <option key={s} value={s}>{s}</option>)}
@@ -150,6 +168,17 @@ const StructuringOperationForm: React.FC<StructuringOperationFormProps> = ({ onC
           <div>
             <Label htmlFor="analyst">Analista</Label>
             <Input id="analyst" type="text" value={analyst} onChange={e => setAnalyst(e.target.value)} required />
+          </div>
+        </FormRow>
+
+        <FormRow>
+          <div className="flex-[1]">
+            <Label htmlFor="originator">Originador</Label>
+            <Input id="originator" type="text" value={originator} onChange={e => setOriginator(e.target.value)} placeholder="Ex: João Souza" required />
+          </div>
+          <div className="flex-[1]">
+            <Label htmlFor="modality">Modalidade</Label>
+            <Input id="modality" type="text" value={modality} onChange={e => setModality(e.target.value)} placeholder="Ex: Debênture" required />
           </div>
         </FormRow>
 

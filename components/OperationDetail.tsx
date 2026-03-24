@@ -720,6 +720,9 @@ ${event.nextSteps ? stripHtml(event.nextSteps) : 'Nenhum'}
                 <div className="flex justify-between items-start mb-4">
                     <div className="flex items-center gap-3">
                         <h2 className="text-2xl font-bold text-gray-800 dark:text-gray-100">{operation.name}</h2>
+                        <span className="bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300 text-xs font-bold px-2.5 py-0.5 rounded-md border border-gray-200 dark:border-gray-600 shadow-sm">
+                            ID: {operation.id}
+                        </span>
                         <button onClick={() => setIsEditOperationFormOpen(true)} className="text-gray-400 hover:text-blue-600" title="Editar Operação">
                             <PencilIcon className="w-5 h-5" />
                         </button>

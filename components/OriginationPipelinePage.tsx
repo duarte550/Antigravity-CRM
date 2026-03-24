@@ -26,7 +26,7 @@ const OriginationPipelinePage: React.FC<OriginationPipelinePageProps> = ({ onNav
   const [operationForEvent, setOperationForEvent] = useState<StructuringOperation | null>(null);
   
   const [selectedAnalyst, setSelectedAnalyst] = useState<string>('');
-  const [activeTab, setActiveTab] = useState<'kanban' | 'table' | 'tasks'>('kanban');
+  const [activeTab, setActiveTab] = useState<'kanban' | 'table' | 'tasks' | 'resumo'>('kanban');
 
   const [masterGroups, setMasterGroups] = useState<{ id: number, name: string }[]>([]);
   const [isMasterGroupFormOpen, setIsMasterGroupFormOpen] = useState(false);
@@ -442,6 +442,12 @@ const OriginationPipelinePage: React.FC<OriginationPipelinePageProps> = ({ onNav
                     Liquidações
                 </button>
                 <button 
+                  onClick={() => setActiveTab('resumo')}
+                  className={`px-4 py-2 rounded-md transition-colors ${activeTab === 'resumo' ? 'bg-white dark:bg-gray-800 text-blue-600 dark:text-blue-400 shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}`}
+                >
+                    Resumo
+                </button>
+                <button 
                   onClick={() => setActiveTab('tasks')}
                   className={`px-4 py-2 rounded-md transition-colors ${activeTab === 'tasks' ? 'bg-white dark:bg-gray-800 text-blue-600 dark:text-blue-400 shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}`}
                 >
@@ -533,6 +539,57 @@ const OriginationPipelinePage: React.FC<OriginationPipelinePageProps> = ({ onNav
                     </table>
                 </div>
             </div>
+
+            {activeTab === 'resumo' && (
+                <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden flex-1 overflow-x-auto mt-2 h-full">
+                    <table className="min-w-full text-sm text-left text-gray-500 dark:text-gray-400">
+                        <thead className="text-xs text-gray-700 uppercase bg-gray-50 dark:bg-gray-700 dark:text-gray-300">
+                            <tr>
+                                <th scope="col" className="px-4 py-3 border-b dark:border-gray-700">Operação em estruturação</th>
+                                <th scope="col" className="px-4 py-3 border-b dark:border-gray-700">Originador</th>
+                                <th scope="col" className="px-4 py-3 border-b dark:border-gray-700">Modalidade</th>
+                                <th scope="col" className="px-4 py-3 border-b dark:border-gray-700">Criação</th>
+                                <th scope="col" className="px-4 py-3 border-b dark:border-gray-700">Analista</th>
+                                <th scope="col" className="px-4 py-3 border-b dark:border-gray-700">Temp.</th>
+                                <th scope="col" className="px-4 py-3 border-b dark:border-gray-700 text-right">Volume</th>
+                                <th scope="col" className="px-4 py-3 border-b dark:border-gray-700 text-right">Taxa (Média)</th>
+                                <th scope="col" className="px-4 py-3 border-b dark:border-gray-700">Status pipeline</th>
+                                <th scope="col" className="px-4 py-3 border-b dark:border-gray-700">Último evento</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {filteredOperations.map(op => {
+                                const totalVol = op.series?.reduce((acc, s) => acc + (s.volume || 0), 0) || 0;
+                                const rates = op.series?.map(s => parseFloat((s.rate || '').replace(/[^0-9.-]/g, ''))).filter(r => !isNaN(r)) || [];
+                                const avgRate = rates.length > 0 ? (rates.reduce((a,b)=>a+b,0) / rates.length).toFixed(2) + '%' : '-';
+                                const lastEvent = op.recentEvents && op.recentEvents.length > 0 ? op.recentEvents[0].title : '-';
+                                return (
+                                <tr key={op.id} className="bg-white border-b dark:bg-gray-800 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors cursor-pointer" onClick={() => onNavigate(Page.STRUCTURING_OPERATION_DETAIL, op.id)}>
+                                    <th scope="row" className="px-4 py-3 font-medium text-gray-900 whitespace-nowrap dark:text-white">
+                                        {op.name}
+                                    </th>
+                                    <td className="px-4 py-3">{op.originator || '-'}</td>
+                                    <td className="px-4 py-3">{op.modality || '-'}</td>
+                                    <td className="px-4 py-3">{op.createdAt ? new Date(op.createdAt).toLocaleDateString('pt-BR') : '-'}</td>
+                                    <td className="px-4 py-3">{op.analyst || '-'}</td>
+                                    <td className="px-4 py-3">
+                                        <span className={`px-2 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider ${op.temperature === 'Quente' ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400' : op.temperature === 'Morno' ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400' : 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400'}`}>
+                                            {op.temperature || 'N/D'}
+                                        </span>
+                                    </td>
+                                    <td className="px-4 py-3 text-right">R$ {(totalVol / 1000000).toFixed(2)}M</td>
+                                    <td className="px-4 py-3 text-right">{avgRate}</td>
+                                    <td className="px-4 py-3 text-sm font-medium">{op.stage}</td>
+                                    <td className="px-4 py-3 text-xs text-gray-500 dark:text-gray-400 truncate max-w-[150px]" title={lastEvent}>{lastEvent}</td>
+                                </tr>
+                            )})}
+                        </tbody>
+                    </table>
+                    {filteredOperations.length === 0 && (
+                        <div className="text-center py-8 text-gray-500">Nenhuma operação encontrada com os filtros atuais.</div>
+                    )}
+                </div>
+            )}
 
             {activeTab === 'kanban' && (
                 <div className="flex-1 overflow-x-auto pb-4 mt-2 h-full">

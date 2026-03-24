@@ -18,6 +18,7 @@ const ChangeLogPage: React.FC<ChangeLogPageProps> = ({ apiUrl, showToast, setIsS
     const [patchNotes, setPatchNotes] = useState<PatchNote[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [isModalOpen, setIsModalOpen] = useState(false);
+    const [selectedRequest, setSelectedRequest] = useState<ChangeRequest | null>(null);
     const [newRequest, setNewRequest] = useState({ title: '', description: '' });
     const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -168,7 +169,7 @@ const ChangeLogPage: React.FC<ChangeLogPageProps> = ({ apiUrl, showToast, setIsS
                                                 <div className="w-6 h-6 border-2 border-current rounded-full" />
                                             )}
                                         </button>
-                                        <div className="flex-1 min-w-0">
+                                        <div className="flex-1 min-w-0 cursor-pointer" onClick={() => setSelectedRequest(req)} role="button">
                                             <div className="flex justify-between items-start mb-1">
                                                 <h4 className={`font-bold text-gray-800 truncate ${req.status === 'completed' ? 'line-through text-gray-500' : ''}`}>
                                                     {req.title}
@@ -283,6 +284,38 @@ const ChangeLogPage: React.FC<ChangeLogPageProps> = ({ apiUrl, showToast, setIsS
                     </div>
                 </form>
             </Modal>
+
+            {/* View Full Request Modal */}
+            {selectedRequest && (
+                <Modal isOpen={true} onClose={() => setSelectedRequest(null)} title="Detalhes da Solicitação">
+                    <div className="space-y-4">
+                        <div className="flex justify-between items-start">
+                            <h3 className="text-xl font-bold text-gray-800">{selectedRequest.title}</h3>
+                            <span className={`px-2 py-1 text-xs font-bold rounded-full ${selectedRequest.status === 'completed' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
+                                {selectedRequest.status === 'completed' ? 'Concluída' : 'Pendente'}
+                            </span>
+                        </div>
+                        <div className="text-sm text-gray-500">
+                            <p>Solicitado por: <strong>{selectedRequest.requester}</strong> em {new Date(selectedRequest.createdAt).toLocaleDateString('pt-BR')}</p>
+                            {selectedRequest.status === 'completed' && selectedRequest.updatedAt && (
+                                <p>Concluída em: {new Date(selectedRequest.updatedAt).toLocaleDateString('pt-BR')}</p>
+                            )}
+                        </div>
+                        <div 
+                            className="p-4 bg-gray-50 border border-gray-100 rounded-lg prose prose-sm max-w-none text-gray-700"
+                            dangerouslySetInnerHTML={{ __html: selectedRequest.description }}
+                        />
+                        <div className="flex justify-end pt-4 border-t border-gray-100">
+                            <button 
+                                onClick={() => setSelectedRequest(null)}
+                                className="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300 transition-colors"
+                            >
+                                Fechar
+                            </button>
+                        </div>
+                    </div>
+                </Modal>
+            )}
         </div>
     );
 };

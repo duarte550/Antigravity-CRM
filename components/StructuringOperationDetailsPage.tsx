@@ -317,6 +317,9 @@ const StructuringOperationDetailsPage: React.FC<StructuringOperationDetailsPageP
                   <span className="bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300 text-xs font-medium px-2.5 py-0.5 rounded-full border border-blue-200 dark:border-blue-800/50">
                     Originação
                   </span>
+                  <span className="bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300 text-xs font-bold px-2.5 py-0.5 rounded-md border border-gray-200 dark:border-gray-600 shadow-sm">
+                    ID: {operation.id}
+                  </span>
                 </div>
               </div>
               <p className="text-gray-500 dark:text-gray-400 ml-8 text-sm">

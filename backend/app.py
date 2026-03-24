@@ -215,7 +215,7 @@ def manage_operations_collection():
     if request.method == 'GET':
         try:
             with conn.cursor() as cursor:
-                cursor.execute("SELECT * FROM cri_cra_dev.crm.operations ORDER BY name")
+                cursor.execute("SELECT * FROM cri_cra_dev.crm.operations WHERE is_structuring IS NULL OR is_structuring = FALSE ORDER BY name")
                 db_operations = [format_row(row, cursor) for row in cursor.fetchall()]
                 if not db_operations: return jsonify([])
 
@@ -347,15 +347,34 @@ def manage_operations_collection():
                 dm = data.get('defaultMonitoring', {})
                 est_date = parse_iso_date(data.get('estimatedDate'))
                 maturity_date = parse_iso_date(data.get('maturityDate'))
-                
-                cursor.execute( "INSERT INTO cri_cra_dev.crm.operations (name, area, operation_type, maturity_date, responsible_analyst, review_frequency, call_frequency, df_frequency, segmento, rating_operation, rating_group, watchlist, ltv, dscr, monitoring_news, monitoring_fii_report, monitoring_operational_info, monitoring_receivables_portfolio, monitoring_construction_report, monitoring_commercial_info, monitoring_spe_dfs, estimated_date, status, description, master_group_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", (data['name'], data['area'], data['operationType'], maturity_date, data['responsibleAnalyst'], data['reviewFrequency'], data['callFrequency'], data['dfFrequency'], data['segmento'], data['ratingOperation'], data['ratingGroup'], data['watchlist'], data.get('covenants', {}).get('ltv'), data.get('covenants', {}).get('dscr'), dm.get('news'), dm.get('fiiReport'), dm.get('operationalInfo'), dm.get('receivablesPortfolio'), dm.get('monthlyConstructionReport'), dm.get('monthlyCommercialInfo'), dm.get('speDfs'), est_date, data.get('status', 'Ativa'), data.get('description'), data.get('masterGroupId')) )
-                cursor.execute("SELECT id FROM cri_cra_dev.crm.operations WHERE name = ? ORDER BY id DESC LIMIT 1", (data['name'],))
-                new_op_id = cursor.fetchone().id
-                
                 structuring_op_id = data.get('structuringOperationId')
+                
                 if structuring_op_id:
-                    cursor.execute("UPDATE cri_cra_dev.crm.events SET operation_id = ?, is_origination = TRUE WHERE structuring_operation_id = ?", (new_op_id, structuring_op_id))
-                    cursor.execute("UPDATE cri_cra_dev.crm.structuring_operations SET is_active = FALSE WHERE id = ?", (structuring_op_id,))
+                    cursor.execute("""
+                        UPDATE cri_cra_dev.crm.operations SET 
+                        name=?, area=?, operation_type=?, maturity_date=?, responsible_analyst=?, review_frequency=?, 
+                        call_frequency=?, df_frequency=?, segmento=?, rating_operation=?, rating_group=?, watchlist=?, 
+                        ltv=?, dscr=?, monitoring_news=?, monitoring_fii_report=?, monitoring_operational_info=?, 
+                        monitoring_receivables_portfolio=?, monitoring_construction_report=?, monitoring_commercial_info=?, 
+                        monitoring_spe_dfs=?, estimated_date=?, status=?, description=?, master_group_id=?,
+                        is_structuring=FALSE, is_active=TRUE
+                        WHERE id=?
+                    """, (
+                        data['name'], data['area'], data['operationType'], maturity_date, data['responsibleAnalyst'], 
+                        data['reviewFrequency'], data['callFrequency'], data['dfFrequency'], data['segmento'], 
+                        data['ratingOperation'], data['ratingGroup'], data['watchlist'], 
+                        data.get('covenants', {}).get('ltv'), data.get('covenants', {}).get('dscr'), 
+                        dm.get('news'), dm.get('fiiReport'), dm.get('operationalInfo'), 
+                        dm.get('receivablesPortfolio'), dm.get('monthlyConstructionReport'), 
+                        dm.get('monthlyCommercialInfo'), dm.get('speDfs'), est_date, 
+                        data.get('status', 'Ativa'), data.get('description'), data.get('masterGroupId'),
+                        structuring_op_id
+                    ))
+                    new_op_id = structuring_op_id
+                else:
+                    cursor.execute( "INSERT INTO cri_cra_dev.crm.operations (name, area, operation_type, maturity_date, responsible_analyst, review_frequency, call_frequency, df_frequency, segmento, rating_operation, rating_group, watchlist, ltv, dscr, monitoring_news, monitoring_fii_report, monitoring_operational_info, monitoring_receivables_portfolio, monitoring_construction_report, monitoring_commercial_info, monitoring_spe_dfs, estimated_date, status, description, master_group_id, is_structuring, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, FALSE, TRUE)", (data['name'], data['area'], data['operationType'], maturity_date, data['responsibleAnalyst'], data['reviewFrequency'], data['callFrequency'], data['dfFrequency'], data['segmento'], data['ratingOperation'], data['ratingGroup'], data['watchlist'], data.get('covenants', {}).get('ltv'), data.get('covenants', {}).get('dscr'), dm.get('news'), dm.get('fiiReport'), dm.get('operationalInfo'), dm.get('receivablesPortfolio'), dm.get('monthlyConstructionReport'), dm.get('monthlyCommercialInfo'), dm.get('speDfs'), est_date, data.get('status', 'Ativa'), data.get('description'), data.get('masterGroupId')) )
+                    cursor.execute("SELECT id FROM cri_cra_dev.crm.operations WHERE name = ? ORDER BY id DESC LIMIT 1", (data['name'],))
+                    new_op_id = cursor.fetchone().id
                 
                 # FIX: Handle saving projects and guarantees for new operations
                 for project in data.get('projects', []):
@@ -580,7 +599,7 @@ def _update_operation_db_internal(cursor, op_id, data):
     for rh in data.get('ratingHistory', []):
         if rh.get('id') not in db_rh_ids:
             client_event_id = rh.get('eventId')
-            db_event_id_for_rh = client_event_id_to_db_id_map.get(client_event_id, client_event_id)
+            db_event_id_for_rh = client_event_id_to_db_id_map.get(str(client_event_id), client_event_id)
             cursor.execute("INSERT INTO cri_cra_dev.crm.rating_history (operation_id, date, rating_operation, rating_group, watchlist, sentiment, event_id) VALUES (?, ?, ?, ?, ?, ?, ?)", (op_id, rh.get('date'), rh.get('ratingOperation'), rh.get('ratingGroup'), rh.get('watchlist'), rh.get('sentiment'), db_event_id_for_rh))
 
     cursor.execute("SELECT id, name FROM cri_cra_dev.crm.task_rules WHERE operation_id = ?", (op_id,))

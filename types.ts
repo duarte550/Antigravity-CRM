@@ -241,6 +241,10 @@ export interface StructuringOperation {
   masterGroupId: number;
   masterGroupName?: string;
   name: string;
+  area?: Area;
+  originator?: string;
+  modality?: string;
+  createdAt?: string;
   stage: string;
   liquidationDate?: string;
   series?: StructuringOperationSeries[];

@@ -121,23 +121,26 @@ const WatchlistReportModal: React.FC<WatchlistReportModalProps> = ({ operations,
             const { jsPDF } = await import('jspdf');
 
             const canvas = await html2canvas(reportRef.current, {
-                scale: 2,
+                scale: 1.5, // Reduces scale from 2 to 1.5 to dramatically save resolution block size
                 useCORS: true,
                 backgroundColor: '#ffffff'
             });
 
-            const imgData = canvas.toDataURL('image/png');
-            const imgWidth = canvas.width / 2;
-            const imgHeight = canvas.height / 2;
+            // Use JPEG instead of PNG for huge file size savings
+            const imgData = canvas.toDataURL('image/jpeg', 0.85); // 85% quality JPEG
+            const imgWidth = canvas.width / 1.5; // adjust dimensions based on scale
+            const imgHeight = canvas.height / 1.5;
             const orientation = imgWidth > imgHeight ? 'landscape' : 'portrait';
 
             const pdf = new jsPDF({
                 orientation: orientation,
                 unit: 'px',
-                format: [imgWidth, imgHeight]
+                format: [imgWidth, imgHeight],
+                compress: true // PDF internal compression
             });
 
-            pdf.addImage(imgData, 'PNG', 0, 0, imgWidth, imgHeight);
+            // Use 'JPEG' and 'FAST' compression for massive size reductions
+            pdf.addImage(imgData, 'JPEG', 0, 0, imgWidth, imgHeight, undefined, 'FAST');
             pdf.save(`Relatorio_Watchlist_${monthName.replace(/ /g, '_')}.pdf`);
         } catch (error) {
             console.error('Failed to generate PDF:', error);
