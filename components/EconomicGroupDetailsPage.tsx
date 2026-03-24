@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Page, EconomicGroup, StructuringOperation, Event, OperationRisk } from '../types';
 import EventForm from './EventForm';
 import StructuringOperationForm from './StructuringOperationForm';
+
 import EventHistory from './EventHistory';
 import RatingHistoryChart from './RatingHistoryChart';
 import RiskForm from './RiskForm';
@@ -89,7 +90,7 @@ const EconomicGroupDetailsPage: React.FC<EconomicGroupDetailsPageProps> = ({ eco
     setIsLoading(true);
     try {
       const response = await fetch(`${apiUrl}/api/economic-groups/${economicGroupId}`);
-      if (!response.ok) throw new Error('Failed to fetch economic group');
+      if (!response.ok) throw new Error('Failed to fetch Grupo Econômico');
       const data = await response.json();
       setEconomicGroup(data);
     } catch (error) {
@@ -157,19 +158,17 @@ const EconomicGroupDetailsPage: React.FC<EconomicGroupDetailsPageProps> = ({ eco
     }
   };
 
-  const handleSaveStructuringOperation = async (data: Omit<StructuringOperation, 'id' | 'masterGroupId' | 'masterGroupName'>) => {
+  const handleSaveStructuringOperation = async (data: Omit<StructuringOperation, 'id' | 'economicGroupId' | 'economicGroupName'>) => {
     try {
       const isEditing = !!structuringToEdit;
       const url = isEditing 
         ? `${apiUrl}/api/structuring-operations/${structuringToEdit.id}`
         : `${apiUrl}/api/structuring-operations`;
       
-      const payload = { ...data, economicGroupId }; // attach economic group
-      
       const response = await fetch(url, {
         method: isEditing ? 'PUT' : 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+        body: JSON.stringify(data),
       });
       
       if (!response.ok) throw new Error('Failed to save structuring operation');
@@ -186,6 +185,7 @@ const EconomicGroupDetailsPage: React.FC<EconomicGroupDetailsPageProps> = ({ eco
   };
 
 
+
   if (isLoading) {
     return (
       <div className="flex justify-center items-center h-64">
@@ -195,48 +195,36 @@ const EconomicGroupDetailsPage: React.FC<EconomicGroupDetailsPageProps> = ({ eco
   }
 
   if (!economicGroup) {
-    return <div className="text-gray-900 dark:text-gray-100">Grupo Econômico não encontrado.</div>;
+    return <div className="text-gray-900 dark:text-gray-100">grupo econômico não encontrado.</div>;
   }
 
   return (
-    <div className="space-y-6 text-gray-900 dark:text-gray-100 p-6">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="flex items-center gap-4">
-            {/* Navigates back or to Master Group Page */}
-            <button 
-              onClick={() => {
-                  if (economicGroup.masterGroupId) {
-                      onNavigate(Page.MASTER_GROUP_DETAIL, economicGroup.masterGroupId);
-                  } else {
-                      onNavigate(Page.MASTER_GROUPS);
-                  }
-              }}
-              className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
-            >
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
-            </button>
-            <h1 className="text-3xl font-bold text-gray-900 dark:text-white">{economicGroup.name}</h1>
-            {economicGroup.sector && (
-              <span className="px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
-                {economicGroup.sector}
-              </span>
-            )}
-            {economicGroup.rating && (
-              <span className="px-3 py-1 rounded-full text-sm font-bold bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200 border border-gray-200 dark:border-gray-600">
-                Rating Atual: {economicGroup.rating}
-              </span>
-            )}
-          </div>
-          <div className="text-sm font-medium text-gray-600 dark:text-gray-400">
-              Master Group: <span className="text-blue-600 dark:text-blue-400 cursor-pointer hover:underline" onClick={() => economicGroup.masterGroupId && onNavigate(Page.MASTER_GROUP_DETAIL, economicGroup.masterGroupId)}>{economicGroup.masterGroupName || 'N/A'}</span>
-          </div>
+    <div className="space-y-6 text-gray-900 dark:text-gray-100">
+      <div className="flex items-center gap-4">
+        <button 
+          onClick={() => onNavigate(Page.MASTER_GROUP_DETAIL, economicGroup.masterGroupId)}
+          className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+        >
+          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
+        </button>
+        <h1 className="text-3xl font-bold text-gray-900 dark:text-white">{economicGroup.name}</h1>
+        {economicGroup.sector && (
+          <span className="px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
+            {economicGroup.sector}
+          </span>
+        )}
+        {economicGroup.rating && (
+          <span className="px-3 py-1 rounded-full text-sm font-bold bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200 border border-gray-200 dark:border-gray-600">
+            Rating Atual: {economicGroup.rating}
+          </span>
+        )}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-6">
-          {/* Operations */}
+          {/* Active Operations */}
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
-            <h2 className="text-xl font-semibold mb-4 text-gray-900 dark:text-white">Operações</h2>
+            <h2 className="text-xl font-semibold mb-4 text-gray-900 dark:text-white">Operações Ativas</h2>
             <div className="space-y-4">
               {economicGroup.operations?.map(op => (
                 <div 
@@ -249,12 +237,12 @@ const EconomicGroupDetailsPage: React.FC<EconomicGroupDetailsPageProps> = ({ eco
                     <p className="text-sm text-gray-500 dark:text-gray-400">{op.area}</p>
                   </div>
                   <span className="text-sm font-medium text-gray-600 dark:text-gray-300">
-                    Rating: {op.ratingOperation || 'N/A'}
+                    {op.status || 'Ativa'}
                   </span>
                 </div>
               ))}
               {(!economicGroup.operations || economicGroup.operations.length === 0) && (
-                <p className="text-gray-500 dark:text-gray-400">Nenhuma operação vinculada.</p>
+                <p className="text-gray-500 dark:text-gray-400">Nenhuma operação ativa vinculada.</p>
               )}
             </div>
           </div>
@@ -345,13 +333,13 @@ const EconomicGroupDetailsPage: React.FC<EconomicGroupDetailsPageProps> = ({ eco
               <div className="flex justify-between items-center mb-6">
                   <div className="flex items-center gap-2">
                       <AlertTriangle className="w-6 h-6 text-orange-500" />
-                      <h3 className="text-xl font-bold text-gray-700 dark:text-gray-200">Riscos e Pontos de Atenção (Grupo Econômico)</h3>
+                      <h3 className="text-xl font-bold text-gray-700 dark:text-gray-200">Riscos e Pontos de Atenção (Geral)</h3>
                   </div>
                   <button 
                       onClick={() => setIsAddingRisk(true)}
                       className="flex items-center gap-2 px-4 py-2 bg-orange-500 text-white rounded-md hover:bg-orange-600 transition-colors text-sm font-medium shadow-sm"
                   >
-                      <Plus className="w-4 h-4" /> Adicionar Risco
+                      <Plus className="w-4 h-4" /> Adicionar Risco ao Grupo
                   </button>
               </div>
 
@@ -428,7 +416,7 @@ const EconomicGroupDetailsPage: React.FC<EconomicGroupDetailsPageProps> = ({ eco
           {/* Rating History */}
           <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-lg dark:border dark:border-gray-700">
               <h3 className="text-xl font-bold text-gray-700 dark:text-gray-200 mb-4">Histórico de Ratings e Sentimentos</h3>
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-start">
                   <div className="space-y-3 max-h-96 overflow-y-auto pr-2">
                       {sortedHistory.length > 0 ? (
                           sortedHistory.map((entry, index, array) => {
@@ -511,13 +499,15 @@ const EconomicGroupDetailsPage: React.FC<EconomicGroupDetailsPageProps> = ({ eco
         />
       )}
 
+
+
       <Modal 
           isOpen={isAddingRisk || !!editingRisk} 
           onClose={() => {
               setIsAddingRisk(false);
               setEditingRisk(null);
           }} 
-          title={editingRisk ? "Editar Risco" : "Adicionar Risco ao Grupo Econômico"}
+          title={editingRisk ? "Editar Risco" : "Adicionar Risco ao Grupo"}
       >
           <RiskForm 
               initialData={editingRisk || undefined}
