@@ -17,6 +17,8 @@ interface WatchlistPageProps {
 
 const WatchlistPage: React.FC<WatchlistPageProps> = ({ operations, onUpdateOperation }) => {
     const [activeFilter, setActiveFilter] = useState<WatchlistStatus | 'All'>('All');
+    const [masterGroupFilter, setMasterGroupFilter] = useState<string>('All');
+    const [economicGroupFilter, setEconomicGroupFilter] = useState<string>('All');
     const [expandedOpId, setExpandedOpId] = useState<number | null>(null);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isReportModalOpen, setIsReportModalOpen] = useState(false);
@@ -31,6 +33,9 @@ const WatchlistPage: React.FC<WatchlistPageProps> = ({ operations, onUpdateOpera
     const filteredOperations = useMemo(() => {
         // This initial filter uses the derived current status for accuracy.
         const filtered = operations.filter(op => {
+            if (masterGroupFilter !== 'All' && (op.masterGroupName || 'Sem Master Group') !== masterGroupFilter) return false;
+            if (economicGroupFilter !== 'All' && (op.economicGroupName || 'Sem Grupo Econômico') !== economicGroupFilter) return false;
+
             if (activeFilter === 'All') return true;
             const latestHistoryEntry = op.ratingHistory.length > 0
                 ? [...op.ratingHistory].sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0]
@@ -65,7 +70,17 @@ const WatchlistPage: React.FC<WatchlistPageProps> = ({ operations, onUpdateOpera
 
             return a.name.localeCompare(b.name);
         });
-    }, [operations, activeFilter]);
+    }, [operations, activeFilter, masterGroupFilter, economicGroupFilter]);
+
+    const masterGroupsOpts = useMemo(() => {
+        const mgs = operations.map(op => op.masterGroupName || 'Sem Master Group');
+        return ['All', ...Array.from(new Set(mgs)).sort()];
+    }, [operations]);
+
+    const economicGroupsOpts = useMemo(() => {
+        const egs = operations.map(op => op.economicGroupName || 'Sem Grupo Econômico');
+        return ['All', ...Array.from(new Set(egs)).sort()];
+    }, [operations]);
 
     const handleOpenModal = (op: Operation) => {
         setOperationToEdit(op);
@@ -86,7 +101,7 @@ const WatchlistPage: React.FC<WatchlistPageProps> = ({ operations, onUpdateOpera
         handleCloseModal();
     };
 
-    const handleSaveWatchlistChange = (op: Operation, data: { watchlist: WatchlistStatusType, ratingOp: Rating, ratingGroup: Rating, sentiment: SentimentType, event: Omit<Event, 'id'>}) => {
+    const handleSaveWatchlistChange = (op: Operation, data: { watchlist: WatchlistStatusType, ratingOp: Rating, ratingGroup: Rating, ratingMasterGroup: Rating, sentiment: SentimentType, event: Omit<Event, 'id'>}) => {
         if (editingHistoryEntry && editingEvent) {
             // Update existing entry
             const updatedEvent = { ...editingEvent, ...data.event };
@@ -95,6 +110,7 @@ const WatchlistPage: React.FC<WatchlistPageProps> = ({ operations, onUpdateOpera
                 watchlist: data.watchlist,
                 ratingOperation: data.ratingOp,
                 ratingGroup: data.ratingGroup,
+                ratingMasterGroup: data.ratingMasterGroup,
                 sentiment: data.sentiment,
                 date: data.event.date // Update date if changed
             };
@@ -104,6 +120,7 @@ const WatchlistPage: React.FC<WatchlistPageProps> = ({ operations, onUpdateOpera
                 watchlist: data.watchlist, // Update current status if it's the latest entry? Ideally we recalculate, but simple update is fine for now
                 ratingOperation: data.ratingOp,
                 ratingGroup: data.ratingGroup,
+                ratingMasterGroup: data.ratingMasterGroup,
                 events: op.events.map(e => e.id === editingEvent.id ? updatedEvent : e),
                 ratingHistory: op.ratingHistory.map(h => h.id === editingHistoryEntry.id ? updatedHistoryEntry : h),
             };
@@ -119,6 +136,7 @@ const WatchlistPage: React.FC<WatchlistPageProps> = ({ operations, onUpdateOpera
                 date: eventToSave.date,
                 ratingOperation: data.ratingOp,
                 ratingGroup: data.ratingGroup,
+                ratingMasterGroup: data.ratingMasterGroup,
                 watchlist: data.watchlist,
                 sentiment: data.sentiment, // Use manually selected sentiment
                 eventId: newEventId,
@@ -129,6 +147,7 @@ const WatchlistPage: React.FC<WatchlistPageProps> = ({ operations, onUpdateOpera
                 watchlist: data.watchlist,
                 ratingOperation: data.ratingOp,
                 ratingGroup: data.ratingGroup,
+                ratingMasterGroup: data.ratingMasterGroup,
                 events: [...op.events, eventToSave],
                 ratingHistory: [...op.ratingHistory, newHistoryEntry],
             };
@@ -173,6 +192,7 @@ const WatchlistPage: React.FC<WatchlistPageProps> = ({ operations, onUpdateOpera
                         watchlist: editingHistoryEntry.watchlist,
                         ratingOp: editingHistoryEntry.ratingOperation,
                         ratingGroup: editingHistoryEntry.ratingGroup,
+                        ratingMasterGroup: (editingHistoryEntry.ratingMasterGroup || 'B') as Rating,
                         sentiment: editingHistoryEntry.sentiment,
                         event: editingEvent
                     } : undefined}
@@ -200,20 +220,38 @@ const WatchlistPage: React.FC<WatchlistPageProps> = ({ operations, onUpdateOpera
                     </button>
                 </div>
                 
-                <div className="flex items-center gap-2 border-b border-gray-200 dark:border-gray-700 pb-4 mb-4">
-                    {filterOptions.map(status => (
-                        <button
-                            key={status}
-                            onClick={() => setActiveFilter(status)}
-                            className={`px-4 py-2 text-sm font-semibold rounded-full transition-colors duration-200 ${
-                                activeFilter === status
-                                ? 'bg-blue-600 text-white shadow'
-                                : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
-                            }`}
+                <div className="flex flex-col md:flex-row md:items-center gap-4 border-b border-gray-200 dark:border-gray-700 pb-4 mb-4">
+                    <div className="flex items-center gap-2 overflow-x-auto flex-1 pb-2 md:pb-0">
+                        {filterOptions.map(status => (
+                            <button
+                                key={status}
+                                onClick={() => setActiveFilter(status)}
+                                className={`whitespace-nowrap px-4 py-2 text-sm font-semibold rounded-full transition-colors duration-200 ${
+                                    activeFilter === status
+                                    ? 'bg-blue-600 text-white shadow'
+                                    : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
+                                }`}
+                            >
+                                {status === 'All' ? 'Todas' : status}
+                            </button>
+                        ))}
+                    </div>
+                    <div className="flex items-center gap-4 flex-wrap">
+                        <select
+                            value={masterGroupFilter}
+                            onChange={(e) => setMasterGroupFilter(e.target.value)}
+                            className="block rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm py-2 px-3 transition-colors duration-200"
                         >
-                            {status === 'All' ? 'Todas' : status}
-                        </button>
-                    ))}
+                            {masterGroupsOpts.map(mg => <option key={mg} value={mg}>{mg === 'All' ? 'Master Group: Todos' : mg}</option>)}
+                        </select>
+                        <select
+                            value={economicGroupFilter}
+                            onChange={(e) => setEconomicGroupFilter(e.target.value)}
+                            className="block rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm py-2 px-3 transition-colors duration-200"
+                        >
+                            {economicGroupsOpts.map(eg => <option key={eg} value={eg}>{eg === 'All' ? 'Grupo Econômico: Todos' : eg}</option>)}
+                        </select>
+                    </div>
                 </div>
 
                 <div className="space-y-4">

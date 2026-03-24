@@ -8,11 +8,12 @@ import RichTextEditor from './RichTextEditor';
 interface WatchlistChangeFormProps {
   operation: Operation;
   onClose: () => void;
-  onSave: (data: { watchlist: WatchlistStatus, ratingOp: Rating, ratingGroup: Rating, sentiment: Sentiment, event: Omit<Event, 'id'>}) => void;
+  onSave: (data: { watchlist: WatchlistStatus, ratingOp: Rating, ratingGroup: Rating, ratingMasterGroup: Rating, sentiment: Sentiment, event: Omit<Event, 'id'>}) => void;
   initialData?: {
       watchlist: WatchlistStatus;
       ratingOp: Rating;
       ratingGroup: Rating;
+      ratingMasterGroup: Rating;
       sentiment: Sentiment;
       event: Event;
   };
@@ -28,6 +29,7 @@ const WatchlistChangeForm: React.FC<WatchlistChangeFormProps> = ({ operation, on
   const [watchlist, setWatchlist] = useState(initialData?.watchlist || operation.watchlist);
   const [ratingOp, setRatingOp] = useState(initialData?.ratingOp || operation.ratingOperation);
   const [ratingGroup, setRatingGroup] = useState(initialData?.ratingGroup || operation.ratingGroup);
+  const [ratingMasterGroup, setRatingMasterGroup] = useState(initialData?.ratingMasterGroup || operation.ratingMasterGroup || 'B');
   const [description, setDescription] = useState(initialData?.event.description || '');
   const [changeDate, setChangeDate] = useState(initialData?.event.date ? new Date(initialData.event.date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]);
   const [nextSteps, setNextSteps] = useState(initialData?.event.nextSteps || '');
@@ -48,7 +50,7 @@ const WatchlistChangeForm: React.FC<WatchlistChangeFormProps> = ({ operation, on
         attentionPoints: attentionPoints,
     };
 
-    onSave({ watchlist, ratingOp, ratingGroup, sentiment, event });
+    onSave({ watchlist, ratingOp: ratingOp as Rating, ratingGroup: ratingGroup as Rating, ratingMasterGroup: ratingMasterGroup as Rating, sentiment, event });
     onClose();
   };
 
@@ -76,16 +78,22 @@ const WatchlistChangeForm: React.FC<WatchlistChangeFormProps> = ({ operation, on
             </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
-                <Label htmlFor="rating-op-update">Rating Operação (Opcional)</Label>
+                <Label htmlFor="rating-op-update">Rating Operação</Label>
                 <Select id="rating-op-update" value={ratingOp} onChange={e => setRatingOp(e.target.value as Rating)}>
                     {ratingOptions.map(r => <option key={r} value={r}>{r}</option>)}
                 </Select>
             </div>
             <div>
-                <Label htmlFor="rating-group-update">Rating Grupo (Opcional)</Label>
+                <Label htmlFor="rating-group-update">Rating G. Econômico</Label>
                 <Select id="rating-group-update" value={ratingGroup} onChange={e => setRatingGroup(e.target.value as Rating)}>
+                    {ratingOptions.map(r => <option key={r} value={r}>{r}</option>)}
+                </Select>
+            </div>
+            <div>
+                <Label htmlFor="rating-master-group-update">Rating Master Grupo</Label>
+                <Select id="rating-master-group-update" value={ratingMasterGroup} onChange={e => setRatingMasterGroup(e.target.value as Rating)}>
                     {ratingOptions.map(r => <option key={r} value={r}>{r}</option>)}
                 </Select>
             </div>

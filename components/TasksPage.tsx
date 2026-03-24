@@ -205,7 +205,7 @@ const TasksPage: React.FC<TasksPageProps> = ({ operations, allTasks, onUpdateOpe
       setIsEventFormOpen(false);
   };
 
-  const handleSaveReview = async (data: { event: Omit<Event, 'id'>, ratingOp: Rating, ratingGroup: Rating, sentiment: Sentiment }) => {
+  const handleSaveReview = async (data: { event: Omit<Event, 'id'>, ratingOp: Rating, ratingGroup: Rating, ratingMasterGroup: Rating, sentiment: Sentiment }) => {
     if (!reviewTaskToComplete) return;
     const operationToUpdate = operationsById.get(reviewTaskToComplete.operationId);
     if (!operationToUpdate) return;
@@ -217,6 +217,7 @@ const TasksPage: React.FC<TasksPageProps> = ({ operations, allTasks, onUpdateOpe
         date: eventToSave.date,
         ratingOperation: data.ratingOp,
         ratingGroup: data.ratingGroup,
+        ratingMasterGroup: data.ratingMasterGroup,
         watchlist: operationToUpdate.watchlist,
         sentiment: data.sentiment,
         eventId: newEventId,
@@ -226,6 +227,7 @@ const TasksPage: React.FC<TasksPageProps> = ({ operations, allTasks, onUpdateOpe
         ...operationToUpdate,
         ratingOperation: data.ratingOp,
         ratingGroup: data.ratingGroup,
+        ratingMasterGroup: data.ratingMasterGroup,
         events: [...operationToUpdate.events, eventToSave],
         ratingHistory: [...operationToUpdate.ratingHistory, newHistoryEntry],
         tasks: updatedTasks

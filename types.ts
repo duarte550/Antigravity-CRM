@@ -106,6 +106,7 @@ export interface RatingHistoryEntry {
     date: string; // ISO string
     ratingOperation: Rating;
     ratingGroup: Rating;
+    ratingMasterGroup?: Rating;
     watchlist: WatchlistStatus;
     sentiment: Sentiment;
     eventId: number;
@@ -127,6 +128,9 @@ export interface Operation {
   name: string;
   area: Area;
   masterGroupId?: number;
+  masterGroupName?: string;
+  economicGroupId?: number;
+  economicGroupName?: string;
   projects: Project[];
   operationType: string;
   guarantees: Guarantee[];
@@ -142,9 +146,11 @@ export interface Operation {
   taskRules: TaskRule[];
   ratingOperation: Rating;
   ratingGroup: Rating;
+  ratingMasterGroup: Rating;
   watchlist: WatchlistStatus;
   ratingHistory: RatingHistoryEntry[];
   tasks: Task[]; // Now provided by the backend
+  contacts?: Contact[];
   taskExceptions?: string[];
   overdueCount: number; // Now provided by the backend
   nextReviewGerencial?: string | null; // ISO string
@@ -207,13 +213,15 @@ export enum Page {
   SYNC_QUEUE = 'sync_queue',
   MASTER_GROUPS = 'master_groups',
   MASTER_GROUP_DETAIL = 'master-group-detail',
+  ECONOMIC_GROUP_DETAIL = 'economic-group-detail',
   ORIGINATION_PIPELINE = 'origination-pipeline',
   STRUCTURING_OPERATION_DETAIL = 'structuring-operation-detail',
 }
 
-export interface MasterGroupContact {
+export interface Contact {
   id: number;
-  masterGroupId: number;
+  operationId?: number;
+  masterGroupId?: number;
   name: string;
   email?: string;
   phone?: string;
@@ -240,6 +248,8 @@ export interface StructuringOperation {
   id: number;
   masterGroupId: number;
   masterGroupName?: string;
+  economicGroupId?: number;
+  economicGroupName?: string;
   name: string;
   area?: Area;
   originator?: string;
@@ -256,17 +266,19 @@ export interface StructuringOperation {
   isActive?: boolean;
   taskRules?: TaskRule[];
   tasks?: Task[];
+  contacts?: Contact[];
   taskExceptions?: string[];
 }
 
-export interface MasterGroup {
+export interface EconomicGroup {
   id: number;
+  masterGroupId: number;
+  masterGroupName?: string;
   name: string;
   sector?: string;
   rating?: Rating;
   operations?: Partial<Operation>[];
   structuringOperations?: StructuringOperation[];
-  contacts?: MasterGroupContact[];
   events?: Event[];
   recentChanges?: {
     id: number;
@@ -278,6 +290,31 @@ export interface MasterGroup {
     entity: string;
     details: string;
   }[];
-  ratingHistory?: any[];
+  ratingHistory?: RatingHistoryEntry[];
+  risks?: OperationRisk[];
+  createdAt?: string;
+}
+
+export interface MasterGroup {
+  id: number;
+  name: string;
+  sector?: string;
+  rating?: Rating;
+  economicGroups?: EconomicGroup[];
+  operations?: Partial<Operation>[];
+  structuringOperations?: StructuringOperation[];
+  contacts?: Contact[];
+  events?: Event[];
+  recentChanges?: {
+    id: number;
+    operationId: number;
+    operationName: string;
+    timestamp: string;
+    user: string;
+    action: string;
+    entity: string;
+    details: string;
+  }[];
+  ratingHistory?: RatingHistoryEntry[];
   risks?: OperationRisk[];
 }

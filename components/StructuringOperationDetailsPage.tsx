@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Page, StructuringOperation, Event, MasterGroupContact, StructuringOperationStage } from '../types';
+import { Page, StructuringOperation, Event, Contact, StructuringOperationStage } from '../types';
 import EventForm from './EventForm';
 import OperationForm from './OperationForm';
 import AdHocTaskForm from './AdHocTaskForm';
@@ -15,7 +15,7 @@ interface StructuringOperationDetailsPageProps {
 
 interface StructuringOperationFull extends StructuringOperation {
   events?: Event[];
-  contacts?: MasterGroupContact[];
+  contacts?: Contact[];
 }
 
 const StructuringOperationDetailsPage: React.FC<StructuringOperationDetailsPageProps> = ({ operationId, onNavigate, apiUrl, showToast, pushToGenericQueue }) => {

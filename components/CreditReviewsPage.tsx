@@ -21,9 +21,10 @@ interface CreditReviewsPageProps {
 
   const CreditReviewsPage: React.FC<CreditReviewsPageProps> = ({ operations, onUpdateOperation, onCompleteReview, onSelectOperation, apiUrl, showToast, setIsSyncing, setIsRefreshing }) => {
     const [searchTerm, setSearchTerm] = useState('');
-    // Filters
     const [analystFilter, setAnalystFilter] = useState('All');
     const [areaFilter, setAreaFilter] = useState<'All' | Area>('All');
+    const [masterGroupFilter, setMasterGroupFilter] = useState<string>('All');
+    const [economicGroupFilter, setEconomicGroupFilter] = useState<string>('All');
     const [selectedMonthsGerencial, setSelectedMonthsGerencial] = useState<string[]>([]);
     const [selectedMonthsPolitica, setSelectedMonthsPolitica] = useState<string[]>([]);
     const [selectedMonthsEstimated, setSelectedMonthsEstimated] = useState<string[]>([]);
@@ -57,6 +58,8 @@ interface CreditReviewsPageProps {
           if (!matchesSearch) return false;
           if (analystFilter !== 'All' && op.responsibleAnalyst !== analystFilter) return false;
           if (areaFilter !== 'All' && op.area !== areaFilter) return false;
+          if (masterGroupFilter !== 'All' && (op.masterGroupName || 'Sem Master Group') !== masterGroupFilter) return false;
+          if (economicGroupFilter !== 'All' && (op.economicGroupName || 'Sem Grupo Econômico') !== economicGroupFilter) return false;
           
           if (selectedMonthsGerencial.length > 0) {
               const date = op.nextReviewGerencialTask ? op.nextReviewGerencialTask.dueDate.substring(0, 7) : null;
@@ -105,7 +108,17 @@ interface CreditReviewsPageProps {
       });
   
       return result;
-    }, [operations, searchTerm, analystFilter, areaFilter, selectedMonthsGerencial, selectedMonthsPolitica, selectedMonthsEstimated, sortConfig]);
+    }, [operations, searchTerm, analystFilter, areaFilter, masterGroupFilter, economicGroupFilter, selectedMonthsGerencial, selectedMonthsPolitica, selectedMonthsEstimated, sortConfig]);
+
+    const masterGroupsOpts = useMemo(() => {
+        const mgs = operations.map(op => op.masterGroupName || 'Sem Master Group');
+        return ['All', ...Array.from(new Set(mgs)).sort()];
+    }, [operations]);
+
+    const economicGroupsOpts = useMemo(() => {
+        const egs = operations.map(op => op.economicGroupName || 'Sem Grupo Econômico');
+        return ['All', ...Array.from(new Set(egs)).sort()];
+    }, [operations]);
 
     const handleAddMonth = (type: 'gerencial' | 'politica' | 'estimated') => {
         if (type === 'gerencial' && monthInputGerencial && !selectedMonthsGerencial.includes(monthInputGerencial)) {
@@ -292,6 +305,18 @@ interface CreditReviewsPageProps {
                     <option value="All">Todas</option>
                     <option value="CRI">CRI</option>
                     <option value="Capital Solutions">Capital Solutions</option>
+                </select>
+            </div>
+            <div>
+                <label htmlFor="mg-filter" className="text-sm font-medium text-gray-700 dark:text-gray-300">Master Group</label>
+                <select id="mg-filter" value={masterGroupFilter} onChange={e => setMasterGroupFilter(e.target.value)} className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm sm:text-sm transition-colors duration-200">
+                    {masterGroupsOpts.map(mg => <option key={mg} value={mg}>{mg === 'All' ? 'Todos' : mg}</option>)}
+                </select>
+            </div>
+            <div>
+                <label htmlFor="eg-filter" className="text-sm font-medium text-gray-700 dark:text-gray-300">Grupo Econômico</label>
+                <select id="eg-filter" value={economicGroupFilter} onChange={e => setEconomicGroupFilter(e.target.value)} className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm sm:text-sm transition-colors duration-200">
+                    {economicGroupsOpts.map(eg => <option key={eg} value={eg}>{eg === 'All' ? 'Todos' : eg}</option>)}
                 </select>
             </div>
 

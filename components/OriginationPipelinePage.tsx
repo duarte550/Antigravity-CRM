@@ -27,6 +27,8 @@ const OriginationPipelinePage: React.FC<OriginationPipelinePageProps> = ({ onNav
   const [operationForEvent, setOperationForEvent] = useState<StructuringOperation | null>(null);
   
   const [selectedAnalyst, setSelectedAnalyst] = useState<string>('');
+  const [masterGroupFilter, setMasterGroupFilter] = useState<string>('All');
+  const [economicGroupFilter, setEconomicGroupFilter] = useState<string>('All');
   const [activeTab, setActiveTab] = useState<'kanban' | 'table' | 'tasks' | 'resumo' | 'por-fundo'>('resumo');
 
   const [masterGroups, setMasterGroups] = useState<{ id: number, name: string }[]>([]);
@@ -103,9 +105,21 @@ const OriginationPipelinePage: React.FC<OriginationPipelinePageProps> = ({ onNav
   ).filter(Boolean) as string[];
 
   const filteredOperations = activeOperations.filter(op => {
-    if (!selectedAnalyst) return true;
-    return op.analyst === selectedAnalyst || op.recentEvents?.some(e => e.registeredBy === selectedAnalyst);
+    if (selectedAnalyst && op.analyst !== selectedAnalyst && !op.recentEvents?.some(e => e.registeredBy === selectedAnalyst)) return false;
+    if (masterGroupFilter !== 'All' && (op.masterGroupName || 'Sem Master Group') !== masterGroupFilter) return false;
+    if (economicGroupFilter !== 'All' && (op.economicGroupName || 'Sem Grupo Econômico') !== economicGroupFilter) return false;
+    return true;
   });
+
+  const masterGroupsOpts = useMemo(() => {
+    const mgs = activeOperations.map(op => op.masterGroupName || 'Sem Master Group');
+    return ['All', ...Array.from(new Set(mgs)).sort()];
+  }, [activeOperations]);
+
+  const economicGroupsOpts = useMemo(() => {
+    const egs = activeOperations.map(op => op.economicGroupName || 'Sem Grupo Econômico');
+    return ['All', ...Array.from(new Set(egs)).sort()];
+  }, [activeOperations]);
   
   const allOriginationTasks = useMemo(() => {
     return filteredOperations.flatMap(op => op.tasks || []);
@@ -221,7 +235,7 @@ const OriginationPipelinePage: React.FC<OriginationPipelinePageProps> = ({ onNav
         setOperationToEdit(null);
         showToast('Criando operação...', 'success');
 
-        const response = await fetch(`${apiUrl}/api/master-groups/${data.masterGroupId}/structuring-operations`, {
+        const response = await fetch(`${apiUrl}/api/structuring-operations`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(data),
@@ -524,6 +538,20 @@ const OriginationPipelinePage: React.FC<OriginationPipelinePageProps> = ({ onNav
             >
                 <option value="">Todos os Analistas</option>
                 {analysts.map(a => <option key={a} value={a}>{a}</option>)}
+            </select>
+            <select
+                value={masterGroupFilter}
+                onChange={(e) => setMasterGroupFilter(e.target.value)}
+                className="block w-48 pl-3 pr-8 py-2 border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:ring-blue-500 focus:border-blue-500"
+            >
+                {masterGroupsOpts.map(mg => <option key={mg} value={mg}>{mg === 'All' ? 'Master Group: Todos' : mg}</option>)}
+            </select>
+            <select
+                value={economicGroupFilter}
+                onChange={(e) => setEconomicGroupFilter(e.target.value)}
+                className="block w-48 pl-3 pr-8 py-2 border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:ring-blue-500 focus:border-blue-500"
+            >
+                {economicGroupsOpts.map(eg => <option key={eg} value={eg}>{eg === 'All' ? 'Grupo Econômico: Todos' : eg}</option>)}
             </select>
         </div>
       </div>

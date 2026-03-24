@@ -1,8 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { Page, MasterGroup, StructuringOperation, Event, OperationRisk } from '../types';
+import { Page, EconomicGroup, StructuringOperation, Event, OperationRisk } from '../types';
 import EventForm from './EventForm';
 import StructuringOperationForm from './StructuringOperationForm';
-
 import EventHistory from './EventHistory';
 import RatingHistoryChart from './RatingHistoryChart';
 import RiskForm from './RiskForm';
@@ -27,16 +26,16 @@ const RatingChangeIndicator: React.FC<{ change: 'up' | 'down' | 'neutral' }> = (
     return <ArrowRightIcon className="w-4 h-4 text-gray-400" title="Sem alteração" />;
 };
 
-interface MasterGroupDetailsPageProps {
-  masterGroupId: number;
+interface EconomicGroupDetailsPageProps {
+  economicGroupId: number;
   onNavigate: (page: Page, id?: number) => void;
   apiUrl: string;
   showToast: (message: string, type: 'success' | 'error') => void;
   pushToGenericQueue?: (url: string, method: string, payload: any) => void;
 }
 
-const MasterGroupDetailsPage: React.FC<MasterGroupDetailsPageProps> = ({ masterGroupId, onNavigate, apiUrl, showToast, pushToGenericQueue }) => {
-  const [masterGroup, setMasterGroup] = useState<MasterGroup | null>(null);
+const EconomicGroupDetailsPage: React.FC<EconomicGroupDetailsPageProps> = ({ economicGroupId, onNavigate, apiUrl, showToast, pushToGenericQueue }) => {
+  const [economicGroup, setEconomicGroup] = useState<EconomicGroup | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isEventFormOpen, setIsEventFormOpen] = useState(false);
   const [isStructuringFormOpen, setIsStructuringFormOpen] = useState(false);
@@ -54,7 +53,7 @@ const MasterGroupDetailsPage: React.FC<MasterGroupDetailsPageProps> = ({ masterG
   const [selectedEventForDetails, setSelectedEventForDetails] = useState<Event | null>(null);
   const eventRefs = useRef<Record<number, HTMLDivElement | null>>({});
 
-  const events = masterGroup?.events || [];
+  const events = economicGroup?.events || [];
   
   const uniqueEventTypes = useMemo(() => ['Todos', ...new Set(events.map(e => e.type))], [events]);
   const uniqueRegisteredBy = useMemo(() => ['Todos', ...new Set(events.map(e => e.registeredBy))], [events]);
@@ -79,22 +78,22 @@ const MasterGroupDetailsPage: React.FC<MasterGroupDetailsPageProps> = ({ masterG
   }, [events, eventDateFilter, eventTypeFilter, eventPersonFilter]);
 
   const sortedHistory = useMemo(() => {
-      return [...(masterGroup?.ratingHistory || [])].sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  }, [masterGroup?.ratingHistory]);
+      return [...(economicGroup?.ratingHistory || [])].sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  }, [economicGroup?.ratingHistory]);
 
   useEffect(() => {
-    fetchMasterGroup();
-  }, [masterGroupId]);
+    fetchEconomicGroup();
+  }, [economicGroupId]);
 
-  const fetchMasterGroup = async () => {
+  const fetchEconomicGroup = async () => {
     setIsLoading(true);
     try {
-      const response = await fetch(`${apiUrl}/api/master-groups/${masterGroupId}`);
-      if (!response.ok) throw new Error('Failed to fetch master group');
+      const response = await fetch(`${apiUrl}/api/economic-groups/${economicGroupId}`);
+      if (!response.ok) throw new Error('Failed to fetch economic group');
       const data = await response.json();
-      setMasterGroup(data);
+      setEconomicGroup(data);
     } catch (error) {
-      showToast('Erro ao carregar master grupo.', 'error');
+      showToast('Erro ao carregar grupo econômico.', 'error');
       console.error(error);
     } finally {
       setIsLoading(false);
@@ -104,14 +103,14 @@ const MasterGroupDetailsPage: React.FC<MasterGroupDetailsPageProps> = ({ masterG
   const handleSaveRisk = async (riskData: any) => {
       try {
           if (editingRisk) {
-              await fetch(`${apiUrl}/api/master-groups/${masterGroupId}/risks/${editingRisk.id}`, {
+              await fetch(`${apiUrl}/api/economic-groups/${economicGroupId}/risks/${editingRisk.id}`, {
                   method: 'PUT',
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({ ...riskData, userName: 'Analista' })
               });
               showToast('Risco atualizado.', 'success');
           } else {
-              await fetch(`${apiUrl}/api/master-groups/${masterGroupId}/risks`, {
+              await fetch(`${apiUrl}/api/economic-groups/${economicGroupId}/risks`, {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({ ...riskData, userName: 'Analista' })
@@ -120,7 +119,7 @@ const MasterGroupDetailsPage: React.FC<MasterGroupDetailsPageProps> = ({ masterG
           }
           setIsAddingRisk(false);
           setEditingRisk(null);
-          fetchMasterGroup();
+          fetchEconomicGroup();
       } catch (e) {
           console.error("Error saving risk:", e);
           showToast('Erro ao salvar risco.', 'error');
@@ -130,11 +129,11 @@ const MasterGroupDetailsPage: React.FC<MasterGroupDetailsPageProps> = ({ masterG
   const handleDeleteRisk = async (id: number) => {
       if (!window.confirm("Certeza que deseja remover este Risco/Ponto de Atenção?")) return;
       try {
-          await fetch(`${apiUrl}/api/master-groups/${masterGroupId}/risks/${id}?userName=Analista`, {
+          await fetch(`${apiUrl}/api/economic-groups/${economicGroupId}/risks/${id}?userName=Analista`, {
               method: 'DELETE'
           });
           showToast('Risco removido.', 'success');
-          fetchMasterGroup();
+          fetchEconomicGroup();
       } catch (e) {
           console.error("Error deleting risk:", e);
           showToast('Erro ao remover risco.', 'error');
@@ -143,13 +142,13 @@ const MasterGroupDetailsPage: React.FC<MasterGroupDetailsPageProps> = ({ masterG
 
   const handleAddEvent = async (eventData: Omit<Event, 'id'>) => {
     try {
-      const response = await fetch(`${apiUrl}/api/master-groups/${masterGroupId}/events`, {
+      const response = await fetch(`${apiUrl}/api/economic-groups/${economicGroupId}/events`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(eventData),
       });
       if (!response.ok) throw new Error('Failed to add event');
-      await fetchMasterGroup();
+      await fetchEconomicGroup();
       showToast('Evento adicionado com sucesso', 'success');
       setIsEventFormOpen(false);
     } catch (error) {
@@ -165,15 +164,17 @@ const MasterGroupDetailsPage: React.FC<MasterGroupDetailsPageProps> = ({ masterG
         ? `${apiUrl}/api/structuring-operations/${structuringToEdit.id}`
         : `${apiUrl}/api/structuring-operations`;
       
+      const payload = { ...data, economicGroupId }; // attach economic group
+      
       const response = await fetch(url, {
         method: isEditing ? 'PUT' : 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
+        body: JSON.stringify(payload),
       });
       
       if (!response.ok) throw new Error('Failed to save structuring operation');
       
-      await fetchMasterGroup();
+      await fetchEconomicGroup();
       
       showToast(`Operação em estruturação ${isEditing ? 'atualizada' : 'criada'} com sucesso`, 'success');
       setIsStructuringFormOpen(false);
@@ -185,7 +186,6 @@ const MasterGroupDetailsPage: React.FC<MasterGroupDetailsPageProps> = ({ masterG
   };
 
 
-
   if (isLoading) {
     return (
       <div className="flex justify-center items-center h-64">
@@ -194,55 +194,67 @@ const MasterGroupDetailsPage: React.FC<MasterGroupDetailsPageProps> = ({ masterG
     );
   }
 
-  if (!masterGroup) {
-    return <div className="text-gray-900 dark:text-gray-100">Master Grupo não encontrado.</div>;
+  if (!economicGroup) {
+    return <div className="text-gray-900 dark:text-gray-100">Grupo Econômico não encontrado.</div>;
   }
 
   return (
-    <div className="space-y-6 text-gray-900 dark:text-gray-100">
-      <div className="flex items-center gap-4">
-        <button 
-          onClick={() => onNavigate(Page.MASTER_GROUPS)}
-          className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
-        >
-          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
-        </button>
-        <h1 className="text-3xl font-bold text-gray-900 dark:text-white">{masterGroup.name}</h1>
-        {masterGroup.sector && (
-          <span className="px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
-            {masterGroup.sector}
-          </span>
-        )}
-        {masterGroup.rating && (
-          <span className="px-3 py-1 rounded-full text-sm font-bold bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200 border border-gray-200 dark:border-gray-600">
-            Rating Atual: {masterGroup.rating}
-          </span>
-        )}
+    <div className="space-y-6 text-gray-900 dark:text-gray-100 p-6">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
+            {/* Navigates back or to Master Group Page */}
+            <button 
+              onClick={() => {
+                  if (economicGroup.masterGroupId) {
+                      onNavigate(Page.MASTER_GROUP_DETAIL, economicGroup.masterGroupId);
+                  } else {
+                      onNavigate(Page.MASTER_GROUPS);
+                  }
+              }}
+              className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
+            </button>
+            <h1 className="text-3xl font-bold text-gray-900 dark:text-white">{economicGroup.name}</h1>
+            {economicGroup.sector && (
+              <span className="px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
+                {economicGroup.sector}
+              </span>
+            )}
+            {economicGroup.rating && (
+              <span className="px-3 py-1 rounded-full text-sm font-bold bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200 border border-gray-200 dark:border-gray-600">
+                Rating Atual: {economicGroup.rating}
+              </span>
+            )}
+          </div>
+          <div className="text-sm font-medium text-gray-600 dark:text-gray-400">
+              Master Group: <span className="text-blue-600 dark:text-blue-400 cursor-pointer hover:underline" onClick={() => economicGroup.masterGroupId && onNavigate(Page.MASTER_GROUP_DETAIL, economicGroup.masterGroupId)}>{economicGroup.masterGroupName || 'N/A'}</span>
+          </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-6">
-          {/* Economic Groups */}
+          {/* Operations */}
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
-            <h2 className="text-xl font-semibold mb-4 text-gray-900 dark:text-white">Grupos Econômicos</h2>
+            <h2 className="text-xl font-semibold mb-4 text-gray-900 dark:text-white">Operações</h2>
             <div className="space-y-4">
-              {masterGroup.economicGroups?.map(eg => (
+              {economicGroup.operations?.map(op => (
                 <div 
-                  key={eg.id} 
+                  key={op.id} 
                   className="flex justify-between items-center p-4 rounded-lg border border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer"
-                  onClick={() => onNavigate(Page.ECONOMIC_GROUP_DETAIL, eg.id)}
+                  onClick={() => onNavigate(Page.DETAIL, op.id)}
                 >
                   <div>
-                    <h3 className="font-medium text-gray-900 dark:text-white">{eg.name}</h3>
-                    <p className="text-sm text-gray-500 dark:text-gray-400">{eg.sector}</p>
+                    <h3 className="font-medium text-gray-900 dark:text-white">{op.name}</h3>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">{op.area}</p>
                   </div>
                   <span className="text-sm font-medium text-gray-600 dark:text-gray-300">
-                    Rating: {eg.rating || 'N/A'}
+                    Rating: {op.ratingOperation || 'N/A'}
                   </span>
                 </div>
               ))}
-              {(!masterGroup.economicGroups || masterGroup.economicGroups.length === 0) && (
-                <p className="text-gray-500 dark:text-gray-400">Nenhum grupo econômico vinculado.</p>
+              {(!economicGroup.operations || economicGroup.operations.length === 0) && (
+                <p className="text-gray-500 dark:text-gray-400">Nenhuma operação vinculada.</p>
               )}
             </div>
           </div>
@@ -262,7 +274,7 @@ const MasterGroupDetailsPage: React.FC<MasterGroupDetailsPageProps> = ({ masterG
               </button>
             </div>
             <div className="space-y-4">
-              {(masterGroup.structuringOperations?.filter(op => op.isActive !== false) || []).map(op => (
+              {(economicGroup.structuringOperations?.filter(op => op.isActive !== false) || []).map(op => (
                 <div 
                   key={op.id} 
                   className="p-4 rounded-lg border border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer"
@@ -289,21 +301,21 @@ const MasterGroupDetailsPage: React.FC<MasterGroupDetailsPageProps> = ({ masterG
                   </div>
                 </div>
               ))}
-              {(!masterGroup.structuringOperations?.filter(op => op.isActive !== false).length) && (
+              {(!economicGroup.structuringOperations?.filter(op => op.isActive !== false).length) && (
                 <p className="text-gray-500 dark:text-gray-400">Nenhuma operação em estruturação ativa.</p>
               )}
 
-              {(masterGroup.structuringOperations?.filter(op => op.isActive === false).length || 0) > 0 && (
+              {(economicGroup.structuringOperations?.filter(op => op.isActive === false).length || 0) > 0 && (
                 <div className="mt-6 border-t border-gray-100 dark:border-gray-700 pt-4">
                   <button 
                     onClick={() => setShowInactiveStructuring(!showInactiveStructuring)} 
                     className="text-sm font-medium text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 flex items-center gap-1"
                   >
-                    {showInactiveStructuring ? 'Ocultar' : 'Mostrar'} Operações Desativadas ({(masterGroup.structuringOperations?.filter(op => op.isActive === false).length)})
+                    {showInactiveStructuring ? 'Ocultar' : 'Mostrar'} Operações Desativadas ({(economicGroup.structuringOperations?.filter(op => op.isActive === false).length)})
                   </button>
                   {showInactiveStructuring && (
                     <div className="space-y-4 mt-4 opacity-75">
-                      {(masterGroup.structuringOperations?.filter(op => op.isActive === false) || []).map(op => (
+                      {(economicGroup.structuringOperations?.filter(op => op.isActive === false) || []).map(op => (
                         <div 
                           key={op.id} 
                           className="p-4 rounded-lg border border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 hover:bg-gray-100 dark:hover:bg-gray-700/80 cursor-pointer"
@@ -333,19 +345,19 @@ const MasterGroupDetailsPage: React.FC<MasterGroupDetailsPageProps> = ({ masterG
               <div className="flex justify-between items-center mb-6">
                   <div className="flex items-center gap-2">
                       <AlertTriangle className="w-6 h-6 text-orange-500" />
-                      <h3 className="text-xl font-bold text-gray-700 dark:text-gray-200">Riscos e Pontos de Atenção (Geral)</h3>
+                      <h3 className="text-xl font-bold text-gray-700 dark:text-gray-200">Riscos e Pontos de Atenção (Grupo Econômico)</h3>
                   </div>
                   <button 
                       onClick={() => setIsAddingRisk(true)}
                       className="flex items-center gap-2 px-4 py-2 bg-orange-500 text-white rounded-md hover:bg-orange-600 transition-colors text-sm font-medium shadow-sm"
                   >
-                      <Plus className="w-4 h-4" /> Adicionar Risco ao Grupo
+                      <Plus className="w-4 h-4" /> Adicionar Risco
                   </button>
               </div>
 
-              {masterGroup.risks && masterGroup.risks.length > 0 ? (
+              {economicGroup.risks && economicGroup.risks.length > 0 ? (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {masterGroup.risks.map(risk => (
+                      {economicGroup.risks.map(risk => (
                           <div key={risk.id} className={`flex flex-col p-4 rounded-lg border-l-4 shadow-sm bg-gray-50 dark:bg-gray-800 border border-transparent dark:border-gray-700 ${
                               risk.severity === 'Alta' ? 'border-l-red-500' : 
                               risk.severity === 'Média' ? 'border-l-orange-500' : 
@@ -416,7 +428,7 @@ const MasterGroupDetailsPage: React.FC<MasterGroupDetailsPageProps> = ({ masterG
           {/* Rating History */}
           <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-lg dark:border dark:border-gray-700">
               <h3 className="text-xl font-bold text-gray-700 dark:text-gray-200 mb-4">Histórico de Ratings e Sentimentos</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-start">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
                   <div className="space-y-3 max-h-96 overflow-y-auto pr-2">
                       {sortedHistory.length > 0 ? (
                           sortedHistory.map((entry, index, array) => {
@@ -451,7 +463,7 @@ const MasterGroupDetailsPage: React.FC<MasterGroupDetailsPageProps> = ({ masterG
                       )}
                   </div>
                   <div>
-                      <RatingHistoryChart history={masterGroup.ratingHistory || []} />
+                      <RatingHistoryChart history={economicGroup.ratingHistory || []} />
                   </div>
               </div>
           </div>
@@ -459,7 +471,7 @@ const MasterGroupDetailsPage: React.FC<MasterGroupDetailsPageProps> = ({ masterG
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
             <h2 className="text-xl font-semibold mb-4 text-gray-900 dark:text-white">Alterações Recentes</h2>
             <div className="space-y-4">
-              {masterGroup.recentChanges?.map(change => (
+              {economicGroup.recentChanges?.map(change => (
                 <div key={change.id} className="border-l-2 border-green-500 pl-3 py-1">
                   <div className="flex items-center gap-2">
                     <p className="text-xs text-gray-500 dark:text-gray-400">{new Date(change.timestamp).toLocaleString()}</p>
@@ -471,7 +483,7 @@ const MasterGroupDetailsPage: React.FC<MasterGroupDetailsPageProps> = ({ masterG
                   <p className="text-sm text-gray-600 dark:text-gray-300">{change.details}</p>
                 </div>
               ))}
-              {(!masterGroup.recentChanges || masterGroup.recentChanges.length === 0) && (
+              {(!economicGroup.recentChanges || economicGroup.recentChanges.length === 0) && (
                 <p className="text-gray-500 dark:text-gray-400">Nenhuma alteração recente.</p>
               )}
             </div>
@@ -499,15 +511,13 @@ const MasterGroupDetailsPage: React.FC<MasterGroupDetailsPageProps> = ({ masterG
         />
       )}
 
-
-
       <Modal 
           isOpen={isAddingRisk || !!editingRisk} 
           onClose={() => {
               setIsAddingRisk(false);
               setEditingRisk(null);
           }} 
-          title={editingRisk ? "Editar Risco" : "Adicionar Risco ao Grupo"}
+          title={editingRisk ? "Editar Risco" : "Adicionar Risco ao Grupo Econômico"}
       >
           <RiskForm 
               initialData={editingRisk || undefined}
@@ -579,4 +589,4 @@ const MasterGroupDetailsPage: React.FC<MasterGroupDetailsPageProps> = ({ masterG
   );
 };
 
-export default MasterGroupDetailsPage;
+export default EconomicGroupDetailsPage;

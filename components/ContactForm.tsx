@@ -1,12 +1,12 @@
 import React, { useState } from 'react';
-import { MasterGroupContact } from '../types';
+import { Contact } from '../types';
 import Modal from './Modal';
 import { Label, Input, FormRow } from './UI';
 
 interface ContactFormProps {
   onClose: () => void;
-  onSave: (data: Omit<MasterGroupContact, 'id' | 'masterGroupId'>) => void;
-  initialData?: MasterGroupContact | null;
+  onSave: (data: Omit<Contact, 'id' | 'masterGroupId'>) => void;
+  initialData?: Contact | null;
 }
 
 const ContactForm: React.FC<ContactFormProps> = ({ onClose, onSave, initialData }) => {

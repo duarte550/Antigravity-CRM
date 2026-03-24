@@ -7,7 +7,7 @@ interface StructuringOperationFormProps {
   onClose: () => void;
   onSave: (data: Omit<StructuringOperation, 'id' | 'masterGroupId' | 'masterGroupName'> & { masterGroupId?: number }) => void;
   initialData?: StructuringOperation | null;
-  masterGroups?: { id: number, name: string }[];
+  masterGroups?: { id: number, name: string, economicGroups?: any[] }[];
   onOpenNewMasterGroup?: () => void;
 }
 
@@ -23,6 +23,8 @@ const StructuringOperationForm: React.FC<StructuringOperationFormProps> = ({ onC
   const [masterGroupNameInput, setMasterGroupNameInput] = useState<string>(
     initialData?.masterGroupName || (masterGroups && masterGroups.length > 0 ? masterGroups[0].name : '')
   );
+  const [economicGroupId, setEconomicGroupId] = useState<number | 'new' | ''>(initialData?.economicGroupId || '');
+  const [newEGName, setNewEGName] = useState(initialData?.economicGroupName || '');
   const [risk, setRisk] = useState(initialData?.risk || 'High Yield');
   const [temperature, setTemperature] = useState(initialData?.temperature || 'Morno');
   const [analyst, setAnalyst] = useState(initialData?.analyst || '');
@@ -90,7 +92,9 @@ const StructuringOperationForm: React.FC<StructuringOperationFormProps> = ({ onC
         liquidationDate: liquidationDate ? new Date(liquidationDate + 'T12:00:00').toISOString() : undefined,
         series: payloadSeries,
         ...(masterGroups && !initialData && masterGroupId && { masterGroupId }),
-      });
+        economicGroupId: economicGroupId === 'new' ? 'new' : (economicGroupId !== '' ? Number(economicGroupId) : undefined),
+        newEGName: economicGroupId === 'new' ? newEGName : undefined,
+      } as any);
     } finally {
       setIsSubmitting(false);
     }
@@ -128,6 +132,28 @@ const StructuringOperationForm: React.FC<StructuringOperationFormProps> = ({ onC
             </div>
           </FormRow>
         )}
+        <FormRow>
+          <div className="flex-[2]">
+            <Label htmlFor="economicGroup">Grupo Econômico <span className="font-normal text-xs text-blue-500">(Opcional)</span></Label>
+            <div className="flex gap-2">
+              <Select
+                id="economicGroup"
+                value={economicGroupId}
+                onChange={e => setEconomicGroupId(e.target.value === 'new' ? 'new' : (e.target.value ? Number(e.target.value) : ''))}
+                disabled={!masterGroupNameInput || !masterGroups?.find(mg => mg.name === masterGroupNameInput)}
+              >
+                <option value="">Nenhum</option>
+                {masterGroups?.find(mg => mg.name === masterGroupNameInput)?.economicGroups?.map((eg: any) => (
+                  <option key={eg.id} value={eg.id}>{eg.name}</option>
+                ))}
+                <option value="new">+ Criar Novo Grupo</option>
+              </Select>
+              {economicGroupId === 'new' && (
+                <Input placeholder="Nome do Grupo" value={newEGName} onChange={e => setNewEGName(e.target.value)} required />
+              )}
+            </div>
+          </div>
+        </FormRow>
         <FormRow>
           <div className="flex-[2]">
             <Label htmlFor="name">Nome da Operação</Label>

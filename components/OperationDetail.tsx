@@ -390,12 +390,14 @@ ${event.nextSteps ? stripHtml(event.nextSteps) : 'Nenhum'}
         }
     };
     
-    const handleSaveReview = async (data: { event: Omit<Event, 'id'>, ratingOp: Rating, ratingGroup: Rating, sentiment: Sentiment }) => {
+    const handleSaveReview = async (data: { event: Omit<Event, 'id'>, ratingOp: Rating, ratingGroup: Rating, ratingMasterGroup: Rating, sentiment: Sentiment }) => {
+        if (!reviewTaskToComplete) return;
+
         const newEventId = Date.now();
         const eventToSave: Event = {
             ...data.event,
             id: newEventId,
-            completedTaskId: reviewTaskToComplete?.id
+            completedTaskId: reviewTaskToComplete.id
         };
        
         const newHistoryEntry: RatingHistoryEntry = {
@@ -403,19 +405,19 @@ ${event.nextSteps ? stripHtml(event.nextSteps) : 'Nenhum'}
             date: eventToSave.date,
             ratingOperation: data.ratingOp,
             ratingGroup: data.ratingGroup,
+            ratingMasterGroup: data.ratingMasterGroup,
             watchlist: operation.watchlist,
             sentiment: data.sentiment,
             eventId: newEventId,
         };
 
-        const updatedTasks = reviewTaskToComplete
-            ? operation.tasks.map(t => t.id === reviewTaskToComplete.id ? { ...t, status: TaskStatus.COMPLETED } : t)
-            : operation.tasks;
+        const updatedTasks = operation.tasks.map(t => t.id === reviewTaskToComplete.id ? {...t, status: TaskStatus.COMPLETED} : t);
 
         const updatedOperation: Operation = {
             ...operation,
             ratingOperation: data.ratingOp,
             ratingGroup: data.ratingGroup,
+            ratingMasterGroup: data.ratingMasterGroup,
             events: [...operation.events, eventToSave],
             ratingHistory: [...operation.ratingHistory, newHistoryEntry],
             tasks: updatedTasks

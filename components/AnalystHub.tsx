@@ -225,7 +225,7 @@ const AnalystHub: React.FC<AnalystHubProps> = ({
     }
   };
 
-  const handleSaveReviewCompletion = async (data: { event: Omit<Event, 'id'>, ratingOp: Rating, ratingGroup: Rating, sentiment: Sentiment }) => {
+  const handleSaveReviewCompletion = async (data: { event: Omit<Event, 'id'>, ratingOp: Rating, ratingGroup: Rating, ratingMasterGroup: Rating, sentiment: Sentiment }) => {
     if (!selectedOperationForAction || !reviewTaskToComplete) return;
     try {
       const newEventId = Date.now();

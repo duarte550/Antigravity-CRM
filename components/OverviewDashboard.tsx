@@ -61,6 +61,8 @@ const OverviewDashboard: React.FC<OverviewDashboardProps> = ({ operations, onSel
   const [isFormOpen, setIsFormOpen] = React.useState(false);
   const [operationToDelete, setOperationToDelete] = useState<Operation | null>(null);
   const [areaFilter, setAreaFilter] = useState<'All' | Area>('All');
+  const [masterGroupFilter, setMasterGroupFilter] = useState<string>('All');
+  const [economicGroupFilter, setEconomicGroupFilter] = useState<string>('All');
   
   // Task Completion State
   const [taskToComplete, setTaskToComplete] = useState<Task | null>(null);
@@ -87,6 +89,12 @@ const OverviewDashboard: React.FC<OverviewDashboardProps> = ({ operations, onSel
     if (areaFilter !== 'All') {
       result = result.filter(op => op.area === areaFilter);
     }
+    if (masterGroupFilter !== 'All') {
+      result = result.filter(op => (op.masterGroupName || 'Sem Master Group') === masterGroupFilter);
+    }
+    if (economicGroupFilter !== 'All') {
+      result = result.filter(op => (op.economicGroupName || 'Sem Grupo Econômico') === economicGroupFilter);
+    }
 
     result.sort((a, b) => {
         let valA: any = a[sortConfig.field as keyof Operation];
@@ -107,7 +115,17 @@ const OverviewDashboard: React.FC<OverviewDashboardProps> = ({ operations, onSel
     });
 
     return result;
-  }, [operations, areaFilter, sortConfig]);
+  }, [operations, areaFilter, masterGroupFilter, economicGroupFilter, sortConfig]);
+
+  const masterGroupsOpts = useMemo(() => {
+    const mgs = operations.map(op => op.masterGroupName || 'Sem Master Group');
+    return ['All', ...Array.from(new Set(mgs)).sort()];
+  }, [operations]);
+
+  const economicGroupsOpts = useMemo(() => {
+    const egs = operations.map(op => op.economicGroupName || 'Sem Grupo Econômico');
+    return ['All', ...Array.from(new Set(egs)).sort()];
+  }, [operations]);
 
   const allTasks = React.useMemo(() => {
       return operations.flatMap(op => op.tasks || []);
@@ -148,7 +166,7 @@ const OverviewDashboard: React.FC<OverviewDashboardProps> = ({ operations, onSel
       setIsEventFormOpen(false);
   };
 
-  const handleSaveReview = async (data: { event: Omit<Event, 'id'>, ratingOp: Rating, ratingGroup: Rating, sentiment: Sentiment }) => {
+  const handleSaveReview = async (data: { event: Omit<Event, 'id'>, ratingOp: Rating, ratingGroup: Rating, ratingMasterGroup: Rating, sentiment: Sentiment }) => {
     if (!reviewTaskToComplete) return;
     const operationToUpdate = operationsById.get(reviewTaskToComplete.operationId);
     if (!operationToUpdate) return;
@@ -165,6 +183,7 @@ const OverviewDashboard: React.FC<OverviewDashboardProps> = ({ operations, onSel
         date: eventToSave.date,
         ratingOperation: data.ratingOp,
         ratingGroup: data.ratingGroup,
+        ratingMasterGroup: data.ratingMasterGroup,
         watchlist: operationToUpdate.watchlist,
         sentiment: data.sentiment,
         eventId: newEventId,
@@ -176,6 +195,7 @@ const OverviewDashboard: React.FC<OverviewDashboardProps> = ({ operations, onSel
         ...operationToUpdate,
         ratingOperation: data.ratingOp,
         ratingGroup: data.ratingGroup,
+        ratingMasterGroup: data.ratingMasterGroup,
         events: [...operationToUpdate.events, eventToSave],
         ratingHistory: [...operationToUpdate.ratingHistory, newHistoryEntry],
         tasks: updatedTasks
@@ -271,6 +291,28 @@ const OverviewDashboard: React.FC<OverviewDashboardProps> = ({ operations, onSel
                     <option value="All">Todas as Áreas</option>
                     <option value="CRI">CRI</option>
                     <option value="Capital Solutions">Capital Solutions</option>
+                </select>
+            </div>
+            <div>
+                <label htmlFor="mg-filter" className="sr-only">Master Group</label>
+                <select 
+                  id="mg-filter"
+                  value={masterGroupFilter}
+                  onChange={e => setMasterGroupFilter(e.target.value)}
+                  className="block w-full pl-3 pr-8 py-2 text-base border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md transition-colors duration-200"
+                >
+                    {masterGroupsOpts.map(mg => <option key={mg} value={mg}>{mg === 'All' ? 'Todos os Master Groups' : mg}</option>)}
+                </select>
+            </div>
+            <div>
+                <label htmlFor="eg-filter" className="sr-only">Grupo Econômico</label>
+                <select 
+                  id="eg-filter"
+                  value={economicGroupFilter}
+                  onChange={e => setEconomicGroupFilter(e.target.value)}
+                  className="block w-full pl-3 pr-8 py-2 text-base border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md transition-colors duration-200"
+                >
+                    {economicGroupsOpts.map(eg => <option key={eg} value={eg}>{eg === 'All' ? 'Todos os Grupos Econômicos' : eg}</option>)}
                 </select>
             </div>
             <button

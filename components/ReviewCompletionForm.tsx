@@ -10,13 +10,14 @@ interface ReviewCompletionFormProps {
   task: Task;
   operation: Operation;
   onClose: () => void;
-  onSave: (data: { event: Omit<Event, 'id'>, ratingOp: Rating, ratingGroup: Rating, sentiment: Sentiment }) => Promise<void>;
+  onSave: (data: { event: Omit<Event, 'id'>, ratingOp: Rating, ratingGroup: Rating, ratingMasterGroup: Rating, sentiment: Sentiment }) => Promise<void>;
 }
 
 const ReviewCompletionForm: React.FC<ReviewCompletionFormProps> = ({ task, operation, onClose, onSave }) => {
   const [completionDate, setCompletionDate] = useState(new Date().toISOString().split('T')[0]);
   const [ratingOp, setRatingOp] = useState(operation.ratingOperation);
   const [ratingGroup, setRatingGroup] = useState(operation.ratingGroup);
+  const [ratingMasterGroup, setRatingMasterGroup] = useState<Rating>(operation.ratingMasterGroup || ('B' as Rating));
   const [sentiment, setSentiment] = useState<Sentiment>(SentimentEnum.NEUTRO);
   const [description, setDescription] = useState('');
   const [nextSteps, setNextSteps] = useState('');
@@ -40,7 +41,7 @@ const ReviewCompletionForm: React.FC<ReviewCompletionFormProps> = ({ task, opera
 
     try {
         // Aguarda o processo de salvamento (App.tsx gerencia a persistência)
-        await onSave({ event, ratingOp, ratingGroup, sentiment });
+        await onSave({ event, ratingOp, ratingGroup, ratingMasterGroup, sentiment });
     } catch (err) {
         setIsSubmitting(false);
     }
@@ -63,7 +64,7 @@ const ReviewCompletionForm: React.FC<ReviewCompletionFormProps> = ({ task, opera
             <Input id="review-completion-date" type="date" value={completionDate} onChange={e => setCompletionDate(e.target.value)} required disabled={isSubmitting} />
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div>
                 <Label htmlFor="review-rating-op">Rating Operação</Label>
                 <Select id="review-rating-op" value={ratingOp} onChange={e => setRatingOp(e.target.value as Rating)} disabled={isSubmitting}>
@@ -73,6 +74,12 @@ const ReviewCompletionForm: React.FC<ReviewCompletionFormProps> = ({ task, opera
             <div>
                 <Label htmlFor="review-rating-group">Rating Grupo</Label>
                 <Select id="review-rating-group" value={ratingGroup} onChange={e => setRatingGroup(e.target.value as Rating)} disabled={isSubmitting}>
+                    {ratingOptions.map(r => <option key={r} value={r}>{r}</option>)}
+                </Select>
+            </div>
+            <div>
+                <Label htmlFor="review-rating-master-group">Rating Master Group</Label>
+                <Select id="review-rating-master-group" value={ratingMasterGroup} onChange={e => setRatingMasterGroup(e.target.value as Rating)} disabled={isSubmitting}>
                     {ratingOptions.map(r => <option key={r} value={r}>{r}</option>)}
                 </Select>
             </div>

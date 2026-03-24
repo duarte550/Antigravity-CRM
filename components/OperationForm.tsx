@@ -41,6 +41,8 @@ const OperationForm: React.FC<OperationFormProps> = ({ onClose, onSave, initialD
   const [name, setName] = useState(initialData?.name || seedData?.name || '');
   const [area, setArea] = useState<Area>(initialData?.area || seedData?.area || 'CRI');
   const [masterGroupId, setMasterGroupId] = useState<number | ''>(initialData?.masterGroupId || seedData?.masterGroupId || '');
+  const [economicGroupId, setEconomicGroupId] = useState<number | 'new' | ''>(initialData?.economicGroupId || '');
+  const [newEGName, setNewEGName] = useState('');
   const [masterGroups, setMasterGroups] = useState<MasterGroup[]>([]);
   const [projects, setProjects] = useState(initialData?.projects?.map(p => p.name).join(', ') || seedData?.projects?.map(p => p.name).join(', ') || '');
   const [operationType, setOperationType] = useState(initialData?.operationType || seedData?.operationType || 'CRI');
@@ -93,6 +95,8 @@ const OperationForm: React.FC<OperationFormProps> = ({ onClose, onSave, initialD
       name,
       area,
       masterGroupId: masterGroupId === '' ? null : Number(masterGroupId),
+      economicGroupId: economicGroupId === '' ? null : economicGroupId === 'new' ? 'new' : Number(economicGroupId),
+      newEGName: economicGroupId === 'new' ? newEGName : undefined,
       projects: projects.split(',').map((p, i) => ({ id: i, name: p.trim() })).filter(p => p.name),
       operationType,
       guarantees: guarantees.split(',').map((g, i) => ({ id: i, name: g.trim() })).filter(g => g.name),
@@ -132,10 +136,27 @@ const OperationForm: React.FC<OperationFormProps> = ({ onClose, onSave, initialD
         <FormRow>
           <div>
             <Label htmlFor="masterGroupId">Master Grupo</Label>
-            <Select id="masterGroupId" value={masterGroupId} onChange={e => setMasterGroupId(e.target.value ? Number(e.target.value) : '')}>
+            <Select id="masterGroupId" value={masterGroupId} onChange={e => {
+                setMasterGroupId(e.target.value ? Number(e.target.value) : '');
+                setEconomicGroupId(''); // reset EG when MG changes
+            }}>
                 <option value="">Nenhum</option>
                 {masterGroups.map(mg => <option key={mg.id} value={mg.id}>{mg.name}</option>)}
             </Select>
+          </div>
+          <div>
+            <Label htmlFor="economicGroupId">Grupo Econômico</Label>
+            <div className="flex gap-2">
+                <Select id="economicGroupId" value={economicGroupId} onChange={e => setEconomicGroupId(e.target.value === 'new' ? 'new' : (e.target.value ? Number(e.target.value) : ''))} required={!!masterGroupId} disabled={!masterGroupId}>
+                    <option value="">Nenhum</option>
+                    {masterGroups.find(mg => mg.id === masterGroupId)?.economicGroups?.map((eg: any) => <option key={eg.id} value={eg.id}>{eg.name}</option>)}
+                    <option value="new">+ Criar Novo Grupo</option>
+                </Select>
+                {economicGroupId === 'new' && (
+                    <Input placeholder="Nome do Grupo" value={newEGName} onChange={e => setNewEGName(e.target.value)} required />
+                )}
+            </div>
+            {!masterGroupId && <p className="text-xs text-gray-500 mt-1">Selecione um Master Grupo primeiro.</p>}
           </div>
         </FormRow>
 

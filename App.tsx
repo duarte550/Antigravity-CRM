@@ -21,6 +21,7 @@ import LegacyPage from './components/LegacyPage';
 import SyncQueuePage from './components/SyncQueuePage';
 import MasterGroupsPage from './components/MasterGroupsPage';
 import MasterGroupDetailsPage from './components/MasterGroupDetailsPage';
+import EconomicGroupDetailsPage from './components/EconomicGroupDetailsPage';
 import OriginationPipelinePage from './components/OriginationPipelinePage';
 import StructuringOperationDetailsPage from './components/StructuringOperationDetailsPage';
 
@@ -805,6 +806,15 @@ const App: React.FC = () => {
             if (!selectedOperationId) return <div>Selecione um Master Grupo</div>;
             return <MasterGroupDetailsPage 
                 masterGroupId={selectedOperationId} 
+                onNavigate={handleNavigate} 
+                apiUrl={API_BASE_URL} 
+                showToast={showToast} 
+                pushToGenericQueue={pushToGenericQueue}
+            />;
+        case Page.ECONOMIC_GROUP_DETAIL:
+            if (!selectedOperationId) return <div>Selecione um Grupo Econômico</div>;
+            return <EconomicGroupDetailsPage 
+                economicGroupId={selectedOperationId} 
                 onNavigate={handleNavigate} 
                 apiUrl={API_BASE_URL} 
                 showToast={showToast} 
