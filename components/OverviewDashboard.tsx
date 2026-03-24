@@ -16,6 +16,7 @@ interface OverviewDashboardProps {
   onOpenNewTaskModal: (operationId?: number) => void;
   onDeleteOperation: (id: number) => void;
   onUpdateOperation: (updatedOperation: Operation, syncToBackend?: boolean) => Promise<void>;
+  apiUrl: string;
 }
 
 type SortField = 'name' | 'maturityDate' | 'nextReviewGerencial' | 'nextReviewPolitica';
@@ -57,7 +58,7 @@ const formatDate = (dateString: string | null | undefined) => {
 };
 
 
-const OverviewDashboard: React.FC<OverviewDashboardProps> = ({ operations, onSelectOperation, onAddOperation, onOpenNewTaskModal, onDeleteOperation, onUpdateOperation }) => {
+const OverviewDashboard: React.FC<OverviewDashboardProps> = ({ operations, onSelectOperation, onAddOperation, onOpenNewTaskModal, onDeleteOperation, onUpdateOperation, apiUrl }) => {
   const [isFormOpen, setIsFormOpen] = React.useState(false);
   const [operationToDelete, setOperationToDelete] = useState<Operation | null>(null);
   const [areaFilter, setAreaFilter] = useState<'All' | Area>('All');
@@ -242,6 +243,7 @@ const OverviewDashboard: React.FC<OverviewDashboardProps> = ({ operations, onSel
         <OperationForm 
             onClose={() => setIsFormOpen(false)} 
             onSave={onAddOperation} 
+            apiUrl={apiUrl}
         />
       )}
 

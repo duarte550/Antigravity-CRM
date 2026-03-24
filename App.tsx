@@ -25,7 +25,7 @@ import EconomicGroupDetailsPage from './components/EconomicGroupDetailsPage';
 import OriginationPipelinePage from './components/OriginationPipelinePage';
 import StructuringOperationDetailsPage from './components/StructuringOperationDetailsPage';
 
-const API_BASE_URL = 'https://crmcri-flask.onrender.com';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://crmcri-flask.onrender.com';
 
 const App: React.FC = () => {
   const [operations, setOperations] = useState<Operation[]>(() => {
@@ -717,6 +717,7 @@ const App: React.FC = () => {
                         onOpenNewTaskModal={openNewTaskModal}
                         onDeleteOperation={handleDeleteOperation}
                         onUpdateOperation={handleUpdateOperation}
+                        apiUrl={API_BASE_URL}
                     />
                 </>
             );
@@ -844,6 +845,7 @@ const App: React.FC = () => {
                 onOpenNewTaskModal={openNewTaskModal}
                 onDeleteOperation={handleDeleteOperation}
                 onUpdateOperation={handleUpdateOperation}
+                apiUrl={API_BASE_URL}
             />;
     }
   }

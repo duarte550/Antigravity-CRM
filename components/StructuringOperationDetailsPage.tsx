@@ -744,6 +744,7 @@ const StructuringOperationDetailsPage: React.FC<StructuringOperationDetailsPageP
                maturityDate: operation.liquidationDate,
                guaranteesString: operation.series?.map(s => s.name).join(', ') || ''
             }}
+            apiUrl={apiUrl}
          />
       )}
 

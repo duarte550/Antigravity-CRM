@@ -545,6 +545,7 @@ ${event.nextSteps ? stripHtml(event.nextSteps) : 'Nenhum'}
                     onClose={() => setIsEditOperationFormOpen(false)}
                     onSave={handleSaveEditedOperation}
                     initialData={operation}
+                    apiUrl={apiUrl}
                 />
             )}
             {isDeleteOperationModalOpen && (

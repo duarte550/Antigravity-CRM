@@ -11,6 +11,7 @@ interface OperationFormProps {
   onSave: (operationData: any) => void;
   initialData?: Operation;
   seedData?: Partial<Operation> & { structuringOperationId?: number; guaranteesString?: string };
+  apiUrl: string;
 }
 
 const defaultMonitoringInitial: DefaultMonitoring = {
@@ -37,7 +38,7 @@ const Checkbox: React.FC<CheckboxProps> = ({ name, label, checked, onChange }) =
 );
 
 
-const OperationForm: React.FC<OperationFormProps> = ({ onClose, onSave, initialData, seedData }) => {
+const OperationForm: React.FC<OperationFormProps> = ({ onClose, onSave, initialData, seedData, apiUrl }) => {
   const [name, setName] = useState(initialData?.name || seedData?.name || '');
   const [area, setArea] = useState<Area>(initialData?.area || seedData?.area || 'CRI');
   const [masterGroupId, setMasterGroupId] = useState<number | ''>(initialData?.masterGroupId || seedData?.masterGroupId || '');
@@ -51,7 +52,7 @@ const OperationForm: React.FC<OperationFormProps> = ({ onClose, onSave, initialD
   useEffect(() => {
     const fetchMasterGroups = async () => {
       try {
-        const response = await fetch('https://crmcri-flask.onrender.com/api/master-groups');
+        const response = await fetch(`${apiUrl}/api/master-groups`);
         if (response.ok) {
           const data = await response.json();
           setMasterGroups(data);
