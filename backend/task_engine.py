@@ -135,7 +135,7 @@ def generate_tasks_for_rule(operation, rule, task_exceptions):
         # 1 - Buscar diretamente nos eventos quando foi a última revisão para essa operação
         review_events = [
             e for e in events_list
-            if 'revisão' in str(e.get('type', '')).lower() or 'revisão' in str(e.get('title', '')).lower()
+            if e.get('type') == 'Revisão Periódica'
         ]
         
         if review_events:
@@ -143,29 +143,19 @@ def generate_tasks_for_rule(operation, rule, task_exceptions):
             if sorted_events[0].get('date'):
                 base_date = parse_iso_date(sorted_events[0].get('date'))
                 
-        # 2 - Caso não exista um evento, mas exista data em que foram alterados tanto o rating do grupo como da operação
+        # 2 - Caso não exista um evento, acha a data mais recente com registro de rating nas duas colunas
         if not base_date and rh_list:
-            changes_by_date = {}
-            sorted_by_date_asc = sorted(rh_list, key=lambda x: str(x.get('date') or ''))
-            prev_ro, prev_rg = None, None
-            
-            for rh in sorted_by_date_asc:
-                d_str = str(rh.get('date') or '')[:10]
+            valid_dates = []
+            for rh in rh_list:
                 ro = rh.get('ratingOperation')
                 rg = rh.get('ratingGroup')
                 
-                if d_str not in changes_by_date:
-                    changes_by_date[d_str] = {'ro_changed': False, 'rg_changed': False}
-                    
-                # To consider it a change, it must be different from previous (or be the initial assignment)
-                if ro and ro != prev_ro:
-                    changes_by_date[d_str]['ro_changed'] = True
-                    prev_ro = ro
-                if rg and rg != prev_rg:
-                    changes_by_date[d_str]['rg_changed'] = True
-                    prev_rg = rg
-                    
-            valid_dates = [d_str for d_str, changes in changes_by_date.items() if changes['ro_changed'] and changes['rg_changed']]
+                # Se houver valor para ambas as colunas
+                if ro and rg:
+                    d_str = str(rh.get('date') or '')[:10]
+                    if d_str:
+                        valid_dates.append(d_str)
+                        
             if valid_dates:
                 valid_dates.sort(reverse=True)
                 base_date = parse_iso_date(valid_dates[0])
