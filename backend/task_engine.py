@@ -126,39 +126,58 @@ def generate_tasks_for_rule(operation, rule, task_exceptions):
     if hasattr(start_date_obj, 'date'):
         start_date_obj = start_date_obj.date()
         
-    # For Review tasks, base the recurrence on the latest rating history of THIS specific rule
-    latest_rh_date = None
-    if rule['name'] in ['Revisão Política', 'Revisão Gerencial'] and operation.get('ratingHistory') and operation.get('events'):
-        # Find all rating history entries, and check their associated event's completedTaskId to see if it matches this rule
-        rule_tag = f"-rule{rule['id']}-"
-        valid_event_ids = {
-            e.get('id'): e for e in operation.get('events', [])
-            if e.get('completedTaskId') and rule_tag in e.get('completedTaskId')
-        }
+    # For Review tasks, base the recurrence on the specific backfill logic requested
+    if rule['name'] in ['Revisão Política', 'Revisão Gerencial']:
+        base_date = None
+        rh_list = operation.get('ratingHistory') or []
+        events_list = operation.get('events') or []
         
-        # Filter rating histories that were originated by this specific rule's conclusion
-        valid_rh = [rh for rh in operation['ratingHistory'] if rh.get('eventId') in valid_event_ids]
+        # 1 - Buscar diretamente nos eventos quando foi a última revisão para essa operação
+        review_events = [
+            e for e in events_list
+            if 'revisão' in str(e.get('type', '')).lower() or 'revisão' in str(e.get('title', '')).lower()
+        ]
         
-        if valid_rh:
-            sorted_rh = sorted(valid_rh, key=lambda x: str(x.get('date') or ''), reverse=True)
-            latest_rh_str = sorted_rh[0].get('date')
-            if latest_rh_str:
-                parsed_rh = parse_iso_date(latest_rh_str)
-                if hasattr(parsed_rh, 'date'):
-                    latest_rh_date = parsed_rh.date()
-                else:
-                    latest_rh_date = parsed_rh
-
-    if latest_rh_date:
-        # Instead of completely replacing start_date_obj causing past tasks to vanish,
-        # we generate the NEXT task starting from the latest_rh_date.
-        # However, to preserve the exact sequence, we set the current_date to latest_rh_date 
-        # But wait, we want the *next* date. So we start recurrence from latest_rh_date.
-        # But we also add the last completed task so it appears in the UI.
+        if review_events:
+            sorted_events = sorted(review_events, key=lambda x: str(x.get('date') or ''), reverse=True)
+            if sorted_events[0].get('date'):
+                base_date = parse_iso_date(sorted_events[0].get('date'))
+                
+        # 2 - Caso não exista um evento, mas exista data em que foram alterados tanto o rating do grupo como da operação
+        if not base_date and rh_list:
+            changes_by_date = {}
+            sorted_by_date_asc = sorted(rh_list, key=lambda x: str(x.get('date') or ''))
+            prev_ro, prev_rg = None, None
+            
+            for rh in sorted_by_date_asc:
+                d_str = str(rh.get('date') or '')[:10]
+                ro = rh.get('ratingOperation')
+                rg = rh.get('ratingGroup')
+                
+                if d_str not in changes_by_date:
+                    changes_by_date[d_str] = {'ro_changed': False, 'rg_changed': False}
+                    
+                # To consider it a change, it must be different from previous (or be the initial assignment)
+                if ro and ro != prev_ro:
+                    changes_by_date[d_str]['ro_changed'] = True
+                    prev_ro = ro
+                if rg and rg != prev_rg:
+                    changes_by_date[d_str]['rg_changed'] = True
+                    prev_rg = rg
+                    
+            valid_dates = [d_str for d_str, changes in changes_by_date.items() if changes['ro_changed'] and changes['rg_changed']]
+            if valid_dates:
+                valid_dates.sort(reverse=True)
+                base_date = parse_iso_date(valid_dates[0])
+                
+        # 3 - Omitted the 'createdAt' fallback. The code naturally falls back to the rule's own 'startDate'.
         
-        # We can just reset the base start_date_obj to latest_rh_date
-        # The completed task was completed, so the UI relies on event logging for completed tasks anyway.
-        start_date_obj = latest_rh_date
+        # Define start_date_obj properly
+        if base_date:
+            if hasattr(base_date, 'date'):
+                start_date_obj = base_date.date()
+            else:
+                start_date_obj = base_date
 
     # The first due date is one frequency period AFTER the start date.
     current_date = get_next_date(start_date_obj, rule['frequency'])

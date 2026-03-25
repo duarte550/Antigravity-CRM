@@ -225,22 +225,32 @@ def update_schema():
     conn = get_db_connection()
     try:
         with conn.cursor() as cursor:
-            # 1. Process legacy renamed/deleted objects
+            # 1. Process legacy renamed/deleted objects and column dropping
+            # Note: To rename or drop columns in Delta, we must enable columnMapping.mode = 'name'
             migrations = [
                 ("ALTER TABLE cri_cra_dev.crm.structuring_operation_series RENAME TO cri_cra_dev.crm.operation_series", "Rename series table"),
-                ("ALTER TABLE cri_cra_dev.crm.operation_series RENAME COLUMN structuring_operation_id TO operation_id", "Rename series col"),
                 ("ALTER TABLE cri_cra_dev.crm.structuring_operation_stages RENAME TO cri_cra_dev.crm.operation_stages", "Rename stages table"),
-                ("ALTER TABLE cri_cra_dev.crm.operation_stages RENAME COLUMN structuring_operation_id TO operation_id", "Rename stages col"),
-                ("ALTER TABLE cri_cra_dev.crm.events RENAME COLUMN structuring_operation_stage_id TO operation_stage_id", "Rename events col"),
-                ("ALTER TABLE cri_cra_dev.crm.task_rules RENAME COLUMN structuring_operation_stage_id TO operation_stage_id", "Rename tasks col"),
                 ("DROP TABLE IF EXISTS cri_cra_dev.crm.structuring_operations", "Drop struct_operations"),
+                
+                # Enable Column Mapping to drop legacy columns
+                ("ALTER TABLE cri_cra_dev.crm.operation_series SET TBLPROPERTIES ('delta.columnMapping.mode' = 'name', 'delta.minReaderVersion' = '2', 'delta.minWriterVersion' = '5')", "Enable column mapping on operation_series"),
+                ("ALTER TABLE cri_cra_dev.crm.operation_stages SET TBLPROPERTIES ('delta.columnMapping.mode' = 'name', 'delta.minReaderVersion' = '2', 'delta.minWriterVersion' = '5')", "Enable column mapping on operation_stages"),
+                ("ALTER TABLE cri_cra_dev.crm.events SET TBLPROPERTIES ('delta.columnMapping.mode' = 'name', 'delta.minReaderVersion' = '2', 'delta.minWriterVersion' = '5')", "Enable column mapping on events"),
+                ("ALTER TABLE cri_cra_dev.crm.task_rules SET TBLPROPERTIES ('delta.columnMapping.mode' = 'name', 'delta.minReaderVersion' = '2', 'delta.minWriterVersion' = '5')", "Enable column mapping on task_rules"),
+                
+                # Drop legacy columns (zombie columns that blocked mock_data.sql)
+                ("ALTER TABLE cri_cra_dev.crm.operation_series DROP COLUMN structuring_operation_id", "Drop zombie col in series"),
+                ("ALTER TABLE cri_cra_dev.crm.operation_stages DROP COLUMN structuring_operation_id", "Drop zombie col in stages"),
+                ("ALTER TABLE cri_cra_dev.crm.events DROP COLUMN structuring_operation_stage_id", "Drop zombie col in events"),
+                ("ALTER TABLE cri_cra_dev.crm.task_rules DROP COLUMN structuring_operation_stage_id", "Drop zombie col in task_rules")
             ]
             for sql, desc in migrations:
                 try:
                     cursor.execute(sql)
                     print(f"Migration applied: {desc}")
-                except Exception:
-                    # Ignore if the rename was already done or table missing
+                except Exception as e:
+                    # Ignore if the rename/drop was already done or table missing
+                    # print(f"Migration skipped: {desc} (Error: {e})") # Un-comment to trace
                     pass
 
             # 2. Re-create and Sync Columns for each Table
@@ -291,6 +301,14 @@ def update_schema():
                     cursor.execute(f"ALTER TABLE cri_cra_dev.crm.operations ALTER COLUMN {col} DROP NOT NULL")
                 except Exception:
                     pass
+            
+            # Remove NOT NULL constraints from operation_id in entities that can be attached to a master_group instead
+            try:
+                cursor.execute("ALTER TABLE cri_cra_dev.crm.events ALTER COLUMN operation_id DROP NOT NULL")
+                cursor.execute("ALTER TABLE cri_cra_dev.crm.operation_risks ALTER COLUMN operation_id DROP NOT NULL")
+                cursor.execute("ALTER TABLE cri_cra_dev.crm.rating_history ALTER COLUMN operation_id DROP NOT NULL")
+            except Exception as e:
+                pass
 
             # Seed Patch notes
             cursor.execute("SELECT COUNT(*) as count FROM cri_cra_dev.crm.patch_notes")
