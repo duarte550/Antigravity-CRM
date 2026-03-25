@@ -21,7 +21,7 @@ const PorFundoTab: React.FC<PorFundoTabProps> = ({ operations, apiUrl, showToast
     const [funds, setFunds] = useState<string[]>([]);
     const [selectedFund, setSelectedFund] = useState<string>('');
     const [isLoading, setIsLoading] = useState(false);
-    
+
     const [riscoData, setRiscoData] = useState<any[]>([]);
     const [inputs, setInputs] = useState({
         emission: 0,
@@ -29,7 +29,7 @@ const PorFundoTab: React.FC<PorFundoTabProps> = ({ operations, apiUrl, showToast
         repurchases: 0,
         new_repo: 0
     });
-    
+
     // Internal loading state while fetching specific fund
     const [isFetchingFund, setIsFetchingFund] = useState(false);
 
@@ -135,7 +135,7 @@ const PorFundoTab: React.FC<PorFundoTabProps> = ({ operations, apiUrl, showToast
 
     const totalSaidas = simulatedOps.reduce((acc, curr) => acc + curr.volume, 0);
     const caixaApos = caixaAtual + totalEntradas - totalSaidas;
-    const caixaMenosComp = caixaApos - compromissadasReversas;
+    const caixaMenosComp = caixaApos + compromissadasReversas;
 
     const plFinal = plAtual + inputs.emission;
 
@@ -163,7 +163,7 @@ const PorFundoTab: React.FC<PorFundoTabProps> = ({ operations, apiUrl, showToast
     const calcFinalTax = (idx: string) => {
         let financialHoje = getRiscoValor(riscoData, `CRI ${idx} - Financeiro`);
         let taxHoje = getRiscoValor(riscoData, `Taxa Média Curva ${idx}`);
-        
+
         let sumVolPipe = 0;
         let sumProdPipe = 0;
         const ops = simulatedOps.filter(o => o.indexer.toUpperCase() === idx.toUpperCase());
@@ -171,13 +171,13 @@ const PorFundoTab: React.FC<PorFundoTabProps> = ({ operations, apiUrl, showToast
             const r = parseFloat((o.rate || '').replace(/[^0-9.-]/g, ''));
             if (!isNaN(r) && o.volume) {
                 sumVolPipe += o.volume;
-                sumProdPipe += (r/100) * o.volume; // treat as decimal internally
+                sumProdPipe += (r / 100) * o.volume; // treat as decimal internally
             }
         });
 
         const totalVol = financialHoje + sumVolPipe;
         if (totalVol === 0) return null;
-        
+
         const finalTax = ((financialHoje * taxHoje) + sumProdPipe) / totalVol;
         return finalTax * 100; // back to percentage
     };
@@ -192,7 +192,7 @@ const PorFundoTab: React.FC<PorFundoTabProps> = ({ operations, apiUrl, showToast
         return (
             <div className="flex flex-col items-center justify-center p-20 text-center h-[60vh] mix-blend-luminosity">
                 <div className="w-20 h-20 bg-gray-50 dark:bg-gray-800 rounded-full flex items-center justify-center mb-6 shadow-inner border border-gray-100 dark:border-gray-700">
-                    <svg className="w-10 h-10 text-gray-300 dark:text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/></svg>
+                    <svg className="w-10 h-10 text-gray-300 dark:text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>
                 </div>
                 <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2 tracking-tight">Nenhum Fundo Disponível</h2>
                 <p className="text-gray-500 dark:text-gray-400 max-w-md">Não foram encontrados dados de risco importados no sistema para montar o simulador de portfólio. Verifique o banco de dados principal.</p>
@@ -206,20 +206,20 @@ const PorFundoTab: React.FC<PorFundoTabProps> = ({ operations, apiUrl, showToast
             <div className="flex justify-between items-center bg-white dark:bg-gray-800 p-5 rounded-2xl border border-gray-100 dark:border-gray-700/80 shadow-sm">
                 <div className="flex items-center gap-4">
                     <div className="bg-blue-50 dark:bg-blue-900/30 p-2.5 rounded-xl text-blue-600 dark:text-blue-400">
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/></svg>
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>
                     </div>
                     <div>
                         <span className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider block mb-0.5">Portfólio</span>
                         <div className="relative group mt-1">
-                            <select 
-                                value={selectedFund} 
+                            <select
+                                value={selectedFund}
                                 onChange={e => setSelectedFund(e.target.value)}
                                 className="text-gray-900 dark:text-white bg-gray-50/80 dark:bg-gray-900/50 font-bold text-lg border border-gray-200 dark:border-gray-700/80 rounded-xl pr-10 pl-3 py-1.5 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 cursor-pointer appearance-none hover:bg-white dark:hover:bg-gray-800 transition-all shadow-sm"
                             >
                                 {funds.map(f => <option key={f} value={f}>{f}</option>)}
                             </select>
                             <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400 group-hover:text-blue-500 transition-colors">
-                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7"/></svg>
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
                             </div>
                         </div>
                     </div>
@@ -232,7 +232,7 @@ const PorFundoTab: React.FC<PorFundoTabProps> = ({ operations, apiUrl, showToast
                         </div>
                     )}
                     <button onClick={saveInputs} className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg font-semibold text-sm transition-all shadow-sm hover:shadow-md flex items-center gap-2">
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"/></svg>
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" /></svg>
                         Salvar Premissas
                     </button>
                 </div>
@@ -244,7 +244,7 @@ const PorFundoTab: React.FC<PorFundoTabProps> = ({ operations, apiUrl, showToast
                     <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700/80 shadow-sm overflow-hidden text-sm">
                         <div className="p-4 border-b border-gray-100 dark:border-gray-700/60 bg-gray-50/50 dark:bg-transparent">
                             <h2 className="font-semibold text-gray-900 dark:text-white flex items-center gap-2">
-                                <svg className="w-4 h-4 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                                <svg className="w-4 h-4 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                                 Projeção de Caixa
                             </h2>
                         </div>
@@ -254,14 +254,14 @@ const PorFundoTab: React.FC<PorFundoTabProps> = ({ operations, apiUrl, showToast
                                 <tr className="border-b border-gray-50 dark:border-gray-700/50 hover:bg-gray-50/50 dark:hover:bg-gray-800/50 transition-colors">
                                     <td className="p-4 font-medium text-gray-600 dark:text-gray-400 w-1/2">Caixa Disponível Hoje</td>
                                     <td className="p-4 font-mono font-medium text-right">{formatCurrency(caixaAtual)}</td>
-                                    <td className="p-4 text-right text-gray-400 dark:text-gray-500">{plAtual ? formatPercent((caixaAtual/plAtual)*100) : '-'}</td>
+                                    <td className="p-4 text-right text-gray-400 dark:text-gray-500">{plAtual ? formatPercent((caixaAtual / plAtual) * 100) : '-'}</td>
                                 </tr>
                                 <tr className="border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50/50 dark:hover:bg-gray-800/50 transition-colors">
                                     <td className="p-4 font-medium text-blue-600 dark:text-blue-400">Posição em LCI</td>
                                     <td className="p-4 font-mono font-medium text-right">{formatCurrency(lciAtual)}</td>
-                                    <td className="p-4 text-right text-gray-400 dark:text-gray-500">{plAtual ? formatPercent((lciAtual/plAtual)*100) : '-'}</td>
+                                    <td className="p-4 text-right text-gray-400 dark:text-gray-500">{plAtual ? formatPercent((lciAtual / plAtual) * 100) : '-'}</td>
                                 </tr>
-                                
+
                                 {/* Entradas */}
                                 <tr className="border-b border-gray-100 dark:border-gray-700/80 bg-emerald-50/30 dark:bg-emerald-900/10">
                                     <td className="p-4 font-bold text-gray-900 dark:text-white flex items-center gap-2">
@@ -269,9 +269,9 @@ const PorFundoTab: React.FC<PorFundoTabProps> = ({ operations, apiUrl, showToast
                                         (+) Previsão de Entradas
                                     </td>
                                     <td className="p-4 font-bold text-emerald-600 dark:text-emerald-400 text-right">{formatCurrency(totalEntradas)}</td>
-                                    <td className="p-4 text-right font-medium text-emerald-600/70 dark:text-emerald-400/70">{plAtual ? formatPercent((totalEntradas/plAtual)*100) : '-'}</td>
+                                    <td className="p-4 text-right font-medium text-emerald-600/70 dark:text-emerald-400/70">{plAtual ? formatPercent((totalEntradas / plAtual) * 100) : '-'}</td>
                                 </tr>
-                                
+
                                 <tr className="border-b border-gray-50 dark:border-gray-700/30 group">
                                     <td className="p-3 pl-8 text-gray-500 dark:text-gray-400 font-medium">Nova Emissão Acordada</td>
                                     <td className="p-2 py-3">
@@ -280,7 +280,7 @@ const PorFundoTab: React.FC<PorFundoTabProps> = ({ operations, apiUrl, showToast
                                             <input type="number" value={inputs.emission} onChange={e => handleInputChange('emission', e.target.value)} className="w-full py-1.5 px-2 bg-transparent text-gray-900 dark:text-gray-100 text-right font-mono outline-none border-none shadow-none focus:ring-0" placeholder="0" />
                                         </div>
                                     </td>
-                                    <td className="p-3 text-right text-sm text-gray-400 dark:text-gray-500">{plAtual ? formatPercent((inputs.emission/plAtual)*100) : '-'}</td>
+                                    <td className="p-3 text-right text-sm text-gray-400 dark:text-gray-500">{plAtual ? formatPercent((inputs.emission / plAtual) * 100) : '-'}</td>
                                 </tr>
                                 <tr className="border-b border-gray-50 dark:border-gray-700/30 group">
                                     <td className="p-3 pl-8 text-gray-500 dark:text-gray-400 font-medium">Pré-pagamentos Previstos</td>
@@ -290,7 +290,7 @@ const PorFundoTab: React.FC<PorFundoTabProps> = ({ operations, apiUrl, showToast
                                             <input type="number" value={inputs.prepayment} onChange={e => handleInputChange('prepayment', e.target.value)} className="w-full py-1.5 px-2 bg-transparent text-gray-900 dark:text-gray-100 text-right font-mono outline-none border-none shadow-none focus:ring-0" placeholder="0" />
                                         </div>
                                     </td>
-                                    <td className="p-3 text-right text-sm text-gray-400 dark:text-gray-500">{plAtual ? formatPercent((inputs.prepayment/plAtual)*100) : '-'}</td>
+                                    <td className="p-3 text-right text-sm text-gray-400 dark:text-gray-500">{plAtual ? formatPercent((inputs.prepayment / plAtual) * 100) : '-'}</td>
                                 </tr>
                                 <tr className="border-b border-gray-50 dark:border-gray-700/30 group">
                                     <td className="p-3 pl-8 text-gray-500 dark:text-gray-400 font-medium">Recompras (G. Econômico)</td>
@@ -300,7 +300,7 @@ const PorFundoTab: React.FC<PorFundoTabProps> = ({ operations, apiUrl, showToast
                                             <input type="number" value={inputs.repurchases} onChange={e => handleInputChange('repurchases', e.target.value)} className="w-full py-1.5 px-2 bg-transparent text-gray-900 dark:text-gray-100 text-right font-mono outline-none border-none shadow-none focus:ring-0" placeholder="0" />
                                         </div>
                                     </td>
-                                    <td className="p-3 text-right text-sm text-gray-400 dark:text-gray-500">{plAtual ? formatPercent((inputs.repurchases/plAtual)*100) : '-'}</td>
+                                    <td className="p-3 text-right text-sm text-gray-400 dark:text-gray-500">{plAtual ? formatPercent((inputs.repurchases / plAtual) * 100) : '-'}</td>
                                 </tr>
                                 <tr className="border-b border-gray-100 dark:border-gray-700/80 group">
                                     <td className="p-3 pl-8 text-gray-500 dark:text-gray-400 font-medium">Captação em Compromissadas</td>
@@ -310,7 +310,7 @@ const PorFundoTab: React.FC<PorFundoTabProps> = ({ operations, apiUrl, showToast
                                             <input type="number" value={inputs.new_repo} onChange={e => handleInputChange('new_repo', e.target.value)} className="w-full py-1.5 px-2 bg-transparent text-gray-900 dark:text-gray-100 text-right font-mono outline-none border-none shadow-none focus:ring-0" placeholder="0" />
                                         </div>
                                     </td>
-                                    <td className="p-3 text-right text-sm text-gray-400 dark:text-gray-500">{plAtual ? formatPercent((inputs.new_repo/plAtual)*100) : '-'}</td>
+                                    <td className="p-3 text-right text-sm text-gray-400 dark:text-gray-500">{plAtual ? formatPercent((inputs.new_repo / plAtual) * 100) : '-'}</td>
                                 </tr>
 
                                 {/* Saídas */}
@@ -327,7 +327,7 @@ const PorFundoTab: React.FC<PorFundoTabProps> = ({ operations, apiUrl, showToast
                                         )}
                                     </td>
                                     <td className="p-4 font-bold text-rose-600 dark:text-rose-400 text-right">{formatCurrency(totalSaidas)}</td>
-                                    <td className="p-4 text-right font-medium text-rose-600/70 dark:text-rose-400/70">{plAtual ? formatPercent((totalSaidas/plAtual)*100) : '-'}</td>
+                                    <td className="p-4 text-right font-medium text-rose-600/70 dark:text-rose-400/70">{plAtual ? formatPercent((totalSaidas / plAtual) * 100) : '-'}</td>
                                 </tr>
 
                                 {simulatedOps.length === 0 && (
@@ -338,21 +338,21 @@ const PorFundoTab: React.FC<PorFundoTabProps> = ({ operations, apiUrl, showToast
                                         <td className="p-3 pl-8 text-xs">
                                             <div className="flex justify-between items-start mb-1.5">
                                                 <span className="font-semibold text-gray-700 dark:text-gray-300">{o.name}</span>
-                                                <button onClick={() => onEditOperation(o.originalOp)} className="text-gray-300 hover:text-blue-500 transition-colors"><svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg></button>
+                                                <button onClick={() => onEditOperation(o.originalOp)} className="text-gray-300 hover:text-blue-500 transition-colors"><svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg></button>
                                             </div>
                                             <div className="flex gap-2">
                                                 <div className="flex items-center gap-1">
                                                     <span className="text-[10px] text-gray-400 dark:text-gray-500 uppercase font-bold">Tx:</span>
-                                                    <input 
-                                                        type="text" 
-                                                        value={o.rate} 
+                                                    <input
+                                                        type="text"
+                                                        value={o.rate}
                                                         onChange={(e) => handleSimulateChange(o.id, 'rate', e.target.value)}
                                                         className="w-14 p-1 text-xs border border-gray-200 dark:border-gray-600/80 rounded bg-gray-50 dark:bg-gray-900/50 focus:bg-white dark:focus:bg-gray-900 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 text-gray-900 dark:text-gray-100 transition-all font-mono shadow-sm hover:bg-white"
                                                     />
                                                 </div>
                                                 <div className="flex items-center">
-                                                    <select 
-                                                        value={o.indexer} 
+                                                    <select
+                                                        value={o.indexer}
                                                         onChange={(e) => handleSimulateChange(o.id, 'indexer', e.target.value)}
                                                         className="w-full text-xs p-1 border border-gray-200 dark:border-gray-600/80 rounded bg-gray-50 dark:bg-gray-900/50 focus:bg-white dark:focus:bg-gray-900 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 text-gray-700 dark:text-gray-300 transition-all font-medium py-1 shadow-sm hover:bg-white"
                                                     >
@@ -370,15 +370,15 @@ const PorFundoTab: React.FC<PorFundoTabProps> = ({ operations, apiUrl, showToast
                                                 <input type="number" value={o.volume} onChange={(e) => handleSimulateChange(o.id, 'volume', Number(e.target.value))} className="w-full py-1 px-1 bg-transparent text-gray-900 dark:text-gray-100 text-right font-mono text-sm outline-none border-none shadow-none focus:ring-0" placeholder="0" />
                                             </div>
                                         </td>
-                                        <td className="p-3 text-right text-gray-400 dark:text-gray-500 text-sm align-top pt-5">{plAtual ? formatPercent((o.volume/plAtual)*100) : '-'}</td>
+                                        <td className="p-3 text-right text-gray-400 dark:text-gray-500 text-sm align-top pt-5">{plAtual ? formatPercent((o.volume / plAtual) * 100) : '-'}</td>
                                     </tr>
                                 ))}
-                                
+
                                 {/* Nova Linha de Destaque: Caixa após Saídas */}
                                 <tr className="bg-blue-50/50 dark:bg-blue-900/20 border-t border-blue-100 dark:border-blue-800/40">
                                     <td className="p-4 font-semibold text-blue-900 dark:text-blue-100 text-sm tracking-wide">CAIXA FINAL PROJETADO</td>
                                     <td className="p-4 font-bold font-mono text-base text-blue-700 dark:text-blue-400 text-right">{formatCurrency(caixaApos)}</td>
-                                    <td className="p-4 font-bold text-right text-blue-600/70 dark:text-blue-400/70">{plAtual ? formatPercent((caixaApos/plAtual)*100) : '-'}</td>
+                                    <td className="p-4 font-bold text-right text-blue-600/70 dark:text-blue-400/70">{plAtual ? formatPercent((caixaApos / plAtual) * 100) : '-'}</td>
                                 </tr>
                             </tbody>
                         </table>
@@ -387,7 +387,7 @@ const PorFundoTab: React.FC<PorFundoTabProps> = ({ operations, apiUrl, showToast
                     <div className="bg-gradient-to-br from-indigo-50 to-blue-50 dark:from-gray-800 dark:to-gray-800/80 rounded-2xl p-5 border border-indigo-100 dark:border-gray-700 shadow-sm">
                         <div className="flex justify-between items-center mb-4">
                             <h3 className="font-semibold text-gray-800 dark:text-gray-200 flex items-center gap-2">
-                                <svg className="w-4 h-4 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                                <svg className="w-4 h-4 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
                                 Posição de Liquidez Final
                             </h3>
                         </div>
@@ -413,7 +413,7 @@ const PorFundoTab: React.FC<PorFundoTabProps> = ({ operations, apiUrl, showToast
                     {/* PL */}
                     <div className="bg-white dark:bg-gray-800 rounded-2xl p-5 border border-gray-100 dark:border-gray-700/80 shadow-sm">
                         <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-200 mb-4 flex items-center gap-2">
-                            <svg className="w-4 h-4 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/></svg>
+                            <svg className="w-4 h-4 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg>
                             Impacto no PL
                         </h3>
                         <table className="w-full text-sm">
@@ -437,7 +437,7 @@ const PorFundoTab: React.FC<PorFundoTabProps> = ({ operations, apiUrl, showToast
                     {/* Taxas */}
                     <div className="bg-white dark:bg-gray-800 rounded-2xl p-5 border border-gray-100 dark:border-gray-700/80 shadow-sm overflow-x-auto">
                         <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-200 mb-4 flex items-center gap-2">
-                            <svg className="w-4 h-4 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+                            <svg className="w-4 h-4 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
                             Mix de Taxas Projetadas
                         </h3>
                         <table className="w-full text-sm text-left">
@@ -454,7 +454,7 @@ const PorFundoTab: React.FC<PorFundoTabProps> = ({ operations, apiUrl, showToast
                                     const txHoje = getTaxaHoje(idx);
                                     const txPipe = calcPipelineTaxMid(idx);
                                     const txFinal = calcFinalTax(idx);
-                                    
+
                                     if (txHoje === '-' && txPipe === null) return null;
 
                                     return (
@@ -473,7 +473,7 @@ const PorFundoTab: React.FC<PorFundoTabProps> = ({ operations, apiUrl, showToast
                     {/* Compromissadas */}
                     <div className="bg-white dark:bg-gray-800 rounded-2xl p-5 border border-gray-100 dark:border-gray-700/80 shadow-sm">
                         <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-200 mb-4 flex items-center gap-2">
-                            <svg className="w-4 h-4 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 14v3m4-3v3m4-3v3M3 21h18M3 10h18M3 7l9-4 9 4M4 10h16v11H4V10z"/></svg>
+                            <svg className="w-4 h-4 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 14v3m4-3v3m4-3v3M3 21h18M3 10h18M3 7l9-4 9 4M4 10h16v11H4V10z" /></svg>
                             Volume de Compromissadas
                         </h3>
                         <table className="w-full text-sm text-left">
@@ -489,20 +489,20 @@ const PorFundoTab: React.FC<PorFundoTabProps> = ({ operations, apiUrl, showToast
                                 <tr className="hover:bg-gray-50/50 dark:hover:bg-gray-800/50 transition-colors">
                                     <td className="py-3">Estoque</td>
                                     <td className="py-3 text-right font-mono">{formatCurrency(compromissadasAtual)}</td>
-                                    <td className="py-3 text-right">{plAtual ? formatPercent((compromissadasAtual/plAtual)*100) : '-'}</td>
-                                    <td className="py-3 text-right ">{plFinal ? formatPercent((compromissadasAtual/plFinal)*100) : '-'}</td>
+                                    <td className="py-3 text-right">{plAtual ? formatPercent((compromissadasAtual / plAtual) * 100) : '-'}</td>
+                                    <td className="py-3 text-right ">{plFinal ? formatPercent((compromissadasAtual / plFinal) * 100) : '-'}</td>
                                 </tr>
                                 <tr className="hover:bg-gray-50/50 dark:hover:bg-gray-800/50 transition-colors">
                                     <td className="py-3 text-purple-600 dark:text-purple-400 font-medium">(+) Captação</td>
                                     <td className="py-3 text-right font-mono font-medium text-purple-600 dark:text-purple-400">{formatCurrency(inputs.new_repo)}</td>
-                                    <td className="py-3 text-right">{plAtual ? formatPercent((inputs.new_repo/plAtual)*100) : '-'}</td>
-                                    <td className="py-3 text-right font-medium text-purple-600 dark:text-purple-400">{plFinal ? formatPercent((inputs.new_repo/plFinal)*100) : '-'}</td>
+                                    <td className="py-3 text-right">{plAtual ? formatPercent((inputs.new_repo / plAtual) * 100) : '-'}</td>
+                                    <td className="py-3 text-right font-medium text-purple-600 dark:text-purple-400">{plFinal ? formatPercent((inputs.new_repo / plFinal) * 100) : '-'}</td>
                                 </tr>
                                 <tr className="font-bold text-gray-900 dark:text-gray-100 bg-gray-50/50 dark:bg-transparent">
                                     <td className="py-3 px-2 rounded-l-lg">Patamar Final</td>
                                     <td className="py-3 text-right font-mono">{formatCurrency(compromissadasAtual + inputs.new_repo)}</td>
-                                    <td className="py-3 text-right text-gray-500 dark:text-gray-500 font-medium">{plAtual ? formatPercent(((compromissadasAtual+inputs.new_repo)/plAtual)*100) : '-'}</td>
-                                    <td className="py-3 text-right text-purple-700 dark:text-purple-400 px-2 rounded-r-lg">{plFinal ? formatPercent(((compromissadasAtual+inputs.new_repo)/plFinal)*100) : '-'}</td>
+                                    <td className="py-3 text-right text-gray-500 dark:text-gray-500 font-medium">{plAtual ? formatPercent(((compromissadasAtual + inputs.new_repo) / plAtual) * 100) : '-'}</td>
+                                    <td className="py-3 text-right text-purple-700 dark:text-purple-400 px-2 rounded-r-lg">{plFinal ? formatPercent(((compromissadasAtual + inputs.new_repo) / plFinal) * 100) : '-'}</td>
                                 </tr>
                             </tbody>
                         </table>
