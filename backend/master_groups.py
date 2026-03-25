@@ -33,7 +33,7 @@ def fetch_full_master_group(cursor, mg_id):
     } for r in op_rows]
     
     # Fetch structuring operations
-    cursor.execute("SELECT id, name, pipeline_stage as stage, liquidation_date, responsible_analyst as analyst, risk, temperature, is_active FROM cri_cra_dev.crm.operations WHERE master_group_id = ? AND is_structuring = TRUE", (mg_id,))
+    cursor.execute("SELECT id, name, pipeline_stage as stage, liquidation_date, structuring_analyst as analyst, risk, temperature, is_active FROM cri_cra_dev.crm.operations WHERE master_group_id = ? AND is_structuring = TRUE", (mg_id,))
     so_rows = [format_row(r, cursor) for r in cursor.fetchall()]
     mg['structuringOperations'] = []
     
@@ -147,22 +147,6 @@ def manage_master_groups():
                 for mg in mgs:
                     cursor.execute("SELECT * FROM cri_cra_dev.crm.economic_groups WHERE master_group_id = ?", (mg['id'],))
                     mg['economicGroups'] = [format_row(r, cursor) for r in cursor.fetchall()]
-
-                    cursor.execute("SELECT id, name, rating_operation FROM cri_cra_dev.crm.operations WHERE master_group_id = ? AND (is_structuring IS NULL OR is_structuring = FALSE)", (mg['id'],))
-                    op_rows = [format_row(row, cursor) for row in cursor.fetchall()]
-                    mg['operations'] = [{
-                        'id': r.get('id'), 'name': r.get('name'), 'ratingOperation': r.get('rating_operation')
-                    } for r in op_rows]
-                    
-                    cursor.execute("SELECT id, name, pipeline_stage as stage FROM cri_cra_dev.crm.operations WHERE master_group_id = ? AND is_structuring = TRUE", (mg['id'],))
-                    so_rows = [format_row(r, cursor) for r in cursor.fetchall()]
-                    for so in so_rows:
-                        cursor.execute("SELECT * FROM cri_cra_dev.crm.operation_series WHERE operation_id = ?", (so['id'],))
-                        series_rows = [format_row(r, cursor) for r in cursor.fetchall()]
-                        so['series'] = [{
-                           'id': s['id'], 'name': s['name'], 'rate': s.get('rate'), 'indexer': s.get('indexer'), 'volume': s.get('volume'), 'fund': s.get('fund')
-                        } for s in series_rows]
-                    mg['structuringOperations'] = so_rows
                 return jsonify(mgs)
         elif request.method == 'POST':
             data = request.json
@@ -279,7 +263,7 @@ def add_structuring_operation():
             elif economic_group_id == '':
                 economic_group_id = None
                 
-            cursor.execute("INSERT INTO cri_cra_dev.crm.operations (master_group_id, economic_group_id, name, area, pipeline_stage, liquidation_date, risk, temperature, responsible_analyst, is_active, originator, modality, created_at, is_structuring) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, TRUE)",
+            cursor.execute("INSERT INTO cri_cra_dev.crm.operations (master_group_id, economic_group_id, name, area, pipeline_stage, liquidation_date, risk, temperature, structuring_analyst, is_active, originator, modality, created_at, is_structuring) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, TRUE)",
                            (master_group_id, economic_group_id, data.get('name'), data.get('area'), data.get('stage', 'Conversa Inicial'), parse_iso_date(data.get('liquidationDate')), data.get('risk'), data.get('temperature'), data.get('analyst'), True, data.get('originator'), data.get('modality'), datetime.now()))
             cursor.execute("SELECT id FROM cri_cra_dev.crm.operations ORDER BY id DESC LIMIT 1")
             new_id = cursor.fetchone().id
@@ -305,7 +289,7 @@ def get_structuring_operations():
     conn = get_db_connection()
     try:
         with conn.cursor() as cursor:
-            cursor.execute("SELECT o.id, o.name, o.area, o.pipeline_stage as stage, o.liquidation_date, o.risk, o.temperature, o.responsible_analyst as analyst, o.is_active, o.originator, o.modality, o.created_at, mg.name as master_group_name FROM cri_cra_dev.crm.operations o JOIN cri_cra_dev.crm.master_groups mg ON o.master_group_id = mg.id WHERE o.is_structuring = TRUE")
+            cursor.execute("SELECT o.id, o.name, o.area, o.pipeline_stage as stage, o.liquidation_date, o.risk, o.temperature, o.structuring_analyst as analyst, o.is_active, o.originator, o.modality, o.created_at, mg.name as master_group_name FROM cri_cra_dev.crm.operations o JOIN cri_cra_dev.crm.master_groups mg ON o.master_group_id = mg.id WHERE o.is_structuring = TRUE")
             sos = [format_row(r, cursor) for r in cursor.fetchall()]
             
             for so in sos:
@@ -361,7 +345,7 @@ def manage_structuring_operation(so_id):
     try:
         if request.method == 'GET':
             with conn.cursor() as cursor:
-                cursor.execute("SELECT o.id, o.master_group_id, o.name, o.area, o.pipeline_stage as stage, o.liquidation_date, o.risk, o.temperature, o.responsible_analyst as analyst, o.is_active, o.originator, o.modality, o.created_at, mg.name as master_group_name FROM cri_cra_dev.crm.operations o JOIN cri_cra_dev.crm.master_groups mg ON o.master_group_id = mg.id WHERE o.id = ? AND o.is_structuring = TRUE", (so_id,))
+                cursor.execute("SELECT o.id, o.master_group_id, o.name, o.area, o.pipeline_stage as stage, o.liquidation_date, o.risk, o.temperature, o.structuring_analyst as analyst, o.is_active, o.originator, o.modality, o.created_at, mg.name as master_group_name FROM cri_cra_dev.crm.operations o JOIN cri_cra_dev.crm.master_groups mg ON o.master_group_id = mg.id WHERE o.id = ? AND o.is_structuring = TRUE", (so_id,))
                 so_row = cursor.fetchone()
                 if not so_row:
                     return jsonify({"error": "Not found"}), 404
@@ -417,7 +401,7 @@ def manage_structuring_operation(so_id):
             data = request.json
             with conn.cursor() as cursor:
                 user_name = data.get('userName', 'Sistema')
-                cursor.execute("SELECT risk, temperature, responsible_analyst as analyst, area, master_group_id, economic_group_id FROM cri_cra_dev.crm.operations WHERE id=?", (so_id,))
+                cursor.execute("SELECT risk, temperature, structuring_analyst as analyst, area, master_group_id, economic_group_id FROM cri_cra_dev.crm.operations WHERE id=?", (so_id,))
                 old_row = cursor.fetchone()
                 old_op = format_row(old_row, cursor) if old_row else {}
                 
@@ -447,7 +431,7 @@ def manage_structuring_operation(so_id):
                 else:
                     new_economic_group_id = old_op.get('economic_group_id') if new_economic_group_id is None else new_economic_group_id
 
-                cursor.execute("UPDATE cri_cra_dev.crm.operations SET name=?, area=?, pipeline_stage=?, liquidation_date=?, risk=?, temperature=?, is_active=?, responsible_analyst=?, originator=?, modality=?, economic_group_id=? WHERE id=?",
+                cursor.execute("UPDATE cri_cra_dev.crm.operations SET name=?, area=?, pipeline_stage=?, liquidation_date=?, risk=?, temperature=?, is_active=?, structuring_analyst=?, originator=?, modality=?, economic_group_id=? WHERE id=?",
                                (data.get('name'), new_area, data.get('stage'), parse_iso_date(data.get('liquidationDate')), data.get('risk'), data.get('temperature'), is_active_val, data.get('analyst'), data.get('originator'), data.get('modality'), new_economic_group_id, so_id))
                                
                 cursor.execute("DELETE FROM cri_cra_dev.crm.operation_series WHERE operation_id=?", (so_id,))
@@ -490,7 +474,7 @@ def manage_structuring_operation(so_id):
                 if 'taskExceptions' in data:
                     cursor.execute("DELETE FROM cri_cra_dev.crm.task_exceptions WHERE operation_id = ?", (so_id,))
                     for task_id in data['taskExceptions']:
-                        cursor.execute("INSERT INTO cri_cra_dev.crm.task_exceptions (operation_id, task_id) VALUES (?, ?)", (so_id, task_id))
+                        cursor.execute("INSERT INTO cri_cra_dev.crm.task_exceptions (operation_id, task_id, deleted_at, deleted_by) VALUES (?, ?, ?, ?)", (so_id, task_id, datetime.now(), data.get('userName', 'System')))
                                    
                 conn.commit()
                 return jsonify({"status": "success"}), 200

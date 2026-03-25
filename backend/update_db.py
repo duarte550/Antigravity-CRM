@@ -35,6 +35,7 @@ SCHEMA = {
         "operation_type STRING",
         "maturity_date TIMESTAMP",
         "responsible_analyst STRING",
+        "structuring_analyst STRING",
         "review_frequency STRING",
         "call_frequency STRING",
         "df_frequency STRING",

@@ -73,6 +73,7 @@ const OperationForm: React.FC<OperationFormProps> = ({ onClose, onSave, initialD
 
   const [maturityDate, setMaturityDate] = useState(formatDate(initialData?.maturityDate) || formatDate(seedData?.maturityDate));
   const [responsibleAnalyst, setResponsibleAnalyst] = useState(initialData?.responsibleAnalyst || seedData?.responsibleAnalyst || '');
+  const [structuringAnalyst, setStructuringAnalyst] = useState(initialData?.structuringAnalyst || seedData?.structuringAnalyst || '');
   const [reviewFrequency, setReviewFrequency] = useState(initialData?.reviewFrequency || seedData?.reviewFrequency || 'Trimestral');
   const [callFrequency, setCallFrequency] = useState(initialData?.callFrequency || seedData?.callFrequency || 'Mensal');
   const [dfFrequency, setDfFrequency] = useState(initialData?.dfFrequency || seedData?.dfFrequency || 'Trimestral');
@@ -104,6 +105,7 @@ const OperationForm: React.FC<OperationFormProps> = ({ onClose, onSave, initialD
       guarantees: guarantees.split(',').map((g, i) => ({ id: i, name: g.trim() })).filter(g => g.name),
       maturityDate: maturityDate ? new Date(maturityDate + 'T12:00:00').toISOString() : null,
       responsibleAnalyst,
+      structuringAnalyst,
       reviewFrequency,
       callFrequency,
       dfFrequency,

@@ -107,7 +107,7 @@ def fetch_full_operation(cursor, operation_id):
         'operationType': operation_db['operation_type'],
         'maturityDate': safe_isoformat(operation_db.get('maturity_date')),
         'estimatedDate': safe_isoformat(operation_db.get('estimated_date')),
-        'responsibleAnalyst': operation_db['responsible_analyst'], 'reviewFrequency': operation_db['review_frequency'],
+        'responsibleAnalyst': operation_db['responsible_analyst'], 'structuringAnalyst': operation_db.get('structuring_analyst'), 'reviewFrequency': operation_db['review_frequency'],
         'callFrequency': operation_db['call_frequency'], 'dfFrequency': operation_db['df_frequency'],
         'segmento': operation_db['segmento'], 'ratingOperation': operation_db['rating_operation'],
         'ratingGroup': operation_db['rating_group'], 'watchlist': operation_db['watchlist'],
@@ -279,7 +279,7 @@ def manage_operations_collection():
                         'operationType': op_db['operation_type'],
                         'maturityDate': safe_isoformat(op_db.get('maturity_date')),
                         'estimatedDate': safe_isoformat(op_db.get('estimated_date')),
-                        'responsibleAnalyst': op_db['responsible_analyst'], 'reviewFrequency': op_db['review_frequency'],
+                        'responsibleAnalyst': op_db['responsible_analyst'], 'structuringAnalyst': op_db.get('structuring_analyst'), 'reviewFrequency': op_db['review_frequency'],
                         'callFrequency': op_db['call_frequency'], 'dfFrequency': op_db['df_frequency'],
                         'segmento': op_db['segmento'], 'ratingOperation': op_db['rating_operation'],
                         'ratingGroup': op_db['rating_group'], 'watchlist': op_db['watchlist'],
@@ -408,7 +408,7 @@ def manage_operations_collection():
                 if structuring_op_id:
                     cursor.execute("""
                         UPDATE cri_cra_dev.crm.operations SET 
-                        name=?, area=?, operation_type=?, maturity_date=?, responsible_analyst=?, review_frequency=?, 
+                        name=?, area=?, operation_type=?, maturity_date=?, responsible_analyst=?, structuring_analyst=?, review_frequency=?, 
                         call_frequency=?, df_frequency=?, segmento=?, rating_operation=?, rating_group=?, watchlist=?, 
                         ltv=?, dscr=?, monitoring_news=?, monitoring_fii_report=?, monitoring_operational_info=?, 
                         monitoring_receivables_portfolio=?, monitoring_construction_report=?, monitoring_commercial_info=?, 
@@ -416,7 +416,7 @@ def manage_operations_collection():
                         is_structuring=FALSE, is_active=TRUE
                         WHERE id=?
                     """, (
-                        data['name'], data['area'], data['operationType'], maturity_date, data['responsibleAnalyst'], 
+                        data['name'], data['area'], data['operationType'], maturity_date, data['responsibleAnalyst'], data.get('structuringAnalyst'),
                         data['reviewFrequency'], data['callFrequency'], data['dfFrequency'], data['segmento'], 
                         data['ratingOperation'], data['ratingGroup'], data['watchlist'], 
                         data.get('covenants', {}).get('ltv'), data.get('covenants', {}).get('dscr'), 
@@ -428,7 +428,7 @@ def manage_operations_collection():
                     ))
                     new_op_id = structuring_op_id
                 else:
-                    cursor.execute( "INSERT INTO cri_cra_dev.crm.operations (name, area, operation_type, maturity_date, responsible_analyst, review_frequency, call_frequency, df_frequency, segmento, rating_operation, rating_group, watchlist, ltv, dscr, monitoring_news, monitoring_fii_report, monitoring_operational_info, monitoring_receivables_portfolio, monitoring_construction_report, monitoring_commercial_info, monitoring_spe_dfs, estimated_date, status, description, master_group_id, economic_group_id, is_structuring, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, FALSE, TRUE)", (data['name'], data['area'], data['operationType'], maturity_date, data['responsibleAnalyst'], data['reviewFrequency'], data['callFrequency'], data['dfFrequency'], data['segmento'], data['ratingOperation'], data['ratingGroup'], data['watchlist'], data.get('covenants', {}).get('ltv'), data.get('covenants', {}).get('dscr'), dm.get('news'), dm.get('fiiReport'), dm.get('operationalInfo'), dm.get('receivablesPortfolio'), dm.get('monthlyConstructionReport'), dm.get('monthlyCommercialInfo'), dm.get('speDfs'), est_date, data.get('status', 'Ativa'), data.get('description'), data.get('masterGroupId'), data.get('economicGroupId')) )
+                    cursor.execute( "INSERT INTO cri_cra_dev.crm.operations (name, area, operation_type, maturity_date, responsible_analyst, structuring_analyst, review_frequency, call_frequency, df_frequency, segmento, rating_operation, rating_group, watchlist, ltv, dscr, monitoring_news, monitoring_fii_report, monitoring_operational_info, monitoring_receivables_portfolio, monitoring_construction_report, monitoring_commercial_info, monitoring_spe_dfs, estimated_date, status, description, master_group_id, economic_group_id, is_structuring, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, FALSE, TRUE)", (data['name'], data['area'], data['operationType'], maturity_date, data['responsibleAnalyst'], data.get('structuringAnalyst'), data['reviewFrequency'], data['callFrequency'], data['dfFrequency'], data['segmento'], data['ratingOperation'], data['ratingGroup'], data['watchlist'], data.get('covenants', {}).get('ltv'), data.get('covenants', {}).get('dscr'), dm.get('news'), dm.get('fiiReport'), dm.get('operationalInfo'), dm.get('receivablesPortfolio'), dm.get('monthlyConstructionReport'), dm.get('monthlyCommercialInfo'), dm.get('speDfs'), est_date, data.get('status', 'Ativa'), data.get('description'), data.get('masterGroupId'), data.get('economicGroupId')) )
                     cursor.execute("SELECT id FROM cri_cra_dev.crm.operations WHERE name = ? ORDER BY id DESC LIMIT 1", (data['name'],))
                     new_op_id = cursor.fetchone().id
                 
@@ -575,7 +575,7 @@ def _update_operation_db_internal(cursor, op_id, data):
     final_master_group_id = data.get('masterGroupId', old_op_db.get('master_group_id'))
     final_economic_group_id = data.get('economicGroupId', old_op_db.get('economic_group_id'))
 
-    cursor.execute( "UPDATE cri_cra_dev.crm.operations SET name = ?, area = ?, rating_operation = ?, rating_group = ?, watchlist = ?, ltv = ?, dscr = ?, estimated_date = ?, maturity_date = ?, responsible_analyst = ?, segmento = ?, description = ?, status = ?, moved_to_legacy_date = ?, master_group_id = ?, economic_group_id = ? WHERE id = ?", (data.get('name', old_op_db.get('name')), data.get('area', old_op_db.get('area')), data.get('ratingOperation', old_op_db.get('rating_operation')), new_rating_group, data.get('watchlist', old_op_db.get('watchlist')), cov.get('ltv', old_op_db.get('ltv')), cov.get('dscr', old_op_db.get('dscr')), final_est_date, final_maturity_date, data.get('responsibleAnalyst', old_op_db.get('responsible_analyst')), data.get('segmento', old_op_db.get('segmento')), final_description, final_status, final_moved_to_legacy_date, final_master_group_id, final_economic_group_id, op_id) )
+    cursor.execute( "UPDATE cri_cra_dev.crm.operations SET name = ?, area = ?, rating_operation = ?, rating_group = ?, watchlist = ?, ltv = ?, dscr = ?, estimated_date = ?, maturity_date = ?, responsible_analyst = ?, structuring_analyst = ?, segmento = ?, description = ?, status = ?, moved_to_legacy_date = ?, master_group_id = ?, economic_group_id = ? WHERE id = ?", (data.get('name', old_op_db.get('name')), data.get('area', old_op_db.get('area')), data.get('ratingOperation', old_op_db.get('rating_operation')), new_rating_group, data.get('watchlist', old_op_db.get('watchlist')), cov.get('ltv', old_op_db.get('ltv')), cov.get('dscr', old_op_db.get('dscr')), final_est_date, final_maturity_date, data.get('responsibleAnalyst', old_op_db.get('responsible_analyst')), data.get('structuringAnalyst', old_op_db.get('structuring_analyst')), data.get('segmento', old_op_db.get('segmento')), final_description, final_status, final_moved_to_legacy_date, final_master_group_id, final_economic_group_id, op_id) )
     
     if 'notes' in data:
         cursor.execute("SELECT 1 FROM cri_cra_dev.crm.operation_review_notes WHERE operation_id = ?", (op_id,))
@@ -686,7 +686,7 @@ def _update_operation_db_internal(cursor, op_id, data):
     if 'taskExceptions' in data:
         cursor.execute("DELETE FROM cri_cra_dev.crm.task_exceptions WHERE operation_id = ?", (op_id,))
         for task_id in data['taskExceptions']:
-            cursor.execute("INSERT INTO cri_cra_dev.crm.task_exceptions (operation_id, task_id) VALUES (?, ?)", (op_id, task_id))
+            cursor.execute("INSERT INTO cri_cra_dev.crm.task_exceptions (operation_id, task_id, deleted_at, deleted_by) VALUES (?, ?, ?, ?)", (op_id, task_id, datetime.now(), data.get('responsibleAnalyst', 'System')))
             
     if 'contacts' in data:
         cursor.execute("DELETE FROM cri_cra_dev.crm.operation_contacts WHERE operation_id = ?", (op_id,))

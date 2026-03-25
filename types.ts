@@ -136,6 +136,7 @@ export interface Operation {
   guarantees: Guarantee[];
   maturityDate: string; // ISO string
   responsibleAnalyst: string;
+  structuringAnalyst?: string;
   reviewFrequency: string;
   callFrequency: string;
   dfFrequency: string;

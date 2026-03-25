@@ -21,10 +21,6 @@ const EconomicGroupForm: React.FC<EconomicGroupFormProps> = ({ onClose, onSave, 
   const [masterGroups, setMasterGroups] = useState<MasterGroup[]>([]);
   const [isLoadingMGs, setIsLoadingMGs] = useState(true);
 
-  useEffect(() => {
-    fetchMasterGroups();
-  }, []);
-
   const fetchMasterGroups = async () => {
     try {
       const response = await fetchApi(`${apiUrl}/api/master-groups`);
@@ -37,6 +33,10 @@ const EconomicGroupForm: React.FC<EconomicGroupFormProps> = ({ onClose, onSave, 
       setIsLoadingMGs(false);
     }
   };
+
+  useEffect(() => {
+    fetchMasterGroups();
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -59,7 +59,7 @@ const EconomicGroupForm: React.FC<EconomicGroupFormProps> = ({ onClose, onSave, 
             <Select 
               id="masterGroupId" 
               value={masterGroupId} 
-              onChange={e => setMasterGroupId(Number(e.target.value))} 
+              onChange={e => setMasterGroupId(e.target.value ? Number(e.target.value) : '')} 
               required
               disabled={isLoadingMGs || !!initialData}
             >

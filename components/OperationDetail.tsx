@@ -870,6 +870,7 @@ ${event.nextSteps ? stripHtml(event.nextSteps) : 'Nenhum'}
                     <InfoCard title="Segmento">{operation.segmento}</InfoCard>
                     <InfoCard title="Vencimento" highlight>{operation.maturityDate ? new Date(operation.maturityDate).toLocaleDateString('pt-BR') : 'N/A'}</InfoCard>
                     <InfoCard title="Analista">{operation.responsibleAnalyst}</InfoCard>
+                    {operation.structuringAnalyst && <InfoCard title="Analista Estruturação">{operation.structuringAnalyst}</InfoCard>}
                     <InfoCard title="Próx. Rev. Gerencial" highlight>{operation.nextReviewGerencial ? new Date(operation.nextReviewGerencial).toLocaleDateString('pt-BR') : 'N/A'}</InfoCard>
                     <InfoCard title="Próx. Rev. Política" highlight>{operation.nextReviewPolitica ? new Date(operation.nextReviewPolitica).toLocaleDateString('pt-BR') : 'N/A'}</InfoCard>
                 </div>
