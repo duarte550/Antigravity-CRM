@@ -484,75 +484,101 @@ const OriginationPipelinePage: React.FC<OriginationPipelinePageProps> = ({ onNav
   return (
     <div className="space-y-6 h-full flex flex-col p-6 max-w-[1600px] mx-auto">
       {/* Header */}
-      <div className="flex justify-between items-center bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
-        <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Hub de Originação</h1>
-            <p className="text-gray-500 dark:text-gray-400 text-sm">Dashboard consolidado e acompanhamento de {filteredOperations.length} operações ativas.</p>
-        </div>
-        
-        <div className="flex gap-4 items-center">
-            <button 
-              onClick={() => { setOperationToEdit(null); setIsFormOpen(true); }}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md transition-colors text-sm font-medium shadow-sm flex items-center gap-2"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4"/></svg>
-              Nova Operação
-            </button>
-            <div className="bg-gray-100 dark:bg-gray-700 p-1 rounded-lg flex text-sm font-medium">
+      <div className="flex flex-col bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
+        <div className="flex justify-between items-center p-6 pb-4">
+            <div>
+                <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-1">Hub de Originação</h1>
+                <p className="text-gray-500 dark:text-gray-400 text-sm">Dashboard consolidado e acompanhamento de {filteredOperations.length} operações ativas.</p>
+            </div>
+            
+            <div className="flex gap-4 items-center">
+                <div className="bg-gray-100 dark:bg-gray-700/80 p-1 rounded-lg flex text-sm font-medium border border-gray-200 dark:border-gray-600/50">
+                    <button 
+                      onClick={() => setActiveTab('resumo')}
+                      className={`px-4 py-1.5 rounded-md transition-all ${activeTab === 'resumo' ? 'bg-white dark:bg-gray-800 text-blue-600 dark:text-blue-400 shadow-sm ring-1 ring-gray-900/5 dark:ring-white/10' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}`}
+                    >
+                        Resumo
+                    </button>
+                    <button 
+                      onClick={() => setActiveTab('por-fundo')}
+                      className={`px-4 py-1.5 rounded-md transition-all ${activeTab === 'por-fundo' ? 'bg-white dark:bg-gray-800 text-blue-600 dark:text-blue-400 shadow-sm ring-1 ring-gray-900/5 dark:ring-white/10' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}`}
+                    >
+                        Por Fundo
+                    </button>
+                    <button 
+                      onClick={() => setActiveTab('kanban')}
+                      className={`px-4 py-1.5 rounded-md transition-all ${activeTab === 'kanban' ? 'bg-white dark:bg-gray-800 text-blue-600 dark:text-blue-400 shadow-sm ring-1 ring-gray-900/5 dark:ring-white/10' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}`}
+                    >
+                        Kanban
+                    </button>
+                    <button 
+                      onClick={() => setActiveTab('table')}
+                      className={`px-4 py-1.5 rounded-md transition-all ${activeTab === 'table' ? 'bg-white dark:bg-gray-800 text-blue-600 dark:text-blue-400 shadow-sm ring-1 ring-gray-900/5 dark:ring-white/10' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}`}
+                    >
+                        Liquidações
+                    </button>
+                    <button 
+                      onClick={() => setActiveTab('tasks')}
+                      className={`px-4 py-1.5 rounded-md transition-all ${activeTab === 'tasks' ? 'bg-white dark:bg-gray-800 text-blue-600 dark:text-blue-400 shadow-sm ring-1 ring-gray-900/5 dark:ring-white/10' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}`}
+                    >
+                        Tarefas
+                    </button>
+                </div>
                 <button 
-                  onClick={() => setActiveTab('resumo')}
-                  className={`px-4 py-2 rounded-md transition-colors ${activeTab === 'resumo' ? 'bg-white dark:bg-gray-800 text-blue-600 dark:text-blue-400 shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}`}
+                  onClick={() => { setOperationToEdit(null); setIsFormOpen(true); }}
+                  className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-all text-sm font-medium shadow-sm flex items-center gap-2 border border-transparent hover:border-blue-500"
                 >
-                    Resumo
-                </button>
-                <button 
-                  onClick={() => setActiveTab('por-fundo')}
-                  className={`px-4 py-2 rounded-md transition-colors ${activeTab === 'por-fundo' ? 'bg-white dark:bg-gray-800 text-blue-600 dark:text-blue-400 shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}`}
-                >
-                    Por Fundo
-                </button>
-                <button 
-                  onClick={() => setActiveTab('kanban')}
-                  className={`px-4 py-2 rounded-md transition-colors ${activeTab === 'kanban' ? 'bg-white dark:bg-gray-800 text-blue-600 dark:text-blue-400 shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}`}
-                >
-                    Kanban
-                </button>
-                <button 
-                  onClick={() => setActiveTab('table')}
-                  className={`px-4 py-2 rounded-md transition-colors ${activeTab === 'table' ? 'bg-white dark:bg-gray-800 text-blue-600 dark:text-blue-400 shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}`}
-                >
-                    Liquidações
-                </button>
-                <button 
-                  onClick={() => setActiveTab('tasks')}
-                  className={`px-4 py-2 rounded-md transition-colors ${activeTab === 'tasks' ? 'bg-white dark:bg-gray-800 text-blue-600 dark:text-blue-400 shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}`}
-                >
-                    Tarefas
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4"/></svg>
+                  Nova Operação
                 </button>
             </div>
+        </div>
 
-            <select
-                value={selectedAnalyst}
-                onChange={(e) => setSelectedAnalyst(e.target.value)}
-                className="block w-48 pl-3 pr-10 py-2 border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:ring-blue-500 focus:border-blue-500"
-            >
-                <option value="">Todos os Analistas</option>
-                {analysts.map(a => <option key={a} value={a}>{a}</option>)}
-            </select>
-            <select
-                value={masterGroupFilter}
-                onChange={(e) => setMasterGroupFilter(e.target.value)}
-                className="block w-48 pl-3 pr-8 py-2 border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:ring-blue-500 focus:border-blue-500"
-            >
-                {masterGroupsOpts.map(mg => <option key={mg} value={mg}>{mg === 'All' ? 'Master Group: Todos' : mg}</option>)}
-            </select>
-            <select
-                value={economicGroupFilter}
-                onChange={(e) => setEconomicGroupFilter(e.target.value)}
-                className="block w-48 pl-3 pr-8 py-2 border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:ring-blue-500 focus:border-blue-500"
-            >
-                {economicGroupsOpts.map(eg => <option key={eg} value={eg}>{eg === 'All' ? 'Grupo Econômico: Todos' : eg}</option>)}
-            </select>
+        {/* Filters Bar */}
+        <div className="flex items-center gap-3 px-6 py-3 border-t border-gray-100 dark:border-gray-700/80 bg-gray-50/50 dark:bg-gray-800/30 rounded-b-xl">
+            <div className="flex items-center gap-1.5 text-gray-400 dark:text-gray-500">
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"/></svg>
+                <span className="text-xs font-semibold uppercase tracking-wider">Filtros</span>
+            </div>
+            
+            <div className="flex block items-center gap-2">
+                <select
+                    value={selectedAnalyst}
+                    onChange={(e) => setSelectedAnalyst(e.target.value)}
+                    className="block w-40 pl-3 pr-8 py-1.5 border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 text-xs focus:ring-1 focus:ring-blue-500 focus:border-blue-500 shadow-sm transition-colors hover:border-gray-300 dark:hover:border-gray-500"
+                >
+                    <option value="">Analista: Todos</option>
+                    {analysts.map(a => <option key={a} value={a}>{a}</option>)}
+                </select>
+                <select
+                    value={masterGroupFilter}
+                    onChange={(e) => setMasterGroupFilter(e.target.value)}
+                    className="block w-48 pl-3 pr-8 py-1.5 border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 text-xs focus:ring-1 focus:ring-blue-500 focus:border-blue-500 shadow-sm transition-colors hover:border-gray-300 dark:hover:border-gray-500"
+                >
+                    {masterGroupsOpts.map(mg => <option key={mg} value={mg}>{mg === 'All' ? 'Master Group: Todos' : mg}</option>)}
+                </select>
+                <select
+                    value={economicGroupFilter}
+                    onChange={(e) => setEconomicGroupFilter(e.target.value)}
+                    className="block w-48 pl-3 pr-8 py-1.5 border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 text-xs focus:ring-1 focus:ring-blue-500 focus:border-blue-500 shadow-sm transition-colors hover:border-gray-300 dark:hover:border-gray-500"
+                >
+                    {economicGroupsOpts.map(eg => <option key={eg} value={eg}>{eg === 'All' ? 'Grupo Econômico: Todos' : eg}</option>)}
+                </select>
+                
+                {(selectedAnalyst || masterGroupFilter !== 'All' || economicGroupFilter !== 'All') && (
+                    <button 
+                        onClick={() => {
+                            setSelectedAnalyst('');
+                            setMasterGroupFilter('All');
+                            setEconomicGroupFilter('All');
+                        }}
+                        className="ml-2 text-xs text-gray-400 hover:text-red-500 dark:text-gray-500 dark:hover:text-red-400 transition-colors flex items-center gap-1 font-medium"
+                    >
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/></svg>
+                        Limpar
+                    </button>
+                )}
+            </div>
         </div>
       </div>
 

@@ -24,7 +24,10 @@ app.register_blueprint(fund_simulator_bp)
 logging.basicConfig(level=logging.INFO)
 
 # Run schema updates on startup
-update_db.update_schema()
+try:
+    update_db.update_schema()
+except Exception as e:
+    logging.warning(f"Could not run schema updates on startup: {e}")
 
 # Configuração de CORS para permitir requisições de qualquer origem.
 CORS(app, supports_credentials=True, origins = ["https://front-crm-cri.azurewebsites.net"])
