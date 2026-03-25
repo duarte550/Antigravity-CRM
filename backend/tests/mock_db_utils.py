@@ -4,13 +4,22 @@ import os
 
 class GenericRow:
     def __init__(self, d):
+        self._d = d
         self.__dict__.update(d)
         
     def __getitem__(self, key):
-        return self.__dict__.get(key)
+        if isinstance(key, int):
+            return list(self._d.values())[key]
+        return self._d.get(key)
         
     def get(self, key, default=None):
-        return self.__dict__.get(key, default)
+        return self._d.get(key, default)
+
+    def __iter__(self):
+        return iter(self._d.values())
+        
+    def __len__(self):
+        return len(self._d)
 
 class DatabricksToSqliteMockCursor:
     def __init__(self, cursor):
@@ -20,9 +29,17 @@ class DatabricksToSqliteMockCursor:
     def execute(self, query, params=()):
         # Remove Databricks specific schema prefixes
         query = query.replace("cri_cra_dev.crm.", "")
+        query = query.replace("risco_dev.risco_cri.", "risco_dev_risco_cri_")
+        query = query.replace("middle_dev.fundos.", "middle_dev_fundos_")
         
         # Databricks allows string casts like CAST(id AS STRING). SqLite uses CAST(id AS TEXT)
         query = re.sub(r'CAST\(([^ ]+)\s+AS\s+STRING\)', r'CAST(\1 AS TEXT)', query, flags=re.IGNORECASE)
+        query = re.sub(r'CURRENT_TIMESTAMP\(\)', 'CURRENT_TIMESTAMP', query, flags=re.IGNORECASE)
+        query = query.replace('TRUE', '1').replace('FALSE', '0')
+        
+        # Convert any datetime objects in params to strings
+        from datetime import datetime
+        params = tuple(p.isoformat() if isinstance(p, datetime) else p for p in params)
         
         self.cursor.execute(query, params)
         self.description = self.cursor.description
@@ -93,6 +110,10 @@ def init_mock_db():
     # Need to execute statement by statement due to SQLite executescript limitations, but executescript works for pure DDL
     try:
         c.executescript(sql)
+        c.execute("CREATE TABLE IF NOT EXISTS risco_dev_risco_cri_dadosconsolidadoscris (Fundo TEXT, Data TEXT, Info TEXT, Valor REAL)")
+        c.execute("CREATE TABLE IF NOT EXISTS middle_dev_fundos_fundos (codigo TEXT, area INTEGER)")
+        c.execute("INSERT INTO middle_dev_fundos_fundos VALUES ('FUNDO_FAKE_AUTOMATIZADO', 8)")
+        c.execute("INSERT INTO risco_dev_risco_cri_dadosconsolidadoscris VALUES ('FUNDO_FAKE_AUTOMATIZADO', '2025-01-01', 'Taxa Média MTM CDI', 12.0)")
     except Exception as e:
         print("MOCK DB SCHEMA ERROR:", e)
         raise e

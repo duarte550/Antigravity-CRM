@@ -5,6 +5,7 @@ import { Label, Input } from './UI';
 import RichTextEditor from './RichTextEditor';
 import Modal from './Modal';
 import { PlusIcon, CheckCircleIcon, ClockIcon, HistoryIcon, MessageSquareIcon } from './icons/Icons';
+import { fetchApi } from '../utils/api';
 
 interface ChangeLogPageProps {
     apiUrl: string;
@@ -27,8 +28,8 @@ const ChangeLogPage: React.FC<ChangeLogPageProps> = ({ apiUrl, showToast, setIsS
         setIsRefreshing(true);
         try {
             const [reqRes, patchRes] = await Promise.all([
-                fetch(`${apiUrl}/api/change-requests`, { credentials: 'include' }),
-                fetch(`${apiUrl}/api/patch-notes`, { credentials: 'include' })
+                fetchApi(`${apiUrl}/api/change-requests`, { credentials: 'include' }),
+                fetchApi(`${apiUrl}/api/patch-notes`, { credentials: 'include' })
             ]);
     
             if (reqRes.ok) setRequests(await reqRes.json());
@@ -51,7 +52,7 @@ const ChangeLogPage: React.FC<ChangeLogPageProps> = ({ apiUrl, showToast, setIsS
         setIsSubmitting(true);
         setIsSyncing(true);
         try {
-            const response = await fetch(`${apiUrl}/api/change-requests`, {
+            const response = await fetchApi(`${apiUrl}/api/change-requests`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -101,7 +102,7 @@ const ChangeLogPage: React.FC<ChangeLogPageProps> = ({ apiUrl, showToast, setIsS
         setRequests(prev => prev.map(r => r.id === request.id ? updated : r));
 
         try {
-            const response = await fetch(`${apiUrl}/api/change-requests/${request.id}`, {
+            const response = await fetchApi(`${apiUrl}/api/change-requests/${request.id}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ status: newStatus }),

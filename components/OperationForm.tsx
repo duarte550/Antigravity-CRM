@@ -5,6 +5,7 @@ import { WatchlistStatus, ratingOptions, segmentoOptions, areaOptions } from '..
 import Modal from './Modal';
 import { Label, Input, Select, FormRow } from './UI';
 import RichTextEditor from './RichTextEditor';
+import { fetchApi } from '../utils/api';
 
 interface OperationFormProps {
   onClose: () => void;
@@ -52,7 +53,7 @@ const OperationForm: React.FC<OperationFormProps> = ({ onClose, onSave, initialD
   useEffect(() => {
     const fetchMasterGroups = async () => {
       try {
-        const response = await fetch(`${apiUrl}/api/master-groups`);
+        const response = await fetchApi(`${apiUrl}/api/master-groups`);
         if (response.ok) {
           const data = await response.json();
           setMasterGroups(data);

@@ -9,6 +9,7 @@ import RiskForm from './RiskForm';
 import { AlertTriangle, Plus, Edit2, Trash2 } from 'lucide-react';
 import { ArrowUpIcon, ArrowRightIcon, ArrowDownIcon } from './icons/Icons';
 import Modal from './Modal';
+import { fetchApi } from '../utils/api';
 
 const getRatingChange = (current?: string, previous?: string): 'up' | 'down' | 'neutral' => {
     if (!current || !previous) return 'neutral';
@@ -89,7 +90,7 @@ const MasterGroupDetailsPage: React.FC<MasterGroupDetailsPageProps> = ({ masterG
   const fetchMasterGroup = async () => {
     setIsLoading(true);
     try {
-      const response = await fetch(`${apiUrl}/api/master-groups/${masterGroupId}`);
+      const response = await fetchApi(`${apiUrl}/api/master-groups/${masterGroupId}`);
       if (!response.ok) throw new Error('Failed to fetch master group');
       const data = await response.json();
       setMasterGroup(data);
@@ -104,14 +105,14 @@ const MasterGroupDetailsPage: React.FC<MasterGroupDetailsPageProps> = ({ masterG
   const handleSaveRisk = async (riskData: any) => {
       try {
           if (editingRisk) {
-              await fetch(`${apiUrl}/api/master-groups/${masterGroupId}/risks/${editingRisk.id}`, {
+              await fetchApi(`${apiUrl}/api/master-groups/${masterGroupId}/risks/${editingRisk.id}`, {
                   method: 'PUT',
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({ ...riskData, userName: 'Analista' })
               });
               showToast('Risco atualizado.', 'success');
           } else {
-              await fetch(`${apiUrl}/api/master-groups/${masterGroupId}/risks`, {
+              await fetchApi(`${apiUrl}/api/master-groups/${masterGroupId}/risks`, {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({ ...riskData, userName: 'Analista' })
@@ -130,7 +131,7 @@ const MasterGroupDetailsPage: React.FC<MasterGroupDetailsPageProps> = ({ masterG
   const handleDeleteRisk = async (id: number) => {
       if (!window.confirm("Certeza que deseja remover este Risco/Ponto de Atenção?")) return;
       try {
-          await fetch(`${apiUrl}/api/master-groups/${masterGroupId}/risks/${id}?userName=Analista`, {
+          await fetchApi(`${apiUrl}/api/master-groups/${masterGroupId}/risks/${id}?userName=Analista`, {
               method: 'DELETE'
           });
           showToast('Risco removido.', 'success');
@@ -143,7 +144,7 @@ const MasterGroupDetailsPage: React.FC<MasterGroupDetailsPageProps> = ({ masterG
 
   const handleAddEvent = async (eventData: Omit<Event, 'id'>) => {
     try {
-      const response = await fetch(`${apiUrl}/api/master-groups/${masterGroupId}/events`, {
+      const response = await fetchApi(`${apiUrl}/api/master-groups/${masterGroupId}/events`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(eventData),
@@ -165,7 +166,7 @@ const MasterGroupDetailsPage: React.FC<MasterGroupDetailsPageProps> = ({ masterG
         ? `${apiUrl}/api/structuring-operations/${structuringToEdit.id}`
         : `${apiUrl}/api/structuring-operations`;
       
-      const response = await fetch(url, {
+      const response = await fetchApi(url, {
         method: isEditing ? 'PUT' : 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),

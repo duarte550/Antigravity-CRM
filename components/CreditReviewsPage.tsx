@@ -4,6 +4,7 @@ import type { Operation, Task, Area, OperationReviewNote } from '../types';
 import { TaskStatus } from '../types';
 import { PencilIcon, CheckCircleIcon, ArrowUpIcon, ArrowDownIcon } from './icons/Icons';
 import RichTextEditor from './RichTextEditor';
+import { fetchApi } from '../utils/api';
 
 interface CreditReviewsPageProps {
   operations: Operation[];
@@ -163,7 +164,7 @@ interface CreditReviewsPageProps {
   
         setIsSyncing(true);
         try {
-          const response = await fetch(`${apiUrl}/api/operation_review_notes`, {
+          const response = await fetchApi(`${apiUrl}/api/operation_review_notes`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({

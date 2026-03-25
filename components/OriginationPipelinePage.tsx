@@ -7,6 +7,7 @@ import OriginationTasksPage from './OriginationTasksPage';
 import PorFundoTab from './PorFundoTab';
 import type { Task, TaskRule } from '../types';
 import { TaskStatus } from '../types';
+import { fetchApi } from '../utils/api';
 
 interface OriginationPipelinePageProps {
   onNavigate: (page: Page, id?: number) => void;
@@ -47,7 +48,7 @@ const OriginationPipelinePage: React.FC<OriginationPipelinePageProps> = ({ onNav
     setOperations(prev => prev.map(o => o.id === updatedOp.id ? updatedOp : o));
     if (syncToBackend) {
       try {
-        await fetch(`${apiUrl}/api/structuring-operations/${updatedOp.id}`, {
+        await fetchApi(`${apiUrl}/api/structuring-operations/${updatedOp.id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(updatedOp)
@@ -132,7 +133,7 @@ const OriginationPipelinePage: React.FC<OriginationPipelinePageProps> = ({ onNav
 
   const fetchMasterGroups = async () => {
     try {
-      const response = await fetch(`${apiUrl}/api/master-groups`);
+      const response = await fetchApi(`${apiUrl}/api/master-groups`);
       if (response.ok) {
         const data = await response.json();
         setMasterGroups(data.map((mg: any) => ({ id: mg.id, name: mg.name })));
@@ -145,7 +146,7 @@ const OriginationPipelinePage: React.FC<OriginationPipelinePageProps> = ({ onNav
   const fetchOperations = async () => {
     try {
       setIsLoading(true);
-      const response = await fetch(`${apiUrl}/api/structuring-operations`);
+      const response = await fetchApi(`${apiUrl}/api/structuring-operations`);
       if (!response.ok) throw new Error('Failed to fetch structuring operations');
       const data = await response.json();
       setOperations(data);
@@ -182,7 +183,7 @@ const OriginationPipelinePage: React.FC<OriginationPipelinePageProps> = ({ onNav
              showToast('Operação inativada via fila de background.', 'success');
          }
       } else {
-         const response = await fetch(`${apiUrl}/api/structuring-operations/${id}`, {
+         const response = await fetchApi(`${apiUrl}/api/structuring-operations/${id}`, {
            method: 'PUT',
            headers: { 'Content-Type': 'application/json' },
            body: JSON.stringify(payload),
@@ -202,7 +203,7 @@ const OriginationPipelinePage: React.FC<OriginationPipelinePageProps> = ({ onNav
   const handleSaveOperation = async (data: Omit<StructuringOperation, 'id' | 'masterGroupId' | 'masterGroupName'> & { masterGroupId?: number }) => {
     try {
       if (operationToEdit) {
-        const response = await fetch(`${apiUrl}/api/structuring-operations/${operationToEdit.id}`, {
+        const response = await fetchApi(`${apiUrl}/api/structuring-operations/${operationToEdit.id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(data),
@@ -235,7 +236,7 @@ const OriginationPipelinePage: React.FC<OriginationPipelinePageProps> = ({ onNav
         setOperationToEdit(null);
         showToast('Criando operação...', 'success');
 
-        const response = await fetch(`${apiUrl}/api/structuring-operations`, {
+        const response = await fetchApi(`${apiUrl}/api/structuring-operations`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(data),
@@ -255,7 +256,7 @@ const OriginationPipelinePage: React.FC<OriginationPipelinePageProps> = ({ onNav
   const handleSaveMasterGroup = async (data: Omit<MasterGroup, 'id' | 'operations' | 'structuringOperations' | 'contacts' | 'events'>) => {
     try {
       showToast('Criando Master Group...', 'success');
-      const response = await fetch(`${apiUrl}/api/master-groups`, {
+      const response = await fetchApi(`${apiUrl}/api/master-groups`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
@@ -278,7 +279,7 @@ const OriginationPipelinePage: React.FC<OriginationPipelinePageProps> = ({ onNav
       const activeStage = operationForEvent.stages?.find(s => !s.isCompleted);
       const payload = { ...eventData, structuringOperationStageId: activeStage?.id };
 
-      const response = await fetch(`${apiUrl}/api/structuring-operations/${operationForEvent.id}/events`, {
+      const response = await fetchApi(`${apiUrl}/api/structuring-operations/${operationForEvent.id}/events`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),

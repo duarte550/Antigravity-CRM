@@ -9,6 +9,7 @@ import Modal from './Modal';
 import ReviewCompletionForm from './ReviewCompletionForm';
 import AnalystCalendar from './AnalystCalendar';
 import type { WatchlistStatus, Rating, Sentiment } from '../types';
+import { fetchApi } from '../utils/api';
 
 interface AnalystHubProps {
   operations: Operation[];
@@ -66,7 +67,7 @@ const AnalystHub: React.FC<AnalystHubProps> = ({
     const fetchNotes = async () => {
       setIsRefreshing(true);
       try {
-        const response = await fetch(`${apiUrl}/api/analyst-notes/${encodeURIComponent(selectedAnalyst)}`);
+        const response = await fetchApi(`${apiUrl}/api/analyst-notes/${encodeURIComponent(selectedAnalyst)}`);
         if (response.ok) {
           const data = await response.json();
           setAnalystNotes(data.notes || '');
@@ -85,7 +86,7 @@ const AnalystHub: React.FC<AnalystHubProps> = ({
     setIsSavingNotes(true);
     setIsSyncing(true);
     try {
-      const response = await fetch(`${apiUrl}/api/analyst-notes/${encodeURIComponent(selectedAnalyst)}`, {
+      const response = await fetchApi(`${apiUrl}/api/analyst-notes/${encodeURIComponent(selectedAnalyst)}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ notes: analystNotes })
@@ -623,7 +624,7 @@ const AnalystHub: React.FC<AnalystHubProps> = ({
     if (task.status === 'Concluída') return;
     setIsSyncing(true);
     try {
-      const response = await fetch(`${apiUrl}/api/events`, {
+      const response = await fetchApi(`${apiUrl}/api/events`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

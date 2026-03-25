@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { StructuringOperation } from '../types';
+import { fetchApi } from '../utils/api';
 
 interface PorFundoTabProps {
     operations: StructuringOperation[];
@@ -33,7 +34,7 @@ const PorFundoTab: React.FC<PorFundoTabProps> = ({ operations, apiUrl, showToast
     const [isFetchingFund, setIsFetchingFund] = useState(false);
 
     useEffect(() => {
-        fetch(`${apiUrl}/api/fund-simulator/funds`)
+        fetchApi(`${apiUrl}/api/fund-simulator/funds`)
             .then(res => res.json())
             .then(data => {
                 if (Array.isArray(data)) {
@@ -50,7 +51,7 @@ const PorFundoTab: React.FC<PorFundoTabProps> = ({ operations, apiUrl, showToast
     useEffect(() => {
         if (!selectedFund) return;
         setIsFetchingFund(true);
-        fetch(`${apiUrl}/api/fund-simulator/data/${encodeURIComponent(selectedFund)}`)
+        fetchApi(`${apiUrl}/api/fund-simulator/data/${encodeURIComponent(selectedFund)}`)
             .then(res => res.json())
             .then(data => {
                 setRiscoData(data.riscoData || []);
@@ -69,7 +70,7 @@ const PorFundoTab: React.FC<PorFundoTabProps> = ({ operations, apiUrl, showToast
 
     const saveInputs = async () => {
         try {
-            const res = await fetch(`${apiUrl}/api/fund-simulator/inputs/${encodeURIComponent(selectedFund)}`, {
+            const res = await fetchApi(`${apiUrl}/api/fund-simulator/inputs/${encodeURIComponent(selectedFund)}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(inputs)
@@ -437,9 +438,9 @@ const PorFundoTab: React.FC<PorFundoTabProps> = ({ operations, apiUrl, showToast
                             <thead className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider border-b border-gray-100 dark:border-gray-700">
                                 <tr>
                                     <th className="pb-3 font-medium">Index.</th>
-                                    <th className="pb-3 font-medium text-right">Carteira</th>
-                                    <th className="pb-3 font-medium text-right text-indigo-600 dark:text-indigo-400">Alpha</th>
-                                    <th className="pb-3 font-medium text-right text-gray-900 dark:text-gray-200">Final (Mid)</th>
+                                    <th className="pb-3 font-medium text-right">Carteira Atual</th>
+                                    <th className="pb-3 font-medium text-right text-indigo-600 dark:text-indigo-400">Pipeline</th>
+                                    <th className="pb-3 font-medium text-right text-gray-900 dark:text-gray-200">Combinada</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-50 dark:divide-gray-800 text-gray-700 dark:text-gray-300">

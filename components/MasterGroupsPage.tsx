@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Page, MasterGroup } from '../types';
 import MasterGroupForm from './MasterGroupForm';
+import { fetchApi } from '../utils/api';
 
 interface MasterGroupsPageProps {
   onNavigate: (page: Page, id?: number) => void;
@@ -24,7 +25,7 @@ const MasterGroupsPage: React.FC<MasterGroupsPageProps> = ({ onNavigate, apiUrl,
   const fetchMasterGroups = async () => {
     try {
       setIsLoading(true);
-      const response = await fetch(`${apiUrl}/api/master-groups`);
+      const response = await fetchApi(`${apiUrl}/api/master-groups`);
       if (!response.ok) throw new Error('Failed to fetch master groups');
       const data = await response.json();
       setMasterGroups(data);
@@ -38,7 +39,7 @@ const MasterGroupsPage: React.FC<MasterGroupsPageProps> = ({ onNavigate, apiUrl,
 
   const handleSaveMasterGroup = async (data: Omit<MasterGroup, 'id' | 'operations' | 'structuringOperations' | 'contacts' | 'events'>) => {
     try {
-      const response = await fetch(`${apiUrl}/api/master-groups`, {
+      const response = await fetchApi(`${apiUrl}/api/master-groups`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),

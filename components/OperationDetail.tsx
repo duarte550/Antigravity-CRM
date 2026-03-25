@@ -16,6 +16,7 @@ import OperationForm from './OperationForm';
 import RiskForm from './RiskForm';
 import { X, Edit2, Plus, Trash2, AlertTriangle } from 'lucide-react';
 import RichTextEditor from './RichTextEditor';
+import { fetchApi } from '../utils/api';
 
 interface OperationDetailProps {
   operation: Operation;
@@ -115,7 +116,7 @@ const OperationDetail: React.FC<OperationDetailProps> = ({ operation, onUpdateOp
         setIsSavingRisk(true);
         setIsSyncing(true);
         try {
-            const response = await fetch(`${apiUrl}/api/operations/${operation.id}/risks`, {
+            const response = await fetchApi(`${apiUrl}/api/operations/${operation.id}/risks`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ ...riskData, userName: 'Analista' }),
@@ -142,7 +143,7 @@ const OperationDetail: React.FC<OperationDetailProps> = ({ operation, onUpdateOp
         setIsSavingRisk(true);
         setIsSyncing(true);
         try {
-            const response = await fetch(`${apiUrl}/api/operations/${operation.id}/risks/${editingRisk.id}`, {
+            const response = await fetchApi(`${apiUrl}/api/operations/${operation.id}/risks/${editingRisk.id}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ ...riskData, userName: 'Analista' }),
@@ -168,7 +169,7 @@ const OperationDetail: React.FC<OperationDetailProps> = ({ operation, onUpdateOp
         if (!window.confirm('Tem certeza que deseja remover este risco?')) return;
         setIsSyncing(true);
         try {
-            const response = await fetch(`${apiUrl}/api/operations/${operation.id}/risks/${riskId}?userName=Analista`, {
+            const response = await fetchApi(`${apiUrl}/api/operations/${operation.id}/risks/${riskId}?userName=Analista`, {
                 method: 'DELETE',
             });
             if (response.ok) {

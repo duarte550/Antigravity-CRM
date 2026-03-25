@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { EconomicGroup, MasterGroup, Rating, ratingOptions } from '../types';
 import Modal from './Modal';
 import { Label, Input, FormRow, Select } from './UI';
+import { fetchApi } from '../utils/api';
 
 interface EconomicGroupFormProps {
   onClose: () => void;
@@ -26,7 +27,7 @@ const EconomicGroupForm: React.FC<EconomicGroupFormProps> = ({ onClose, onSave, 
 
   const fetchMasterGroups = async () => {
     try {
-      const response = await fetch(`${apiUrl}/api/master-groups`);
+      const response = await fetchApi(`${apiUrl}/api/master-groups`);
       if (!response.ok) throw new Error('Falha ao carregar Master Grupos');
       const data = await response.json();
       setMasterGroups(data);

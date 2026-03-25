@@ -9,6 +9,7 @@ import RiskForm from './RiskForm';
 import { AlertTriangle, Plus, Edit2, Trash2 } from 'lucide-react';
 import { ArrowUpIcon, ArrowRightIcon, ArrowDownIcon } from './icons/Icons';
 import Modal from './Modal';
+import { fetchApi } from '../utils/api';
 
 const getRatingChange = (current?: string, previous?: string): 'up' | 'down' | 'neutral' => {
     if (!current || !previous) return 'neutral';
@@ -89,7 +90,7 @@ const EconomicGroupDetailsPage: React.FC<EconomicGroupDetailsPageProps> = ({ eco
   const fetchEconomicGroup = async () => {
     setIsLoading(true);
     try {
-      const response = await fetch(`${apiUrl}/api/economic-groups/${economicGroupId}`);
+      const response = await fetchApi(`${apiUrl}/api/economic-groups/${economicGroupId}`);
       if (!response.ok) throw new Error('Failed to fetch Grupo Econômico');
       const data = await response.json();
       setEconomicGroup(data);
@@ -104,14 +105,14 @@ const EconomicGroupDetailsPage: React.FC<EconomicGroupDetailsPageProps> = ({ eco
   const handleSaveRisk = async (riskData: any) => {
       try {
           if (editingRisk) {
-              await fetch(`${apiUrl}/api/economic-groups/${economicGroupId}/risks/${editingRisk.id}`, {
+              await fetchApi(`${apiUrl}/api/economic-groups/${economicGroupId}/risks/${editingRisk.id}`, {
                   method: 'PUT',
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({ ...riskData, userName: 'Analista' })
               });
               showToast('Risco atualizado.', 'success');
           } else {
-              await fetch(`${apiUrl}/api/economic-groups/${economicGroupId}/risks`, {
+              await fetchApi(`${apiUrl}/api/economic-groups/${economicGroupId}/risks`, {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({ ...riskData, userName: 'Analista' })
@@ -130,7 +131,7 @@ const EconomicGroupDetailsPage: React.FC<EconomicGroupDetailsPageProps> = ({ eco
   const handleDeleteRisk = async (id: number) => {
       if (!window.confirm("Certeza que deseja remover este Risco/Ponto de Atenção?")) return;
       try {
-          await fetch(`${apiUrl}/api/economic-groups/${economicGroupId}/risks/${id}?userName=Analista`, {
+          await fetchApi(`${apiUrl}/api/economic-groups/${economicGroupId}/risks/${id}?userName=Analista`, {
               method: 'DELETE'
           });
           showToast('Risco removido.', 'success');
@@ -143,7 +144,7 @@ const EconomicGroupDetailsPage: React.FC<EconomicGroupDetailsPageProps> = ({ eco
 
   const handleAddEvent = async (eventData: Omit<Event, 'id'>) => {
     try {
-      const response = await fetch(`${apiUrl}/api/economic-groups/${economicGroupId}/events`, {
+      const response = await fetchApi(`${apiUrl}/api/economic-groups/${economicGroupId}/events`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(eventData),
@@ -165,7 +166,7 @@ const EconomicGroupDetailsPage: React.FC<EconomicGroupDetailsPageProps> = ({ eco
         ? `${apiUrl}/api/structuring-operations/${structuringToEdit.id}`
         : `${apiUrl}/api/structuring-operations`;
       
-      const response = await fetch(url, {
+      const response = await fetchApi(url, {
         method: isEditing ? 'PUT' : 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),

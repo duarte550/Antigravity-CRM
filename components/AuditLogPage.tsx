@@ -1,6 +1,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import type { AuditLog } from '../types';
+import { fetchApi } from '../utils/api';
 
 interface AuditLogPageProps {
     apiUrl: string;
@@ -22,7 +23,7 @@ const AuditLogPage: React.FC<AuditLogPageProps> = ({ apiUrl, setIsRefreshing }) 
             setIsLoading(true);
             setIsRefreshing(true);
             try {
-                const response = await fetch(`${apiUrl}/api/audit_logs`, { credentials: 'include' });
+                const response = await fetchApi(`${apiUrl}/api/audit_logs`, { credentials: 'include' });
                 if (!response.ok) {
                     throw new Error(`Server responded with status: ${response.status}`);
                 }

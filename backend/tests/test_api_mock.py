@@ -13,6 +13,12 @@ from tests.mock_db_utils import init_mock_db
 mock_db_instance = init_mock_db()
 db.get_db_connection = lambda: mock_db_instance
 
+# Mock update_schema to prevent Databricks migrations on SQLite
+import types
+dummy_update_db = types.ModuleType('update_db')
+dummy_update_db.update_schema = lambda: print("Mock: Skipping update_db.update_schema for SQLite mock")
+sys.modules['update_db'] = dummy_update_db
+
 from app import app
 from db import get_db_connection
 
@@ -63,6 +69,8 @@ class TestCRMAPI(unittest.TestCase):
         self.assertEqual(res_post.status_code, 201, "Criacao de Master Group falhou")
         mg_data = json.loads(res_post.data)
         mg_id = mg_data.get('id')
+        if mg_id is None:
+            print("MG DATA RETURNED:", mg_data)
         self.assertIsNotNone(mg_id, "ID do Master Group nao foi retornado")
 
         try:
@@ -159,10 +167,10 @@ class TestCRMAPI(unittest.TestCase):
         # We need to GET all to find the ID since POST struct-ops returns {"status": "success"} only
         res_get_all = self.client.get('/api/structuring-operations')
         so_list = json.loads(res_get_all.data)
-        so_candidates = [so for so in so_list if so['name'] == "TESTE_AUTOMATIZADO_SO" and so['master_group_id'] == master_group_id]
+        so_candidates = [so for so in so_list if so['name'] == "TESTE_AUTOMATIZADO_SO" and so.get('masterGroupName') == "TESTE_AUTOMATIZADO_MG_EDIT"]
         
         if not so_candidates:
-            self.fail("Structuring Operation was not generated correctly.")
+            self.fail(f"Structuring Operation was not generated correctly. Found: {so_list}")
             
         so_id = so_candidates[0]['id']
 

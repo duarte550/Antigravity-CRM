@@ -25,6 +25,7 @@ import EconomicGroupsPage from './components/EconomicGroupsPage';
 import EconomicGroupDetailsPage from './components/EconomicGroupDetailsPage';
 import OriginationPipelinePage from './components/OriginationPipelinePage';
 import StructuringOperationDetailsPage from './components/StructuringOperationDetailsPage';
+import { fetchApi } from './utils/api';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || '';
 
@@ -133,7 +134,7 @@ const App: React.FC = () => {
       const operationsToSync = [...syncQueue];
       
       try {
-        const response = await fetch(`${API_BASE_URL}/api/operations/bulk-update`, {
+        const response = await fetchApi(`${API_BASE_URL}/api/operations/bulk-update`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ operations: operationsToSync }),
@@ -185,7 +186,7 @@ const App: React.FC = () => {
 
       for (const item of itemsToProcess) {
         try {
-          const response = await fetch(item.url, {
+          const response = await fetchApi(item.url, {
             method: item.method,
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(item.payload),
@@ -222,7 +223,7 @@ const App: React.FC = () => {
       if (navigator.sendBeacon) {
         navigator.sendBeacon(url, data);
       } else {
-        fetch(url, {
+        fetchApi(url, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: data,
@@ -233,7 +234,7 @@ const App: React.FC = () => {
       const gQueue = genericSyncQueueRef.current;
       if (gQueue.length > 0) {
         gQueue.forEach(item => {
-           fetch(item.url, {
+           fetchApi(item.url, {
               method: item.method,
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify(item.payload),
@@ -269,7 +270,7 @@ const App: React.FC = () => {
     });
     setError(null); 
     try {
-      const response = await fetch(`${API_BASE_URL}/api/operations?summary=true`, { credentials: 'include' });
+      const response = await fetchApi(`${API_BASE_URL}/api/operations?summary=true`, { credentials: 'include' });
       if (!response.ok) {
         throw new Error(`O servidor respondeu com o status: ${response.status}`);
       }
@@ -308,7 +309,7 @@ const App: React.FC = () => {
   const fetchOperationDetails = async (operationId: number) => {
     setIsRefreshing(true);
     try {
-        const response = await fetch(`${API_BASE_URL}/api/operations/${operationId}`, { credentials: 'include' });
+        const response = await fetchApi(`${API_BASE_URL}/api/operations/${operationId}`, { credentials: 'include' });
         if (response.status === 404) return null; // Operation might be new/not yet in DB
         if (!response.ok) throw new Error('Falha ao carregar detalhes da operação');
         const fullOperation = await response.json();
@@ -357,7 +358,7 @@ const App: React.FC = () => {
     let totalFixed = 0;
     try {
       while (true) {
-        const response = await fetch(`${API_BASE_URL}/api/operations/sync-rules`, {
+        const response = await fetchApi(`${API_BASE_URL}/api/operations/sync-rules`, {
           method: 'POST',
           credentials: 'include'
         });
@@ -403,7 +404,7 @@ const App: React.FC = () => {
   const handleAddOperation = async (newOperationData: any) => {
     setIsSyncing(true);
     try {
-        const response = await fetch(`${API_BASE_URL}/api/operations`, {
+        const response = await fetchApi(`${API_BASE_URL}/api/operations`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(newOperationData),
@@ -451,7 +452,7 @@ const App: React.FC = () => {
           events: [],
           ratingHistory: []
         };
-        const response = await fetch(`${API_BASE_URL}/api/operations`, {
+        const response = await fetchApi(`${API_BASE_URL}/api/operations`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(newOpData),
@@ -530,7 +531,7 @@ const App: React.FC = () => {
     setOperations(prev => prev.filter(op => op.id !== operationId));
     setIsSyncing(true);
     try {
-      const response = await fetch(`${API_BASE_URL}/api/operations/${operationId}`, {
+      const response = await fetchApi(`${API_BASE_URL}/api/operations/${operationId}`, {
         method: 'DELETE',
         credentials: 'include'
       });

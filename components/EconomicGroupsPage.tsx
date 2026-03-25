@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Page, EconomicGroup } from '../types';
 import EconomicGroupForm from './EconomicGroupForm';
+import { fetchApi } from '../utils/api';
 
 interface EconomicGroupsPageProps {
   onNavigate: (page: Page, id?: number) => void;
@@ -25,7 +26,7 @@ const EconomicGroupsPage: React.FC<EconomicGroupsPageProps> = ({ onNavigate, api
   const fetchEconomicGroups = async () => {
     try {
       setIsLoading(true);
-      const response = await fetch(`${apiUrl}/api/economic-groups`);
+      const response = await fetchApi(`${apiUrl}/api/economic-groups`);
       if (!response.ok) throw new Error('Falha ao buscar grupos econômicos');
       const data = await response.json();
       setEconomicGroups(data);
@@ -39,7 +40,7 @@ const EconomicGroupsPage: React.FC<EconomicGroupsPageProps> = ({ onNavigate, api
 
   const handleSaveEconomicGroup = async (data: Omit<EconomicGroup, 'id' | 'operations' | 'structuringOperations' | 'events' | 'recentChanges' | 'ratingHistory' | 'risks'>) => {
     try {
-      const response = await fetch(`${apiUrl}/api/economic-groups`, {
+      const response = await fetchApi(`${apiUrl}/api/economic-groups`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),

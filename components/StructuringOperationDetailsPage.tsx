@@ -4,6 +4,7 @@ import EventForm from './EventForm';
 import OperationForm from './OperationForm';
 import AdHocTaskForm from './AdHocTaskForm';
 import { TaskRule } from '../types';
+import { fetchApi } from '../utils/api';
 
 interface StructuringOperationDetailsPageProps {
   operationId: number;
@@ -40,7 +41,7 @@ const StructuringOperationDetailsPage: React.FC<StructuringOperationDetailsPageP
   const fetchOperation = async () => {
     setIsLoading(true);
     try {
-      const response = await fetch(`${apiUrl}/api/structuring-operations/${operationId}`);
+      const response = await fetchApi(`${apiUrl}/api/structuring-operations/${operationId}`);
       if (!response.ok) throw new Error('Falha ao buscar detalhes da operação em estruturação');
       const data = await response.json();
       setOperation(data);
@@ -66,7 +67,7 @@ const StructuringOperationDetailsPage: React.FC<StructuringOperationDetailsPageP
              return { ...prev, events: [{ ...eventData, id: Date.now() } as any, ...(prev.events || [])] };
           });
       } else {
-          const response = await fetch(`${apiUrl}/api/structuring-operations/${operationId}/events`, {
+          const response = await fetchApi(`${apiUrl}/api/structuring-operations/${operationId}/events`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload),
@@ -101,7 +102,7 @@ const StructuringOperationDetailsPage: React.FC<StructuringOperationDetailsPageP
       if (pushToGenericQueue) {
           pushToGenericQueue(`${apiUrl}/api/structuring-operations/${operationId}`, 'PUT', payload);
       } else {
-          const response = await fetch(`${apiUrl}/api/structuring-operations/${operationId}`, {
+          const response = await fetchApi(`${apiUrl}/api/structuring-operations/${operationId}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload),
@@ -132,7 +133,7 @@ const StructuringOperationDetailsPage: React.FC<StructuringOperationDetailsPageP
       if (pushToGenericQueue) {
           pushToGenericQueue(`${apiUrl}/api/structuring-operations/${operationId}`, 'PUT', payload);
       } else {
-          const response = await fetch(`${apiUrl}/api/structuring-operations/${operationId}`, {
+          const response = await fetchApi(`${apiUrl}/api/structuring-operations/${operationId}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload),
@@ -149,7 +150,7 @@ const StructuringOperationDetailsPage: React.FC<StructuringOperationDetailsPageP
   const handleDeleteOperation = async () => {
     if (!confirm('Tem certeza que deseja DELETAR esta operação estruturada? Esta ação não pode ser desfeita.')) return;
     try {
-       const response = await fetch(`${apiUrl}/api/structuring-operations/${operationId}`, {
+       const response = await fetchApi(`${apiUrl}/api/structuring-operations/${operationId}`, {
          method: 'DELETE',
        });
        if (!response.ok) throw new Error('Falha ao deletar operação');
@@ -162,7 +163,7 @@ const StructuringOperationDetailsPage: React.FC<StructuringOperationDetailsPageP
 
   const handleSaveStages = async () => {
     try {
-      const response = await fetch(`${apiUrl}/api/structuring-operations/${operationId}/stages`, {
+      const response = await fetchApi(`${apiUrl}/api/structuring-operations/${operationId}/stages`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ stages: stagesDraft.map((s, i) => ({ ...s, order_index: i })) }),
@@ -195,7 +196,7 @@ const StructuringOperationDetailsPage: React.FC<StructuringOperationDetailsPageP
       if (pushToGenericQueue) {
           pushToGenericQueue(`${apiUrl}/api/structuring-operations/${operationId}/stages`, 'PUT', payload);
       } else {
-          const response = await fetch(`${apiUrl}/api/structuring-operations/${operationId}/stages`, {
+          const response = await fetchApi(`${apiUrl}/api/structuring-operations/${operationId}/stages`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload),
@@ -217,7 +218,7 @@ const StructuringOperationDetailsPage: React.FC<StructuringOperationDetailsPageP
             pushToGenericQueue(`${apiUrl}/api/structuring-operations/${operationId}/events`, 'POST', eventPayload);
             setOperation(prev => prev ? { ...prev, events: [{...eventPayload, id: Date.now()} as any, ...(prev.events || [])] } : null);
         } else {
-            fetch(`${apiUrl}/api/structuring-operations/${operationId}/events`, {
+            fetchApi(`${apiUrl}/api/structuring-operations/${operationId}/events`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify(eventPayload),
@@ -237,7 +238,7 @@ const StructuringOperationDetailsPage: React.FC<StructuringOperationDetailsPageP
     try {
       // Create new active operation
       const payload = { ...opData, structuringOperationId: operationId };
-      const response = await fetch(`${apiUrl}/api/operations`, {
+      const response = await fetchApi(`${apiUrl}/api/operations`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -250,14 +251,14 @@ const StructuringOperationDetailsPage: React.FC<StructuringOperationDetailsPageP
       const newStages = (operation.stages || []).map(s => 
         s.id === stageToComplete?.id ? { ...s, isCompleted: true } : s
       );
-      await fetch(`${apiUrl}/api/structuring-operations/${operationId}/stages`, {
+      await fetchApi(`${apiUrl}/api/structuring-operations/${operationId}/stages`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ stages: newStages }),
       });
       
       // Archive structuring operation
-      await fetch(`${apiUrl}/api/structuring-operations/${operationId}`, {
+      await fetchApi(`${apiUrl}/api/structuring-operations/${operationId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...operation, isActive: false }),
