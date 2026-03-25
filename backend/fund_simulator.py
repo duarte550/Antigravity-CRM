@@ -54,6 +54,7 @@ def get_fund_data(fund_name):
                     'PL - Financeiro',
                     'Caixa Líquido - Financeiro',
                     'Compromissadas - Financeiro',
+                    'Repo - Financeiro',
                     'Taxa Média MTM CDI',
                     'Taxa Média Curva CDI',
                     'Taxa Média MTM IPCA',

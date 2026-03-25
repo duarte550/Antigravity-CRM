@@ -93,6 +93,7 @@ const PorFundoTab: React.FC<PorFundoTabProps> = ({ operations, apiUrl, showToast
     const caixaAtual = getRiscoValor(riscoData, 'Caixa Líquido - Financeiro');
     const lciAtual = getRiscoValor(riscoData, 'LCI - Financeiro');
     const compromissadasAtual = getRiscoValor(riscoData, 'Compromissadas - Financeiro');
+    const compromissadasReversas = getRiscoValor(riscoData, 'Repo - Financeiro');
 
     const totalEntradas = inputs.emission + inputs.prepayment + inputs.repurchases + inputs.new_repo;
 
@@ -134,7 +135,7 @@ const PorFundoTab: React.FC<PorFundoTabProps> = ({ operations, apiUrl, showToast
 
     const totalSaidas = simulatedOps.reduce((acc, curr) => acc + curr.volume, 0);
     const caixaApos = caixaAtual + totalEntradas - totalSaidas;
-    const caixaMenosComp = caixaApos - compromissadasAtual;
+    const caixaMenosComp = caixaApos - compromissadasReversas;
 
     const plFinal = plAtual + inputs.emission;
 
@@ -209,13 +210,18 @@ const PorFundoTab: React.FC<PorFundoTabProps> = ({ operations, apiUrl, showToast
                     </div>
                     <div>
                         <span className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider block mb-0.5">Portfólio</span>
-                        <select 
-                            value={selectedFund} 
-                            onChange={e => setSelectedFund(e.target.value)}
-                            className="text-gray-900 dark:text-white bg-transparent font-bold text-lg border-none p-0 focus:ring-0 cursor-pointer appearance-none hover:text-blue-600 transition-colors"
-                        >
-                            {funds.map(f => <option key={f} value={f}>{f}</option>)}
-                        </select>
+                        <div className="relative group mt-1">
+                            <select 
+                                value={selectedFund} 
+                                onChange={e => setSelectedFund(e.target.value)}
+                                className="text-gray-900 dark:text-white bg-gray-50/80 dark:bg-gray-900/50 font-bold text-lg border border-gray-200 dark:border-gray-700/80 rounded-xl pr-10 pl-3 py-1.5 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 cursor-pointer appearance-none hover:bg-white dark:hover:bg-gray-800 transition-all shadow-sm"
+                            >
+                                {funds.map(f => <option key={f} value={f}>{f}</option>)}
+                            </select>
+                            <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400 group-hover:text-blue-500 transition-colors">
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7"/></svg>
+                            </div>
+                        </div>
                     </div>
                 </div>
                 <div className="flex items-center gap-4">
@@ -391,8 +397,8 @@ const PorFundoTab: React.FC<PorFundoTabProps> = ({ operations, apiUrl, showToast
                                 <span className="font-medium text-gray-900 dark:text-gray-100 text-base">{formatCurrency(caixaApos)}</span>
                             </div>
                             <div className="flex justify-between text-gray-500 dark:text-gray-500 items-center">
-                                <span>(-) Compromissadas Atual:</span>
-                                <span>({formatCurrency(compromissadasAtual)})</span>
+                                <span>(-) Compromissadas Reversas:</span>
+                                <span>({formatCurrency(compromissadasReversas)})</span>
                             </div>
                             <div className="flex justify-between font-bold text-lg pt-4 pb-2 border-t border-indigo-200/50 dark:border-gray-700 text-indigo-900 dark:text-indigo-200 items-center">
                                 <span>Caixa Líquido Livre:</span>
