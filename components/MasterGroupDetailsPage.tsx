@@ -53,6 +53,7 @@ const MasterGroupDetailsPage: React.FC<MasterGroupDetailsPageProps> = ({ masterG
   const [eventTypeFilter, setEventTypeFilter] = useState('Todos');
   const [eventPersonFilter, setEventPersonFilter] = useState('Todos');
   const [selectedEventForDetails, setSelectedEventForDetails] = useState<Event | null>(null);
+  const [selectedRecentChange, setSelectedRecentChange] = useState<any>(null);
   const eventRefs = useRef<Record<number, HTMLDivElement | null>>({});
 
   const events = masterGroup?.events || [];
@@ -417,7 +418,7 @@ const MasterGroupDetailsPage: React.FC<MasterGroupDetailsPageProps> = ({ masterG
           {/* Rating History */}
           <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-lg dark:border dark:border-gray-700">
               <h3 className="text-xl font-bold text-gray-700 dark:text-gray-200 mb-4">Histórico de Ratings e Sentimentos</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-start">
+              <div className="flex flex-col gap-8 items-stretch">
                   <div className="space-y-3 max-h-96 overflow-y-auto pr-2">
                       {sortedHistory.length > 0 ? (
                           sortedHistory.map((entry, index, array) => {
@@ -426,15 +427,15 @@ const MasterGroupDetailsPage: React.FC<MasterGroupDetailsPageProps> = ({ masterG
                               const groupRatingChange = getRatingChange(entry.ratingGroup, previousEntry?.ratingGroup);
 
                               return (
-                                  <div key={entry.id} className="p-3 bg-gray-50 dark:bg-gray-800/50 rounded-md grid grid-cols-4 gap-4 items-center border border-transparent dark:border-gray-700">
+                                  <div key={entry.id} className="p-3 bg-gray-50 dark:bg-gray-800/50 rounded-md flex flex-wrap items-center justify-between gap-y-2 gap-x-4 border border-transparent dark:border-gray-700">
                                       <div className="font-medium text-gray-700 dark:text-gray-300">{new Date(entry.date).toLocaleDateString('pt-BR')}</div>
+
+
+
+
+
                                       <div className="text-sm text-gray-800 dark:text-gray-200 flex items-center gap-1.5">
-                                          <span className="text-xs text-gray-500 dark:text-gray-400">Op: </span>
-                                          <RatingChangeIndicator change={opRatingChange} />
-                                          {entry.ratingOperation}
-                                      </div>
-                                      <div className="text-sm text-gray-800 dark:text-gray-200 flex items-center gap-1.5">
-                                          <span className="text-xs text-gray-500 dark:text-gray-400">Grupo: </span>
+                                          <span className="text-xs text-gray-500 dark:text-gray-400">Rating: </span>
                                           <RatingChangeIndicator change={groupRatingChange} />
                                           {entry.ratingGroup}
                                       </div>
@@ -452,7 +453,7 @@ const MasterGroupDetailsPage: React.FC<MasterGroupDetailsPageProps> = ({ masterG
                       )}
                   </div>
                   <div>
-                      <RatingHistoryChart history={masterGroup.ratingHistory || []} />
+                      <RatingHistoryChart history={masterGroup.ratingHistory || []} hideOperationRating={true} />
                   </div>
               </div>
           </div>
@@ -461,7 +462,7 @@ const MasterGroupDetailsPage: React.FC<MasterGroupDetailsPageProps> = ({ masterG
             <h2 className="text-xl font-semibold mb-4 text-gray-900 dark:text-white">Alterações Recentes</h2>
             <div className="space-y-4">
               {masterGroup.recentChanges?.map(change => (
-                <div key={change.id} className="border-l-2 border-green-500 pl-3 py-1">
+                <div key={change.id} className="border-l-2 border-green-500 pl-3 py-1 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 rounded-r-md transition-colors" onClick={() => setSelectedRecentChange(change)}>
                   <div className="flex items-center gap-2">
                     <p className="text-xs text-gray-500 dark:text-gray-400">{new Date(change.timestamp).toLocaleString()}</p>
                     <span className="text-xs font-medium text-gray-700 dark:text-gray-300">{change.user}</span>
@@ -520,6 +521,31 @@ const MasterGroupDetailsPage: React.FC<MasterGroupDetailsPageProps> = ({ masterG
           />
       </Modal>
 
+      <Modal isOpen={!!selectedRecentChange} onClose={() => setSelectedRecentChange(null)} title="Detalhes da Alteração">
+          {selectedRecentChange && (
+              <div className="space-y-4">
+                  <div className="flex justify-between items-center pb-2 border-b border-gray-200 dark:border-gray-700">
+                      <span className="font-bold text-gray-800 dark:text-gray-200">{selectedRecentChange.entity} - {selectedRecentChange.action}</span>
+                      <span className="text-sm text-gray-500 dark:text-gray-400">{new Date(selectedRecentChange.timestamp).toLocaleString('pt-BR')}</span>
+                  </div>
+                  <div>
+                      <p className="text-sm font-semibold text-gray-500 dark:text-gray-400">Usuário</p>
+                      <p className="text-gray-800 dark:text-gray-200">{selectedRecentChange.user}</p>
+                  </div>
+                  {selectedRecentChange.operationName && (
+                      <div>
+                          <p className="text-sm font-semibold text-gray-500 dark:text-gray-400">Operação Relacionada</p>
+                          <p className="text-gray-800 dark:text-gray-200">{selectedRecentChange.operationName}</p>
+                      </div>
+                  )}
+                  <div>
+                      <p className="text-sm font-semibold text-gray-500 dark:text-gray-400">Mudanças Detalhadas</p>
+                      <div className="mt-2 text-gray-800 dark:text-gray-200 text-sm whitespace-pre-wrap font-mono bg-gray-50 dark:bg-gray-800 p-3 rounded-md border border-gray-200 dark:border-gray-700 break-words overflow-x-auto" dangerouslySetInnerHTML={{ __html: selectedRecentChange.details.replace(/\n/g, '<br/>') }} />
+                  </div>
+              </div>
+          )}
+      </Modal>
+
       <Modal isOpen={!!selectedEventForDetails} onClose={() => setSelectedEventForDetails(null)} title="Detalhes do Evento">
           {selectedEventForDetails && (
               <div className="space-y-4">
@@ -555,7 +581,7 @@ const MasterGroupDetailsPage: React.FC<MasterGroupDetailsPageProps> = ({ masterG
                   </div>
                   <div>
                       <h4 className="font-bold text-gray-800 dark:text-gray-200 border-b border-gray-200 dark:border-gray-700 pb-2 bg-gray-50 dark:bg-gray-700 p-2 rounded-t-md mt-4">Descrição e Revisão</h4>
-                      <p className="text-gray-800 dark:text-gray-200 mt-2 text-sm whitespace-pre-wrap" dangerouslySetInnerHTML={{ __html: selectedEventForDetails.description }} />
+                      <p className="text-gray-800 dark:text-gray-200 mt-2 text-sm whitespace-pre-wrap break-words overflow-x-auto" dangerouslySetInnerHTML={{ __html: selectedEventForDetails.description }} />
                   </div>
                   {(selectedEventForDetails.attentionPoints && selectedEventForDetails.attentionPoints !== '<p></p>') && (
                       <div className="mt-4 p-4 bg-orange-50 border border-orange-200 dark:bg-gray-800 dark:border-orange-500 rounded-md">
@@ -563,7 +589,7 @@ const MasterGroupDetailsPage: React.FC<MasterGroupDetailsPageProps> = ({ masterG
                               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
                               Pontos de Atenção
                           </h4>
-                          <div className="text-gray-800 dark:text-gray-200 text-sm whitespace-pre-wrap ml-2" dangerouslySetInnerHTML={{ __html: selectedEventForDetails.attentionPoints }} />
+                          <div className="text-gray-800 dark:text-gray-200 text-sm whitespace-pre-wrap ml-2 break-words overflow-x-auto" dangerouslySetInnerHTML={{ __html: selectedEventForDetails.attentionPoints }} />
                       </div>
                   )}
                   {selectedEventForDetails.nextSteps && (

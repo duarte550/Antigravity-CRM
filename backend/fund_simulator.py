@@ -5,16 +5,19 @@ from utils import format_row
 
 fund_simulator_bp = Blueprint('fund_simulator', __name__)
 
+RISCO_TABLE = os.getenv("RISCO_TABLE", "risco_dev.risco_cri.dadosconsolidadoscris")
+MIDDLE_TABLE = os.getenv("MIDDLE_TABLE", "middle_dev.fundos.fundos")
+
 @fund_simulator_bp.route('/api/fund-simulator/funds', methods=['GET'])
 def get_funds():
     conn = get_db_connection()
     try:
         with conn.cursor() as cursor:
-            cursor.execute("""
+            cursor.execute(f"""
                 SELECT DISTINCT dc.Fundo 
-                FROM risco_dev.risco_cri.dadosconsolidadoscris dc
+                FROM {RISCO_TABLE} dc
                 WHERE dc.Fundo IN (
-                    SELECT codigo FROM middle_dev.fundos.fundos WHERE area = 8
+                    SELECT codigo FROM {MIDDLE_TABLE} WHERE area = 8
                 )
                 ORDER BY dc.Fundo
             """)
@@ -31,7 +34,7 @@ def get_fund_data(fund_name):
     try:
         with conn.cursor() as cursor:
             # 1. Pull data from Risco query
-            query = """
+            query = f"""
                 WITH base_filtrada AS (SELECT
                     dc.Data,
                     dc.Fundo,
@@ -41,7 +44,7 @@ def get_fund_data(fund_name):
                         PARTITION BY dc.Fundo, dc.Info
                         ORDER BY dc.Data DESC
                     ) AS rn
-                FROM risco_dev.risco_cri.dadosconsolidadoscris dc
+                FROM {RISCO_TABLE} dc
                 WHERE dc.Fundo = ?
                 AND dc.Info IN (
                     'CRI CDI - Financeiro',

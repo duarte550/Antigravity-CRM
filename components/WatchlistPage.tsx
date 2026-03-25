@@ -73,14 +73,46 @@ const WatchlistPage: React.FC<WatchlistPageProps> = ({ operations, onUpdateOpera
     }, [operations, activeFilter, masterGroupFilter, economicGroupFilter]);
 
     const masterGroupsOpts = useMemo(() => {
-        const mgs = operations.map(op => op.masterGroupName || 'Sem Master Group');
+        const filtered = operations.filter(op => {
+            if (economicGroupFilter !== 'All' && (op.economicGroupName || 'Sem Grupo Econômico') !== economicGroupFilter) return false;
+            
+            if (activeFilter === 'All') return true;
+            const latestHistoryEntry = op.ratingHistory.length > 0
+                ? [...op.ratingHistory].sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0]
+                : null;
+            const currentStatus = latestHistoryEntry?.watchlist ?? op.watchlist;
+            return currentStatus === activeFilter;
+        });
+        const mgs = filtered.map(op => op.masterGroupName || 'Sem Master Group');
         return ['All', ...Array.from(new Set(mgs)).sort()];
-    }, [operations]);
+    }, [operations, economicGroupFilter, activeFilter]);
 
     const economicGroupsOpts = useMemo(() => {
-        const egs = operations.map(op => op.economicGroupName || 'Sem Grupo Econômico');
+        const filtered = operations.filter(op => {
+            if (masterGroupFilter !== 'All' && (op.masterGroupName || 'Sem Master Group') !== masterGroupFilter) return false;
+
+            if (activeFilter === 'All') return true;
+            const latestHistoryEntry = op.ratingHistory.length > 0
+                ? [...op.ratingHistory].sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0]
+                : null;
+            const currentStatus = latestHistoryEntry?.watchlist ?? op.watchlist;
+            return currentStatus === activeFilter;
+        });
+        const egs = filtered.map(op => op.economicGroupName || 'Sem Grupo Econômico');
         return ['All', ...Array.from(new Set(egs)).sort()];
-    }, [operations]);
+    }, [operations, masterGroupFilter, activeFilter]);
+
+    useEffect(() => {
+        if (masterGroupFilter !== 'All' && !masterGroupsOpts.includes(masterGroupFilter)) {
+            setMasterGroupFilter('All');
+        }
+    }, [masterGroupsOpts, masterGroupFilter]);
+
+    useEffect(() => {
+        if (economicGroupFilter !== 'All' && !economicGroupsOpts.includes(economicGroupFilter)) {
+            setEconomicGroupFilter('All');
+        }
+    }, [economicGroupsOpts, economicGroupFilter]);
 
     const handleOpenModal = (op: Operation) => {
         setOperationToEdit(op);

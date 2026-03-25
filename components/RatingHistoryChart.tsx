@@ -5,9 +5,10 @@ import { ratingOptions } from '../types';
 
 interface RatingHistoryChartProps {
     history: RatingHistoryEntry[];
+    hideOperationRating?: boolean;
 }
 
-const RatingHistoryChart: React.FC<RatingHistoryChartProps> = ({ history }) => {
+const RatingHistoryChart: React.FC<RatingHistoryChartProps> = ({ history, hideOperationRating }) => {
     if (!history || history.length < 1) {
         return (
             <div className="flex items-center justify-center h-full bg-gray-50 dark:bg-gray-800/50 rounded-lg p-4">
@@ -109,7 +110,7 @@ const RatingHistoryChart: React.FC<RatingHistoryChartProps> = ({ history }) => {
                     })()}
                     
                     {/* Data Lines */}
-                    <polyline points={operationPath} fill="none" stroke="#3b82f6" strokeWidth="2" />
+                    {!hideOperationRating && <polyline points={operationPath} fill="none" stroke="#3b82f6" strokeWidth="2" />}
                     <polyline points={groupPath} fill="none" stroke="#16a34a" strokeWidth="2" />
                     
                     {/* Data Points */}
@@ -119,7 +120,7 @@ const RatingHistoryChart: React.FC<RatingHistoryChartProps> = ({ history }) => {
                         const x = xScale(entry.date);
                         return (
                             <React.Fragment key={`point-${i}`}>
-                                {opY !== null && <circle cx={x} cy={opY} r="4" fill="#3b82f6" />}
+                                {(!hideOperationRating && opY !== null) && <circle cx={x} cy={opY} r="4" fill="#3b82f6" />}
                                 {groupY !== null && <circle cx={x} cy={groupY} r="4" fill="#16a34a" />}
                             </React.Fragment>
                         );
@@ -128,10 +129,12 @@ const RatingHistoryChart: React.FC<RatingHistoryChartProps> = ({ history }) => {
             </svg>
             {/* Legend */}
             <div className="flex justify-center items-center gap-6 mt-2 text-sm">
-                <div className="flex items-center gap-2">
-                    <div className="w-4 h-4 bg-blue-500 rounded-full"></div>
-                    <span className="text-gray-600 dark:text-gray-400">Rating Operação</span>
-                </div>
+                {!hideOperationRating && (
+                    <div className="flex items-center gap-2">
+                        <div className="w-4 h-4 bg-blue-500 rounded-full"></div>
+                        <span className="text-gray-600 dark:text-gray-400">Rating Operação</span>
+                    </div>
+                )}
                  <div className="flex items-center gap-2">
                     <div className="w-4 h-4 bg-green-600 rounded-full"></div>
                     <span className="text-gray-600 dark:text-gray-400">Rating Grupo</span>

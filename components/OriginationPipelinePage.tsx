@@ -99,11 +99,17 @@ const OriginationPipelinePage: React.FC<OriginationPipelinePageProps> = ({ onNav
 
   const activeOperations = operations.filter(op => op.isActive !== false);
 
-  const analysts = Array.from(
-    new Set(
-      activeOperations.flatMap(op => [op.analyst, ...(op.recentEvents?.map(e => e.registeredBy) || [])]).filter(Boolean)
-    )
-  ).filter(Boolean) as string[];
+  const analysts = useMemo(() => {
+    const filtered = activeOperations.filter(op => 
+      (masterGroupFilter === 'All' || (op.masterGroupName || 'Sem Master Group') === masterGroupFilter) &&
+      (economicGroupFilter === 'All' || (op.economicGroupName || 'Sem Grupo Econômico') === economicGroupFilter)
+    );
+    return Array.from(
+      new Set(
+        filtered.flatMap(op => [op.analyst, ...(op.recentEvents?.map(e => e.registeredBy) || [])]).filter(Boolean)
+      )
+    ) as string[];
+  }, [activeOperations, masterGroupFilter, economicGroupFilter]);
 
   const filteredOperations = activeOperations.filter(op => {
     if (selectedAnalyst && op.analyst !== selectedAnalyst && !op.recentEvents?.some(e => e.registeredBy === selectedAnalyst)) return false;
@@ -113,14 +119,40 @@ const OriginationPipelinePage: React.FC<OriginationPipelinePageProps> = ({ onNav
   });
 
   const masterGroupsOpts = useMemo(() => {
-    const mgs = activeOperations.map(op => op.masterGroupName || 'Sem Master Group');
+    const filtered = activeOperations.filter(op => 
+      (!selectedAnalyst || op.analyst === selectedAnalyst || op.recentEvents?.some(e => e.registeredBy === selectedAnalyst)) &&
+      (economicGroupFilter === 'All' || (op.economicGroupName || 'Sem Grupo Econômico') === economicGroupFilter)
+    );
+    const mgs = filtered.map(op => op.masterGroupName || 'Sem Master Group');
     return ['All', ...Array.from(new Set(mgs)).sort()];
-  }, [activeOperations]);
+  }, [activeOperations, selectedAnalyst, economicGroupFilter]);
 
   const economicGroupsOpts = useMemo(() => {
-    const egs = activeOperations.map(op => op.economicGroupName || 'Sem Grupo Econômico');
+    const filtered = activeOperations.filter(op => 
+      (!selectedAnalyst || op.analyst === selectedAnalyst || op.recentEvents?.some(e => e.registeredBy === selectedAnalyst)) &&
+      (masterGroupFilter === 'All' || (op.masterGroupName || 'Sem Master Group') === masterGroupFilter)
+    );
+    const egs = filtered.map(op => op.economicGroupName || 'Sem Grupo Econômico');
     return ['All', ...Array.from(new Set(egs)).sort()];
-  }, [activeOperations]);
+  }, [activeOperations, selectedAnalyst, masterGroupFilter]);
+
+  useEffect(() => {
+    if (selectedAnalyst && !analysts.includes(selectedAnalyst)) {
+      setSelectedAnalyst('');
+    }
+  }, [analysts, selectedAnalyst]);
+
+  useEffect(() => {
+    if (masterGroupFilter !== 'All' && !masterGroupsOpts.includes(masterGroupFilter)) {
+      setMasterGroupFilter('All');
+    }
+  }, [masterGroupsOpts, masterGroupFilter]);
+
+  useEffect(() => {
+    if (economicGroupFilter !== 'All' && !economicGroupsOpts.includes(economicGroupFilter)) {
+      setEconomicGroupFilter('All');
+    }
+  }, [economicGroupsOpts, economicGroupFilter]);
   
   const allOriginationTasks = useMemo(() => {
     return filteredOperations.flatMap(op => op.tasks || []);

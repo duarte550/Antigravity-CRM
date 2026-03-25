@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo, useRef } from 'react';
-import type { Operation, Event, Task, RatingHistoryEntry, Rating, Sentiment, TaskRule, OperationRisk } from '../types';
+import type { Operation, Event, Task, RatingHistoryEntry, Rating, Sentiment, TaskRule, OperationRisk, Contact } from '../types';
 import { TaskStatus, ratingOptions, WatchlistStatus, Sentiment as SentimentEnum } from '../types';
 import { PlusCircleIcon, CheckCircleIcon, EyeIcon, ArrowUpIcon, ArrowRightIcon, ArrowDownIcon, BellIcon, PencilIcon, TrashIcon, DownloadIcon, FileTextIcon, ArchiveIcon } from './icons/Icons';
 import EventForm from './EventForm';
@@ -12,9 +12,10 @@ import AdHocTaskForm from './AdHocTaskForm';
 import RatingHistoryChart from './RatingHistoryChart';
 import EventHistory from './EventHistory';
 import OperationForm from './OperationForm';
+import ContactForm from './ContactForm';
 
 import RiskForm from './RiskForm';
-import { X, Edit2, Plus, Trash2, AlertTriangle } from 'lucide-react';
+import { X, Edit2, Plus, Trash2, AlertTriangle, Users } from 'lucide-react';
 import RichTextEditor from './RichTextEditor';
 import { fetchApi } from '../utils/api';
 
@@ -222,6 +223,47 @@ const OperationDetail: React.FC<OperationDetailProps> = ({ operation, onUpdateOp
     const [taskToEdit, setTaskToEdit] = useState<Task | null>(null);
     const [taskToDelete, setTaskToDelete] = useState<Task | null>(null);
 
+
+    // State for managing contacts
+    const [isAddingContact, setIsAddingContact] = useState(false);
+    const [editingContact, setEditingContact] = useState<Contact | null>(null);
+
+    const handleSaveContact = async (contactData: Omit<Contact, 'id' | 'masterGroupId'>) => {
+        setIsSyncing(true);
+        try {
+            let updatedContacts = [...(operation.contacts || [])];
+            if (editingContact) {
+                updatedContacts = updatedContacts.map(c => 
+                    c.id === editingContact.id ? { ...c, ...contactData } : c
+                );
+            } else {
+                updatedContacts.push({ ...contactData, id: Date.now() } as Contact);
+            }
+            const updatedOperation = { ...operation, contacts: updatedContacts };
+            await onUpdateOperation(updatedOperation);
+            setIsAddingContact(false);
+            setEditingContact(null);
+        } catch (error) {
+            console.error('Error saving contact:', error);
+            showToast('Erro ao salvar contato', 'error');
+        } finally {
+            setIsSyncing(false);
+        }
+    };
+
+    const handleDeleteContact = async (contactId: number) => {
+        setIsSyncing(true);
+        try {
+            const updatedContacts = (operation.contacts || []).filter(c => c.id !== contactId);
+            const updatedOperation = { ...operation, contacts: updatedContacts };
+            await onUpdateOperation(updatedOperation);
+        } catch (error) {
+            console.error('Error deleting contact:', error);
+            showToast('Erro ao remover contato', 'error');
+        } finally {
+            setIsSyncing(false);
+        }
+    };
 
     const tasks = operation.tasks || [];
 
@@ -662,7 +704,7 @@ ${event.nextSteps ? stripHtml(event.nextSteps) : 'Nenhum'}
                         </div>
                         <div>
                             <h4 className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase mb-2">Descrição</h4>
-                            <div className="prose prose-sm max-w-none text-gray-700 dark:text-gray-300 bg-gray-50 dark:bg-gray-800/50 p-4 rounded-lg border border-gray-100 dark:border-gray-700" dangerouslySetInnerHTML={{ __html: selectedEventForDetails.description }} />
+                            <div className="prose prose-sm max-w-none break-words overflow-x-auto text-gray-700 dark:text-gray-300 bg-gray-50 dark:bg-gray-800/50 p-4 rounded-lg border border-gray-100 dark:border-gray-700" dangerouslySetInnerHTML={{ __html: selectedEventForDetails.description }} />
                         </div>
 
                         {(selectedEventForDetails.ourAttendees || selectedEventForDetails.operationAttendees) && (
@@ -684,13 +726,13 @@ ${event.nextSteps ? stripHtml(event.nextSteps) : 'Nenhum'}
                         {selectedEventForDetails.nextSteps && (
                             <div className="mt-4 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-100 dark:border-blue-800/50">
                                 <h4 className="text-xs font-bold text-blue-800 dark:text-blue-400 uppercase mb-2">Próximos Passos</h4>
-                                <div className="text-sm text-blue-900 dark:text-blue-200 prose prose-sm max-w-none" dangerouslySetInnerHTML={{ __html: selectedEventForDetails.nextSteps }} />
+                                <div className="text-sm text-blue-900 dark:text-blue-200 prose prose-sm max-w-none break-words overflow-x-auto" dangerouslySetInnerHTML={{ __html: selectedEventForDetails.nextSteps }} />
                             </div>
                         )}
                         {selectedEventForDetails.attentionPoints && (
                             <div className="mt-4 p-4 bg-amber-50 dark:bg-amber-900/20 rounded-lg border border-amber-100 dark:border-amber-800/50">
                                 <h4 className="text-xs font-bold text-amber-800 dark:text-amber-400 uppercase mb-2">Pontos de Atenção</h4>
-                                <div className="text-sm text-amber-900 dark:text-amber-200 prose prose-sm max-w-none" dangerouslySetInnerHTML={{ __html: selectedEventForDetails.attentionPoints }} />
+                                <div className="text-sm text-amber-900 dark:text-amber-200 prose prose-sm max-w-none break-words overflow-x-auto" dangerouslySetInnerHTML={{ __html: selectedEventForDetails.attentionPoints }} />
                             </div>
                         )}
                         <div className="pt-2 text-xs text-gray-400 dark:text-gray-500">
@@ -970,6 +1012,64 @@ ${event.nextSteps ? stripHtml(event.nextSteps) : 'Nenhum'}
                 )}
             </div>
 
+            {/* Contacts */}
+            {isAddingContact && (
+                <ContactForm
+                    onClose={() => setIsAddingContact(false)}
+                    onSave={handleSaveContact}
+                />
+            )}
+            {editingContact && (
+                <ContactForm
+                    onClose={() => setEditingContact(null)}
+                    onSave={handleSaveContact}
+                    initialData={editingContact}
+                />
+            )}
+
+            <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-lg dark:border dark:border-gray-700 mb-8">
+                <div className="flex justify-between items-center mb-6">
+                    <div className="flex items-center gap-2">
+                        <Users className="w-6 h-6 text-blue-500" />
+                        <h3 className="text-xl font-bold text-gray-700 dark:text-gray-200">Contatos da Operação</h3>
+                    </div>
+                    <button 
+                        onClick={() => setIsAddingContact(true)}
+                        className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition-colors text-sm font-medium shadow-sm"
+                    >
+                        <Plus className="w-4 h-4" /> Novo Contato
+                    </button>
+                </div>
+
+                {operation.contacts && operation.contacts.length > 0 ? (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {operation.contacts.map((contact) => (
+                            <div key={contact.id} className="bg-gray-50 dark:bg-gray-700/50 p-4 rounded-lg border border-gray-200 dark:border-gray-600 relative group">
+                                <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <button onClick={() => setEditingContact(contact)} className="p-1 hover:bg-white dark:hover:bg-gray-600 rounded text-gray-400 hover:text-blue-600 transition-colors">
+                                        <Edit2 className="w-3.5 h-3.5" />
+                                    </button>
+                                    <button onClick={() => { if(window.confirm('Excluir contato?')) handleDeleteContact(contact.id); }} className="p-1 hover:bg-white dark:hover:bg-gray-600 rounded text-gray-400 hover:text-red-600 transition-colors">
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                </div>
+                                <h4 className="font-bold text-gray-800 dark:text-gray-200 mb-1 pr-12">{contact.name}</h4>
+                                {contact.role && <p className="text-sm text-gray-500 dark:text-gray-400 mb-2 font-medium">{contact.role}</p>}
+                                <div className="space-y-1 text-sm text-gray-600 dark:text-gray-300">
+                                    {contact.email && <p className="truncate" title={contact.email}><a href={`mailto:${contact.email}`} className="text-blue-600 hover:underline">{contact.email}</a></p>}
+                                    {contact.phone && <p>{contact.phone}</p>}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                ) : (
+                    <div className="text-center py-8 bg-gray-50 dark:bg-gray-800/50 rounded-lg border-2 border-dashed border-gray-200 dark:border-gray-700">
+                        <Users className="w-10 h-10 text-gray-300 dark:text-gray-600 mx-auto mb-2" />
+                        <p className="text-gray-500 dark:text-gray-400">Nenhum contato cadastrado.</p>
+                    </div>
+                )}
+            </div>
+
             <EventHistory 
                 events={filteredEvents}
                 onAddEvent={() => setIsEventFormOpen(true)}
@@ -1142,7 +1242,7 @@ ${event.nextSteps ? stripHtml(event.nextSteps) : 'Nenhum'}
                                 const groupRatingChange = getRatingChange(entry.ratingGroup, previousEntry?.ratingGroup);
 
                                 return (
-                                    <div key={entry.id} className="p-3 bg-gray-50 dark:bg-gray-800/50 rounded-md grid grid-cols-4 gap-4 items-center border border-transparent dark:border-gray-700">
+                                    <div key={entry.id} className="p-3 bg-gray-50 dark:bg-gray-800/50 rounded-md flex flex-wrap items-center justify-between gap-y-2 gap-x-4 border border-transparent dark:border-gray-700">
                                         <div className="font-medium text-gray-700 dark:text-gray-300">{new Date(entry.date).toLocaleDateString('pt-BR')}</div>
                                         <div className="text-sm text-gray-800 dark:text-gray-200 flex items-center gap-1.5">
                                             <span className="text-xs text-gray-500 dark:text-gray-400">Op: </span>

@@ -687,6 +687,13 @@ def _update_operation_db_internal(cursor, op_id, data):
         cursor.execute("DELETE FROM cri_cra_dev.crm.task_exceptions WHERE operation_id = ?", (op_id,))
         for task_id in data['taskExceptions']:
             cursor.execute("INSERT INTO cri_cra_dev.crm.task_exceptions (operation_id, task_id) VALUES (?, ?)", (op_id, task_id))
+            
+    if 'contacts' in data:
+        cursor.execute("DELETE FROM cri_cra_dev.crm.operation_contacts WHERE operation_id = ?", (op_id,))
+        for contact in data['contacts']:
+            if contact.get('name'):
+                cursor.execute("INSERT INTO cri_cra_dev.crm.operation_contacts (operation_id, name, email, phone, role) VALUES (?, ?, ?, ?, ?)",
+                               (op_id, contact.get('name'), contact.get('email'), contact.get('phone'), contact.get('role')))
 
     details = generate_diff_details(old_op_db, data, {'name': 'Nome', 'ratingOperation': 'Rating Op.', 'ratingGroup': 'Rating Grupo', 'watchlist': 'Watchlist'})
     if details: log_action(cursor, data.get('responsibleAnalyst', 'System'), 'UPDATE', 'Operation', op_id, details)

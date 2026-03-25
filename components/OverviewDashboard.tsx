@@ -118,15 +118,50 @@ const OverviewDashboard: React.FC<OverviewDashboardProps> = ({ operations, onSel
     return result;
   }, [operations, areaFilter, masterGroupFilter, economicGroupFilter, sortConfig]);
 
+  const areasOpts = useMemo(() => {
+    const filtered = operations.filter(op => 
+      (masterGroupFilter === 'All' || (op.masterGroupName || 'Sem Master Group') === masterGroupFilter) &&
+      (economicGroupFilter === 'All' || (op.economicGroupName || 'Sem Grupo Econômico') === economicGroupFilter)
+    );
+    const areas = filtered.map(op => op.area).filter(Boolean) as string[];
+    return ['All', ...Array.from(new Set(areas)).sort()];
+  }, [operations, masterGroupFilter, economicGroupFilter]);
+
   const masterGroupsOpts = useMemo(() => {
-    const mgs = operations.map(op => op.masterGroupName || 'Sem Master Group');
+    const filtered = operations.filter(op => 
+      (areaFilter === 'All' || op.area === areaFilter) && 
+      (economicGroupFilter === 'All' || (op.economicGroupName || 'Sem Grupo Econômico') === economicGroupFilter)
+    );
+    const mgs = filtered.map(op => op.masterGroupName || 'Sem Master Group');
     return ['All', ...Array.from(new Set(mgs)).sort()];
-  }, [operations]);
+  }, [operations, areaFilter, economicGroupFilter]);
 
   const economicGroupsOpts = useMemo(() => {
-    const egs = operations.map(op => op.economicGroupName || 'Sem Grupo Econômico');
+    const filtered = operations.filter(op => 
+      (areaFilter === 'All' || op.area === areaFilter) && 
+      (masterGroupFilter === 'All' || (op.masterGroupName || 'Sem Master Group') === masterGroupFilter)
+    );
+    const egs = filtered.map(op => op.economicGroupName || 'Sem Grupo Econômico');
     return ['All', ...Array.from(new Set(egs)).sort()];
-  }, [operations]);
+  }, [operations, areaFilter, masterGroupFilter]);
+
+  React.useEffect(() => {
+    if (areaFilter !== 'All' && !areasOpts.includes(areaFilter)) {
+      setAreaFilter('All');
+    }
+  }, [areasOpts, areaFilter]);
+
+  React.useEffect(() => {
+    if (masterGroupFilter !== 'All' && !masterGroupsOpts.includes(masterGroupFilter)) {
+      setMasterGroupFilter('All');
+    }
+  }, [masterGroupsOpts, masterGroupFilter]);
+
+  React.useEffect(() => {
+    if (economicGroupFilter !== 'All' && !economicGroupsOpts.includes(economicGroupFilter)) {
+      setEconomicGroupFilter('All');
+    }
+  }, [economicGroupsOpts, economicGroupFilter]);
 
   const allTasks = React.useMemo(() => {
       return operations.flatMap(op => op.tasks || []);
@@ -290,9 +325,7 @@ const OverviewDashboard: React.FC<OverviewDashboardProps> = ({ operations, onSel
                   onChange={e => setAreaFilter(e.target.value as 'All' | Area)}
                   className="block w-full pl-3 pr-10 py-2 text-base border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md transition-colors duration-200"
                 >
-                    <option value="All">Todas as Áreas</option>
-                    <option value="CRI">CRI</option>
-                    <option value="Capital Solutions">Capital Solutions</option>
+                    {areasOpts.map(area => <option key={area} value={area}>{area === 'All' ? 'Todas as Áreas' : area}</option>)}
                 </select>
             </div>
             <div>

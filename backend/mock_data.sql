@@ -191,18 +191,17 @@ INSERT INTO cri_cra_dev.crm.fund_allocation_inputs (fund_name, emission, prepaym
 -- ====================================================================
 -- 10. MOCK DE TABELAS EXTERNAS E INFORMAÇÕES FINANCEIRAS DOS FUNDOS
 -- ====================================================================
--- Criando schemas externos simulados (caso o ambiente permita)
-CREATE SCHEMA IF NOT EXISTS middle_dev.fundos;
-CREATE SCHEMA IF NOT EXISTS risco_dev.risco_cri;
+-- Criando mocks das tabelas externas dentro do mesmo schema para evitar erro de NO_SUCH_CATALOG_EXCEPTION 
+-- (O backend agora lê via variável de ambiente RISCO_TABLE e MIDDLE_TABLE)
 
--- Tabela: Fundos do Middle Office
-CREATE TABLE IF NOT EXISTS middle_dev.fundos.fundos (
+-- Tabela: Fundos do Middle Office (Mock)
+CREATE TABLE IF NOT EXISTS cri_cra_dev.crm.middle_fundos (
     codigo STRING PRIMARY KEY,
     area INT
 );
 
--- Tabela: Dados Consolidados de Risco
-CREATE TABLE IF NOT EXISTS risco_dev.risco_cri.dadosconsolidadoscris (
+-- Tabela: Dados Consolidados de Risco (Mock)
+CREATE TABLE IF NOT EXISTS cri_cra_dev.crm.risco_dadosconsolidadoscris (
     Data TIMESTAMP,
     Fundo STRING,
     Info STRING,
@@ -210,18 +209,18 @@ CREATE TABLE IF NOT EXISTS risco_dev.risco_cri.dadosconsolidadoscris (
 );
 
 -- Limpar Tabelas Externas para testes limpos
-DELETE FROM middle_dev.fundos.fundos WHERE codigo IN ('Fundo Agro CRA', 'FII XPTO', 'Fundo A', 'Fundo B');
-DELETE FROM risco_dev.risco_cri.dadosconsolidadoscris WHERE Fundo IN ('Fundo Agro CRA', 'FII XPTO', 'Fundo A', 'Fundo B');
+DELETE FROM cri_cra_dev.crm.middle_fundos WHERE codigo IN ('Fundo Agro CRA', 'FII XPTO', 'Fundo A', 'Fundo B');
+DELETE FROM cri_cra_dev.crm.risco_dadosconsolidadoscris WHERE Fundo IN ('Fundo Agro CRA', 'FII XPTO', 'Fundo A', 'Fundo B');
 
 -- Inserindo os fundos na tabela do Middle (Area = 8 para aparecer no simulador do CRM)
-INSERT INTO middle_dev.fundos.fundos (codigo, area) VALUES 
+INSERT INTO cri_cra_dev.crm.middle_fundos (codigo, area) VALUES 
 ('Fundo Agro CRA', 8),
 ('FII XPTO', 8),
 ('Fundo A', 8),
 ('Fundo B', 8);
 
 -- Inserindo os dados financeiros fictícios e as MTMs
-INSERT INTO risco_dev.risco_cri.dadosconsolidadoscris (Data, Fundo, Info, Valor) VALUES 
+INSERT INTO cri_cra_dev.crm.risco_dadosconsolidadoscris (Data, Fundo, Info, Valor) VALUES 
 -- Fundo Agro CRA
 ('2024-10-25T00:00:00', 'Fundo Agro CRA', 'CRI IPCA - Financeiro', 150000000.00),
 ('2024-10-25T00:00:00', 'Fundo Agro CRA', 'Compromissadas - Financeiro', 20000000.00),
