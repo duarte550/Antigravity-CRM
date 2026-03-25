@@ -33,6 +33,7 @@ const StructuringOperationDetailsPage: React.FC<StructuringOperationDetailsPageP
   
   const [isMigratingToActive, setIsMigratingToActive] = useState(false);
   const [stageToComplete, setStageToComplete] = useState<StructuringOperationStage | null>(null);
+  const [selectedEventForModal, setSelectedEventForModal] = useState<Event | null>(null);
 
   useEffect(() => {
     fetchOperation();
@@ -446,7 +447,7 @@ const StructuringOperationDetailsPage: React.FC<StructuringOperationDetailsPageP
                   const generalEvents = operation.events?.filter(e => !e.structuringOperationStageId) || [];
                   if (generalEvents.length === 0) return <div className="text-center py-4 text-gray-400 text-sm">Nenhum evento geral registrado.</div>;
                   return generalEvents.map(event => (
-                      <div key={event.id} className="bg-gray-50 dark:bg-gray-800/50 p-3 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm relative group flex flex-col md:flex-row gap-4 items-start md:items-center justify-between">
+                      <div key={event.id} onClick={() => setSelectedEventForModal(event as any)} className="bg-gray-50 dark:bg-gray-800/50 p-3 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm relative group flex flex-col md:flex-row gap-4 items-start md:items-center justify-between cursor-pointer hover:border-blue-400 dark:hover:border-blue-500 hover:shadow-md transition-all">
                            <div className="flex-1">
                                <div className="flex items-center gap-2 mb-1">
                                    <span className={`text-[10px] font-bold px-2 py-0.5 uppercase tracking-wider rounded-sm ${event.completedTaskId ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400' : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'}`}>
@@ -502,7 +503,7 @@ const StructuringOperationDetailsPage: React.FC<StructuringOperationDetailsPageP
                         {/* Body */}
                         <div className="p-3 flex-1 overflow-y-auto space-y-3">
                             {stageEvents.map(event => (
-                                <div key={event.id} className="bg-white dark:bg-gray-800 p-3 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm relative group">
+                                <div key={event.id} onClick={() => setSelectedEventForModal(event as any)} className="bg-white dark:bg-gray-800 p-3 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm relative group cursor-pointer hover:border-blue-400 dark:hover:border-blue-500 hover:shadow-md transition-all">
                                     <div className="flex justify-between items-center mb-2">
                                         <span className={`text-[10px] font-bold px-2 py-0.5 uppercase tracking-wider rounded-sm ${event.completedTaskId ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400' : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'}`}>
                                             {event.completedTaskId ? 'Tarefa Concluída' : event.type}
@@ -781,6 +782,71 @@ const StructuringOperationDetailsPage: React.FC<StructuringOperationDetailsPageP
               <button onClick={handleSaveStages} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg">
                 Salvar Etapas
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {selectedEventForModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[70] p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh]">
+            <div className="p-6 border-b border-gray-100 dark:border-gray-700 flex justify-between items-center bg-gray-50 dark:bg-gray-800/80">
+              <div className="flex items-center gap-3">
+                 <div className="p-2 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-lg">
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                 </div>
+                 <h2 className="text-xl font-bold text-gray-900 dark:text-white">Detalhes do Evento</h2>
+              </div>
+              <button
+                onClick={() => setSelectedEventForModal(null)}
+                className="text-gray-400 hover:text-gray-500 dark:hover:text-gray-300 transition-colors bg-white dark:bg-gray-700 rounded-full p-1 border border-gray-200 dark:border-gray-600 shadow-sm"
+              >
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="p-6 overflow-y-auto space-y-6">
+               <div>
+                  <div className="flex items-center gap-2 mb-2">
+                     <span className={`text-xs font-bold px-2.5 py-1 uppercase tracking-wider rounded-md ${selectedEventForModal.completedTaskId ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400' : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'}`}>
+                         {selectedEventForModal.completedTaskId ? 'Tarefa Concluída' : selectedEventForModal.type}
+                     </span>
+                     <time className="text-sm text-gray-500 dark:text-gray-400 font-medium">
+                        {new Date(selectedEventForModal.date).toLocaleDateString()}
+                     </time>
+                  </div>
+                  <h3 className="text-2xl font-bold text-gray-900 dark:text-white mt-2">{selectedEventForModal.title}</h3>
+               </div>
+               
+               <div className="bg-gray-50 dark:bg-gray-900/50 p-4 rounded-xl border border-gray-100 dark:border-gray-800">
+                  <p className="text-gray-700 dark:text-gray-300 whitespace-pre-wrap leading-relaxed whitespace-pre-line text-sm">
+                     {selectedEventForModal.description}
+                  </p>
+               </div>
+
+               {(selectedEventForModal.attentionPoints || selectedEventForModal.nextSteps) && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                     {selectedEventForModal.attentionPoints && (
+                        <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/50 p-4 rounded-xl">
+                           <h4 className="font-semibold text-amber-800 dark:text-amber-400 flex items-center gap-2 mb-2 text-sm">
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+                              Pontos de Atenção
+                           </h4>
+                           <p className="text-sm text-amber-900 dark:text-amber-200 whitespace-pre-wrap">{selectedEventForModal.attentionPoints}</p>
+                        </div>
+                     )}
+                     {selectedEventForModal.nextSteps && (
+                        <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800/50 p-4 rounded-xl">
+                           <h4 className="font-semibold text-blue-800 dark:text-blue-400 flex items-center gap-2 mb-2 text-sm">
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 5l7 7-7 7M5 5l7 7-7 7" /></svg>
+                              Próximos Passos
+                           </h4>
+                           <p className="text-sm text-blue-900 dark:text-blue-200 whitespace-pre-wrap">{selectedEventForModal.nextSteps}</p>
+                        </div>
+                     )}
+                  </div>
+               )}
             </div>
           </div>
         </div>

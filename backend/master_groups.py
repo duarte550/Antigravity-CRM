@@ -25,11 +25,12 @@ def fetch_full_master_group(cursor, mg_id):
     
     # Fetch active/legacy operations
     cursor.execute("SELECT id, name, area, operation_type, status, rating_operation FROM cri_cra_dev.crm.operations WHERE master_group_id = ? AND (is_structuring IS NULL OR is_structuring = FALSE)", (mg_id,))
+    op_rows = [format_row(row, cursor) for row in cursor.fetchall()]
     mg['operations'] = [{
         'id': r.get('id'), 'name': r.get('name'), 'area': r.get('area'), 
         'operationType': r.get('operation_type'), 'status': r.get('status'),
         'ratingOperation': r.get('rating_operation')
-    } for r in cursor.fetchall()]
+    } for r in op_rows]
     
     # Fetch structuring operations
     cursor.execute("SELECT id, name, pipeline_stage as stage, liquidation_date, responsible_analyst as analyst, risk, temperature, is_active FROM cri_cra_dev.crm.operations WHERE master_group_id = ? AND is_structuring = TRUE", (mg_id,))
@@ -148,9 +149,10 @@ def manage_master_groups():
                     mg['economicGroups'] = [format_row(r, cursor) for r in cursor.fetchall()]
 
                     cursor.execute("SELECT id, name, rating_operation FROM cri_cra_dev.crm.operations WHERE master_group_id = ? AND (is_structuring IS NULL OR is_structuring = FALSE)", (mg['id'],))
+                    op_rows = [format_row(row, cursor) for row in cursor.fetchall()]
                     mg['operations'] = [{
                         'id': r.get('id'), 'name': r.get('name'), 'ratingOperation': r.get('rating_operation')
-                    } for r in cursor.fetchall()]
+                    } for r in op_rows]
                     
                     cursor.execute("SELECT id, name, pipeline_stage as stage FROM cri_cra_dev.crm.operations WHERE master_group_id = ? AND is_structuring = TRUE", (mg['id'],))
                     so_rows = [format_row(r, cursor) for r in cursor.fetchall()]
