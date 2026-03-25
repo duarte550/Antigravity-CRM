@@ -561,10 +561,27 @@ def update_structuring_operation_stages(so_id):
     try:
         stages = request.json.get('stages', [])
         with conn.cursor() as cursor:
-            cursor.execute("DELETE FROM cri_cra_dev.crm.operation_stages WHERE operation_id=?", (so_id,))
+            # Pega estágios existentes no banco
+            cursor.execute("SELECT id FROM cri_cra_dev.crm.operation_stages WHERE operation_id=?", (so_id,))
+            db_stage_ids = {row.id for row in cursor.fetchall()}
+            client_stage_ids = {s.get('id') for s in stages if s.get('id')}
+
             for s in stages:
-                cursor.execute("INSERT INTO cri_cra_dev.crm.operation_stages (operation_id, name, order_index, is_completed) VALUES (?, ?, ?, ?)",
-                               (so_id, s.get('name'), s.get('order_index', 0), s.get('isCompleted', False)))
+                s_id = s.get('id')
+                # Se tem ID e está no DB, atualiza
+                if s_id and s_id in db_stage_ids:
+                    cursor.execute("UPDATE cri_cra_dev.crm.operation_stages SET name=?, order_index=?, is_completed=? WHERE id=?",
+                                   (s.get('name'), s.get('order_index', 0), s.get('isCompleted', False), s_id))
+                else:
+                    # Sem ID ou não está no DB, insere novo
+                    cursor.execute("INSERT INTO cri_cra_dev.crm.operation_stages (operation_id, name, order_index, is_completed) VALUES (?, ?, ?, ?)",
+                                   (so_id, s.get('name'), s.get('order_index', 0), s.get('isCompleted', False)))
+            
+            # Deletar estágios não enviados (se precisar)
+            stages_to_delete = db_stage_ids - client_stage_ids
+            for del_id in stages_to_delete:
+                cursor.execute("DELETE FROM cri_cra_dev.crm.operation_stages WHERE id=?", (del_id,))
+                
             conn.commit()
             return jsonify({"status": "success"}), 200
     except Exception as e:

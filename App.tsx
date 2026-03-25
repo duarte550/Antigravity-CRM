@@ -21,11 +21,12 @@ import LegacyPage from './components/LegacyPage';
 import SyncQueuePage from './components/SyncQueuePage';
 import MasterGroupsPage from './components/MasterGroupsPage';
 import MasterGroupDetailsPage from './components/MasterGroupDetailsPage';
+import EconomicGroupsPage from './components/EconomicGroupsPage';
 import EconomicGroupDetailsPage from './components/EconomicGroupDetailsPage';
 import OriginationPipelinePage from './components/OriginationPipelinePage';
 import StructuringOperationDetailsPage from './components/StructuringOperationDetailsPage';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://crmcri-flask.onrender.com';
+const API_BASE_URL = import.meta.env.VITE_API_URL || '';
 
 const App: React.FC = () => {
   const [operations, setOperations] = useState<Operation[]>(() => {
@@ -811,6 +812,12 @@ const App: React.FC = () => {
                 apiUrl={API_BASE_URL} 
                 showToast={showToast} 
                 pushToGenericQueue={pushToGenericQueue}
+            />;
+        case Page.ECONOMIC_GROUPS:
+            return <EconomicGroupsPage 
+                onNavigate={handleNavigate} 
+                apiUrl={API_BASE_URL} 
+                showToast={showToast} 
             />;
         case Page.ECONOMIC_GROUP_DETAIL:
             if (!selectedOperationId) return <div>Selecione um Grupo Econômico</div>;

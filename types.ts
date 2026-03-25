@@ -213,6 +213,7 @@ export enum Page {
   SYNC_QUEUE = 'sync_queue',
   MASTER_GROUPS = 'master_groups',
   MASTER_GROUP_DETAIL = 'master-group-detail',
+  ECONOMIC_GROUPS = 'economic_groups',
   ECONOMIC_GROUP_DETAIL = 'economic-group-detail',
   ORIGINATION_PIPELINE = 'origination-pipeline',
   STRUCTURING_OPERATION_DETAIL = 'structuring-operation-detail',

@@ -102,7 +102,12 @@ def manage_economic_groups():
     try:
         if request.method == 'GET':
             with conn.cursor() as cursor:
-                cursor.execute("SELECT * FROM cri_cra_dev.crm.economic_groups ORDER BY name")
+                cursor.execute("""
+                    SELECT e.*, m.name as master_group_name 
+                    FROM cri_cra_dev.crm.economic_groups e 
+                    LEFT JOIN cri_cra_dev.crm.master_groups m ON e.master_group_id = m.id 
+                    ORDER BY e.name
+                """)
                 egs = [format_row(row, cursor) for row in cursor.fetchall()]
                 return jsonify(egs)
         elif request.method == 'POST':
