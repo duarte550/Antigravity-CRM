@@ -1132,6 +1132,7 @@ const OriginationPipelinePage: React.FC<OriginationPipelinePageProps> = ({ onNav
           initialData={operationToEdit}
           masterGroups={masterGroups}
           onOpenNewMasterGroup={() => setIsMasterGroupFormOpen(true)}
+          apiUrl={apiUrl}
         />
       )}
 

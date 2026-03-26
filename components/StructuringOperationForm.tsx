@@ -10,12 +10,13 @@ interface StructuringOperationFormProps {
   initialData?: StructuringOperation | null;
   masterGroups?: { id: number, name: string, economicGroups?: any[] }[];
   onOpenNewMasterGroup?: () => void;
+  apiUrl?: string;
 }
 
 const STAGES = ['Conversa Inicial', 'Term Sheet', 'Due Diligence', 'Aprovação', 'Liquidação'];
 const INDEXERS = ['CDI', 'IPCA', 'IGPM', 'Pré', 'Outro'];
 
-const StructuringOperationForm: React.FC<StructuringOperationFormProps> = ({ onClose, onSave, initialData, masterGroups, onOpenNewMasterGroup }) => {
+const StructuringOperationForm: React.FC<StructuringOperationFormProps> = ({ onClose, onSave, initialData, masterGroups, onOpenNewMasterGroup, apiUrl }) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [name, setName] = useState(initialData?.name || '');
   const [area, setArea] = useState<Area | ''>(initialData?.area || '');
@@ -213,6 +214,7 @@ const StructuringOperationForm: React.FC<StructuringOperationFormProps> = ({ onC
               id="analyst" 
               value={analyst} 
               onChange={setAnalyst} 
+              apiUrl={apiUrl}
               required 
             />
           </div>

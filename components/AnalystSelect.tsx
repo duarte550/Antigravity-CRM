@@ -19,7 +19,7 @@ const AnalystSelect: React.FC<AnalystSelectProps> = ({ id, value, onChange, apiU
     useEffect(() => {
         const fetchAnalysts = async () => {
             try {
-                const effectiveApiUrl = apiUrl || (import.meta.env.VITE_API_URL !== undefined ? import.meta.env.VITE_API_URL : '');
+                const effectiveApiUrl = apiUrl || '';
                 const response = await fetchApi(`${effectiveApiUrl}/api/analysts`);
                 if (response.ok) {
                     const data = await response.json();

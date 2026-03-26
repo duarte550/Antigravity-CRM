@@ -14,9 +14,10 @@ interface EventFormProps {
   initialData?: Event | null;
   showOriginationToggle?: boolean;
   defaultIsOrigination?: boolean;
+  apiUrl?: string;
 }
 
-const EventForm: React.FC<EventFormProps> = ({ onClose, onSave, analystName, prefilledTitle = '', initialData = null, showOriginationToggle = false, defaultIsOrigination = false }) => {
+const EventForm: React.FC<EventFormProps> = ({ onClose, onSave, analystName, prefilledTitle = '', initialData = null, showOriginationToggle = false, defaultIsOrigination = false, apiUrl }) => {
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [type, setType] = useState('Call Mensal');
   const [customType, setCustomType] = useState('');
@@ -87,6 +88,7 @@ const EventForm: React.FC<EventFormProps> = ({ onClose, onSave, analystName, pre
                     id="registeredBy" 
                     value={registeredBy} 
                     onChange={setRegisteredBy} 
+                    apiUrl={apiUrl}
                     required 
                 />
             </div>
