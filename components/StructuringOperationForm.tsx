@@ -75,7 +75,7 @@ const StructuringOperationForm: React.FC<StructuringOperationFormProps> = ({ onC
     }
 
     const payloadSeries = !initialData && initialVolume !== ''
-      ? [{ name: 'A Definir', rate: '', indexer: initialIndexer, volume: Number(initialVolume) * 1000000, fund: '' }]
+      ? [{ name: 'A Definir', rate: '', indexer: initialIndexer, volume: Number(initialVolume), fund: '' }]
       : series;
 
     setIsSubmitting(true);

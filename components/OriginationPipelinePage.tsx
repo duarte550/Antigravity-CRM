@@ -32,7 +32,7 @@ const OriginationPipelinePage: React.FC<OriginationPipelinePageProps> = ({ onNav
   const [economicGroupFilter, setEconomicGroupFilter] = useState<string>('All');
   const [activeTab, setActiveTab] = useState<'kanban' | 'table' | 'tasks' | 'resumo' | 'por-fundo'>('resumo');
 
-  const [masterGroups, setMasterGroups] = useState<{ id: number, name: string }[]>([]);
+  const [masterGroups, setMasterGroups] = useState<{ id: number, name: string, economicGroups?: any[] }[]>([]);
   const [isMasterGroupFormOpen, setIsMasterGroupFormOpen] = useState(false);
 
   // Table Sorting and Searching
@@ -42,6 +42,15 @@ const OriginationPipelinePage: React.FC<OriginationPipelinePageProps> = ({ onNav
   const [resumoSearchTerm, setResumoSearchTerm] = useState('');
   const [resumoSortConfig, setResumoSortConfig] = useState<{ key: string, desc: boolean }>({ key: 'createdAt', desc: true });
   const [showLiquidated, setShowLiquidated] = useState(false);
+
+  const [resumoOriginatorFilter, setResumoOriginatorFilter] = useState('');
+  const [resumoDateFilter, setResumoDateFilter] = useState('');
+  const [resumoTemperatureFilter, setResumoTemperatureFilter] = useState('');
+  const [resumoIndexerFilter, setResumoIndexerFilter] = useState('');
+  const [resumoStatusFilter, setResumoStatusFilter] = useState('');
+  
+  const originatorsOpts = useMemo(() => Array.from(new Set(operations.map(o => o.originator).filter(Boolean))), [operations]);
+  const indexersOpts = useMemo(() => Array.from(new Set(operations.flatMap(o => o.series?.map(s => s.indexer) || []).filter(Boolean))), [operations]);
 
 
 
@@ -172,7 +181,7 @@ const OriginationPipelinePage: React.FC<OriginationPipelinePageProps> = ({ onNav
       const response = await fetchApi(`${apiUrl}/api/master-groups`);
       if (response.ok) {
         const data = await response.json();
-        setMasterGroups(data.map((mg: any) => ({ id: mg.id, name: mg.name })));
+        setMasterGroups(data.map((mg: any) => ({ id: mg.id, name: mg.name, economicGroups: mg.economicGroups })));
       }
     } catch(err) {
       console.error(err);
@@ -454,6 +463,13 @@ const OriginationPipelinePage: React.FC<OriginationPipelinePageProps> = ({ onNav
             );
         }
 
+        if (resumoOriginatorFilter) ops = ops.filter(o => o.originator === resumoOriginatorFilter);
+        if (resumoTemperatureFilter) ops = ops.filter(o => o.temperature === resumoTemperatureFilter);
+        if (resumoIndexerFilter) ops = ops.filter(o => o.series?.some(s => s.indexer === resumoIndexerFilter));
+        if (resumoStatusFilter) ops = ops.filter(o => o.stage === resumoStatusFilter);
+        if (resumoDateFilter) ops = ops.filter(o => o.createdAt && o.createdAt.startsWith(resumoDateFilter));
+
+
         ops.sort((a, b) => {
             let valA: any = a[resumoSortConfig.key as keyof typeof a] || '';
             let valB: any = b[resumoSortConfig.key as keyof typeof b] || '';
@@ -471,7 +487,7 @@ const OriginationPipelinePage: React.FC<OriginationPipelinePageProps> = ({ onNav
         });
 
         return ops;
-  }, [filteredOperations, resumoSearchTerm, resumoSortConfig]);
+  }, [filteredOperations, resumoSearchTerm, resumoSortConfig, resumoOriginatorFilter, resumoTemperatureFilter, resumoIndexerFilter, resumoStatusFilter, resumoDateFilter]);
 
   const toggleResumoSort = (key: string) => {
       setResumoSortConfig(prev => ({ key, desc: prev.key === key ? !prev.desc : false }));
@@ -630,7 +646,7 @@ const OriginationPipelinePage: React.FC<OriginationPipelinePageProps> = ({ onNav
             <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
                 <div className="bg-white dark:bg-gray-800 rounded-xl p-5 shadow-sm border border-gray-100 dark:border-gray-700 flex flex-col justify-center">
                     <p className="text-gray-500 dark:text-gray-400 text-sm font-medium">Volume Total</p>
-                    <h2 className="text-3xl font-bold text-gray-900 dark:text-white mt-1">R$ {(totalVolume / 1000000).toFixed(1)}M</h2>
+                    <h2 className="text-3xl font-bold text-gray-900 dark:text-white mt-1">R$ {(totalVolume).toFixed(1)}M</h2>
                     
                     <div className="mt-4 pt-3 border-t border-gray-100 dark:border-gray-700 flex justify-between text-sm">
                         <div className="text-center">
@@ -667,7 +683,7 @@ const OriginationPipelinePage: React.FC<OriginationPipelinePageProps> = ({ onNav
                      <div className="flex h-20 items-end gap-1.5 px-1 border-b border-gray-200 dark:border-gray-700 pb-1">
                         {chartLabels.length > 0 ? chartLabels.map(l => (
                             <div key={l} className="flex-1 flex flex-col justify-end items-center group relative h-full">
-                                <div className="absolute bottom-full mb-1 opacity-0 group-hover:opacity-100 bg-gray-800 text-white text-[10px] py-0.5 px-1.5 rounded z-10 whitespace-nowrap">{(volumeByMonth[l]/1000000).toFixed(1)}M</div>
+                                <div className="absolute bottom-full mb-1 opacity-0 group-hover:opacity-100 bg-gray-800 text-white text-[10px] py-0.5 px-1.5 rounded z-10 whitespace-nowrap">{(volumeByMonth[l]).toFixed(1)}M</div>
                                 <div className="bg-blue-500 dark:bg-blue-600 rounded-t-sm w-full transition-all hover:bg-blue-400" style={{ height: `${(volumeByMonth[l]/chartMax)*100}%` }}></div>
                                 <span className="text-[9px] text-gray-400 mt-1 absolute top-full pt-0.5">{l}</span>
                             </div>
@@ -696,15 +712,50 @@ const OriginationPipelinePage: React.FC<OriginationPipelinePageProps> = ({ onNav
 
             {activeTab === 'resumo' && (
                 <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden flex-1 flex flex-col mt-2 h-full">
-                    <div className="p-3 border-b border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/80 flex justify-between items-center gap-4">
+                    <div className="p-3 border-b border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/80 flex flex-wrap items-center gap-3">
                         <input 
                             type="text" 
-                            placeholder="Pesquisar operações..." 
+                            placeholder="Pesquisar..." 
                             value={resumoSearchTerm}
                             onChange={e => setResumoSearchTerm(e.target.value)}
-                            className="w-full max-w-sm px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-sm focus:ring-blue-500 focus:border-blue-500 text-gray-900 dark:text-gray-100"
+                            className="w-full max-w-[200px] px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-sm focus:ring-blue-500 focus:border-blue-500 text-gray-900 dark:text-gray-100"
                         />
-                        <label className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300 cursor-pointer font-medium hover:text-blue-600 dark:hover:text-blue-400 transition-colors">
+                        <select value={resumoOriginatorFilter} onChange={e => setResumoOriginatorFilter(e.target.value)} className="px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-xs focus:ring-blue-500 text-gray-900 dark:text-gray-100">
+                            <option value="">Originador: Todos</option>
+                            {originatorsOpts.map(o => <option key={o as string} value={o as string}>{o as string}</option>)}
+                        </select>
+                        <select value={resumoStatusFilter} onChange={e => setResumoStatusFilter(e.target.value)} className="px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-xs focus:ring-blue-500 text-gray-900 dark:text-gray-100">
+                            <option value="">Status: Todos</option>
+                            {STAGES.map(s => <option key={s} value={s}>{s}</option>)}
+                            <option value="Concluído">Concluído</option>
+                            <option value="Legado">Legado</option>
+                        </select>
+                        <select value={resumoTemperatureFilter} onChange={e => setResumoTemperatureFilter(e.target.value)} className="px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-xs focus:ring-blue-500 text-gray-900 dark:text-gray-100">
+                            <option value="">Temp.: Todos</option>
+                            <option value="Quente">Quente</option>
+                            <option value="Morno">Morno</option>
+                            <option value="Frio">Frio</option>
+                        </select>
+                        <select value={resumoIndexerFilter} onChange={e => setResumoIndexerFilter(e.target.value)} className="px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-xs focus:ring-blue-500 text-gray-900 dark:text-gray-100">
+                            <option value="">Indexador: Todos</option>
+                            {indexersOpts.map(i => <option key={i as string} value={i as string}>{i as string}</option>)}
+                        </select>
+                        <input 
+                            type="date" 
+                            title="Data de Criação"
+                            value={resumoDateFilter}
+                            onChange={e => setResumoDateFilter(e.target.value)}
+                            className="px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-xs focus:ring-blue-500 text-gray-900 dark:text-gray-100 placeholder-gray-400"
+                        />
+                        {(resumoOriginatorFilter || resumoStatusFilter || resumoTemperatureFilter || resumoIndexerFilter || resumoDateFilter || resumoSearchTerm) && (
+                            <button onClick={() => {
+                                setResumoOriginatorFilter(''); setResumoStatusFilter(''); setResumoTemperatureFilter(''); setResumoIndexerFilter(''); setResumoDateFilter(''); setResumoSearchTerm('');
+                            }} className="text-xs text-red-500 hover:text-red-600 font-medium ml-1">
+                                Limpar
+                            </button>
+                        )}
+                        
+                        <label className="ml-auto flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300 cursor-pointer font-medium hover:text-blue-600 dark:hover:text-blue-400 transition-colors">
                             <input 
                                 type="checkbox" 
                                 checked={showLiquidated} 
@@ -769,7 +820,7 @@ const OriginationPipelinePage: React.FC<OriginationPipelinePageProps> = ({ onNav
                                                 {op.temperature || 'N/D'}
                                             </span>
                                         </td>
-                                        <td className="px-4 py-3 text-right">R$ {(op._totalVol / 1000000).toFixed(2)}M</td>
+                                        <td className="px-4 py-3 text-right">R$ {(op._totalVol).toFixed(2)}M</td>
                                         <td className="px-4 py-3 text-right">{op._avgRateStr}</td>
                                         <td className="px-4 py-3 text-sm font-medium">{op.stage}</td>
                                         <td className="px-4 py-3 text-xs text-gray-500 dark:text-gray-400 truncate max-w-[150px]" title={op._lastEvent}>{op._lastEvent}</td>
@@ -858,7 +909,7 @@ const OriginationPipelinePage: React.FC<OriginationPipelinePageProps> = ({ onNav
                                             <div className="flex justify-between">
                                                 <span className="text-gray-500">Volume:</span>
                                                 <span className="font-medium text-gray-900 dark:text-white">
-                                                    {op.series && op.series.length > 0 ? `R$ ${(op.series.reduce((acc, s) => acc + (s.volume || 0), 0) / 1000000).toFixed(2)}M` : '-'}
+                                                    {op.series && op.series.length > 0 ? `R$ ${(op.series.reduce((acc, s) => acc + (s.volume || 0), 0)).toFixed(2)}M` : '-'}
                                                 </span>
                                             </div>
                                             <div className="flex justify-between">
@@ -912,8 +963,8 @@ const OriginationPipelinePage: React.FC<OriginationPipelinePageProps> = ({ onNav
                         {/* Summary by Fund side-by-side config */}
                         <div className="flex gap-4 text-xs">
                              <div className="bg-white dark:bg-gray-800 p-2 rounded shadow-sm border border-gray-200 dark:border-gray-700 flex gap-4">
-                                <div><span className="text-gray-500 mr-2">Vol. Liq:</span><span className="font-semibold text-green-600">R$ {(Object.values(summaries.fundSummary).reduce((a,b)=>a+b.liq,0)/1000000).toFixed(1)}M</span></div>
-                                <div><span className="text-gray-500 mr-2">Vol. Est:</span><span className="font-semibold text-blue-600">R$ {(Object.values(summaries.fundSummary).reduce((a,b)=>a+b.est,0)/1000000).toFixed(1)}M</span></div>
+                                <div><span className="text-gray-500 mr-2">Vol. Liq:</span><span className="font-semibold text-green-600">R$ {(Object.values(summaries.fundSummary).reduce((a,b)=>a+b.liq,0)).toFixed(1)}M</span></div>
+                                <div><span className="text-gray-500 mr-2">Vol. Est:</span><span className="font-semibold text-blue-600">R$ {(Object.values(summaries.fundSummary).reduce((a,b)=>a+b.est,0)).toFixed(1)}M</span></div>
                              </div>
                         </div>
                      </div>
@@ -958,7 +1009,7 @@ const OriginationPipelinePage: React.FC<OriginationPipelinePageProps> = ({ onNav
                                         <td className="px-5 py-3 text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap">{row.analyst}</td>
                                         <td className="px-5 py-3">{row.fund}</td>
                                         <td className="px-5 py-3 text-right font-medium text-gray-900 dark:text-white whitespace-nowrap">
-                                            {row.volume ? `R$ ${(row.volume / 1000000).toFixed(2)}M` : '-'}
+                                            {row.volume ? `R$ ${(row.volume).toFixed(2)}M` : '-'}
                                         </td>
                                         <td className="px-5 py-3">
                                             <div className="flex gap-1">
