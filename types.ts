@@ -165,8 +165,9 @@ export interface Operation {
   status?: OperationStatus;
   lastUpdated?: number;
   movedToLegacyDate?: string; // ISO string
-  litigationLawyerComments?: string | null;
+
   litigationComments?: LitigationComment[];
+  wasStructured?: boolean;
 }
 
 export interface LitigationComment {
@@ -279,6 +280,7 @@ export interface StructuringOperation {
   tasks?: Task[];
   contacts?: Contact[];
   taskExceptions?: string[];
+  wasStructured?: boolean;
 }
 
 export interface EconomicGroup {

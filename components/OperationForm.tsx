@@ -84,6 +84,7 @@ const OperationForm: React.FC<OperationFormProps> = ({ onClose, onSave, initialD
   const [ratingGroup, setRatingGroup] = useState<Rating>(initialData?.ratingGroup || seedData?.ratingGroup || 'Baa1');
   const [watchlist, setWatchlist] = useState<WatchlistStatus>(initialData?.watchlist || seedData?.watchlist || WatchlistStatus.VERDE);
   const [notes, setNotes] = useState(initialData?.notes || seedData?.notes || '');
+  const [wasStructured, setWasStructured] = useState<boolean>(initialData?.wasStructured || seedData?.wasStructured || false);
 
   const handleCheckboxChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const { name, checked } = event.target;
@@ -115,6 +116,7 @@ const OperationForm: React.FC<OperationFormProps> = ({ onClose, onSave, initialD
       ratingGroup,
       watchlist,
       notes,
+      wasStructured,
       covenants: initialData?.covenants || seedData?.covenants || { ltv: null, dscr: null }, 
     };
     onSave(newOperationData);
@@ -201,6 +203,21 @@ const OperationForm: React.FC<OperationFormProps> = ({ onClose, onSave, initialD
                 <Label htmlFor="responsibleAnalyst">Analista Responsável</Label>
                 <Input id="responsibleAnalyst" type="text" value={responsibleAnalyst} onChange={e => setResponsibleAnalyst(e.target.value)} required />
             </div>
+        </FormRow>
+
+        <FormRow>
+          <div className="flex items-center mt-4">
+              <input 
+                  id="wasStructured" 
+                  type="checkbox" 
+                  checked={wasStructured} 
+                  onChange={e => setWasStructured(e.target.checked)} 
+                  className="h-4 w-4 text-blue-600 border-gray-300 dark:border-gray-600 rounded focus:ring-blue-500 bg-white dark:bg-gray-700" 
+              />
+              <label htmlFor="wasStructured" className="ml-2 block text-sm font-medium text-gray-900 dark:text-gray-200">
+                  Passou pela Estruturação / Originação Interna (Origination Pipeline)
+              </label>
+          </div>
         </FormRow>
 
          {!initialData && (

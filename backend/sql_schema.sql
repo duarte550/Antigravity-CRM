@@ -67,8 +67,8 @@ CREATE TABLE IF NOT EXISTS cri_cra_dev.crm.operations (
     is_active BOOLEAN,
     originator STRING,
     modality STRING,
-    litigation_lawyer_comments STRING,
-    created_at TIMESTAMP
+    created_at TIMESTAMP,
+    was_structured BOOLEAN
 );
 
 CREATE TABLE IF NOT EXISTS cri_cra_dev.crm.operation_series (

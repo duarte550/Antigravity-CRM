@@ -26,7 +26,6 @@ const WatchlistPage: React.FC<WatchlistPageProps> = ({ operations, onUpdateOpera
     const [isReportModalOpen, setIsReportModalOpen] = useState(false);
     const [operationToEdit, setOperationToEdit] = useState<Operation | null>(null);
     const [litigationCommentsOperation, setLitigationCommentsOperation] = useState<Operation | null>(null);
-    const [litigationCommentsTemp, setLitigationCommentsTemp] = useState<string>('');
     
     // State for editing existing events
     const [editingHistoryEntry, setEditingHistoryEntry] = useState<RatingHistoryEntry | null>(null);
@@ -311,7 +310,6 @@ const WatchlistPage: React.FC<WatchlistPageProps> = ({ operations, onUpdateOpera
                             onOpenUpdateModal={() => handleOpenModal(op)}
                             onOpenLitigationComments={() => {
                                 setLitigationCommentsOperation(op);
-                                setLitigationCommentsTemp(op.litigationLawyerComments || '');
                             }}
                             onEditEvent={(historyEntry, event) => handleEditEvent(op, historyEntry, event)}
                             onDeleteEvent={(historyEntryId, eventId) => handleDeleteEvent(op, historyEntryId, eventId)}

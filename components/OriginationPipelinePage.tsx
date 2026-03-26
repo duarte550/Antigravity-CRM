@@ -41,6 +41,7 @@ const OriginationPipelinePage: React.FC<OriginationPipelinePageProps> = ({ onNav
 
   const [resumoSearchTerm, setResumoSearchTerm] = useState('');
   const [resumoSortConfig, setResumoSortConfig] = useState<{ key: string, desc: boolean }>({ key: 'createdAt', desc: true });
+  const [showLiquidated, setShowLiquidated] = useState(false);
 
 
 
@@ -159,7 +160,10 @@ const OriginationPipelinePage: React.FC<OriginationPipelinePageProps> = ({ onNav
   }, [filteredOperations]);
 
   useEffect(() => {
-    fetchOperations();
+    fetchOperations(showLiquidated);
+  }, [showLiquidated]);
+
+  useEffect(() => {
     fetchMasterGroups();
   }, []);
 
@@ -175,10 +179,11 @@ const OriginationPipelinePage: React.FC<OriginationPipelinePageProps> = ({ onNav
     }
   };
 
-  const fetchOperations = async () => {
+  const fetchOperations = async (includeLiquidated: boolean = false) => {
     try {
       setIsLoading(true);
-      const response = await fetchApi(`${apiUrl}/api/structuring-operations`);
+      const url = includeLiquidated ? `${apiUrl}/api/structuring-operations?includeLiquidated=true` : `${apiUrl}/api/structuring-operations`;
+      const response = await fetchApi(url);
       if (!response.ok) throw new Error('Failed to fetch structuring operations');
       const data = await response.json();
       setOperations(data);
@@ -421,7 +426,15 @@ const OriginationPipelinePage: React.FC<OriginationPipelinePageProps> = ({ onNav
   };
 
   const sortedAndFilteredResumoOps = useMemo(() => {
-        let ops = filteredOperations.map(op => {
+        let baseOps = operations.filter(op => {
+            if (!showLiquidated && op.isActive === false) return false;
+            if (selectedAnalyst && op.analyst !== selectedAnalyst && !op.recentEvents?.some(e => e.registeredBy === selectedAnalyst)) return false;
+            if (masterGroupFilter !== 'All' && (op.masterGroupName || 'Sem Master Group') !== masterGroupFilter) return false;
+            if (economicGroupFilter !== 'All' && (op.economicGroupName || 'Sem Grupo Econômico') !== economicGroupFilter) return false;
+            return true;
+        });
+
+        let ops = baseOps.map(op => {
             const totalVol = op.series?.reduce((acc, s) => acc + (s.volume || 0), 0) || 0;
             const rates = op.series?.map(s => parseFloat((s.rate || '').replace(/[^0-9.-]/g, ''))).filter(r => !isNaN(r)) || [];
             const avgRateVal = rates.length > 0 ? (rates.reduce((a,b)=>a+b,0) / rates.length) : -999;
@@ -691,7 +704,7 @@ const OriginationPipelinePage: React.FC<OriginationPipelinePageProps> = ({ onNav
 
             {activeTab === 'resumo' && (
                 <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden flex-1 flex flex-col mt-2 h-full">
-                    <div className="p-3 border-b border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/80">
+                    <div className="p-3 border-b border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/80 flex justify-between items-center gap-4">
                         <input 
                             type="text" 
                             placeholder="Pesquisar operações..." 
@@ -699,6 +712,15 @@ const OriginationPipelinePage: React.FC<OriginationPipelinePageProps> = ({ onNav
                             onChange={e => setResumoSearchTerm(e.target.value)}
                             className="w-full max-w-sm px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-sm focus:ring-blue-500 focus:border-blue-500 text-gray-900 dark:text-gray-100"
                         />
+                        <label className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300 cursor-pointer font-medium hover:text-blue-600 dark:hover:text-blue-400 transition-colors">
+                            <input 
+                                type="checkbox" 
+                                checked={showLiquidated} 
+                                onChange={e => setShowLiquidated(e.target.checked)} 
+                                className="w-4 h-4 rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500 focus:ring-2 bg-white dark:bg-gray-700 cursor-pointer transition-colors" 
+                            />
+                            Incluir liquidadas/legado
+                        </label>
                     </div>
                     <div className="overflow-x-auto flex-1 h-full">
                         <table className="min-w-full text-sm text-left text-gray-500 dark:text-gray-400">

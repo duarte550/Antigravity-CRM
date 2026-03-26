@@ -263,7 +263,7 @@ def add_structuring_operation():
             elif economic_group_id == '':
                 economic_group_id = None
                 
-            cursor.execute("INSERT INTO cri_cra_dev.crm.operations (master_group_id, economic_group_id, name, area, pipeline_stage, liquidation_date, risk, temperature, structuring_analyst, is_active, originator, modality, created_at, is_structuring) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, TRUE)",
+            cursor.execute("INSERT INTO cri_cra_dev.crm.operations (master_group_id, economic_group_id, name, area, pipeline_stage, liquidation_date, risk, temperature, structuring_analyst, is_active, originator, modality, created_at, is_structuring, was_structured) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, TRUE, TRUE)",
                            (master_group_id, economic_group_id, data.get('name'), data.get('area'), data.get('stage', 'Conversa Inicial'), parse_iso_date(data.get('liquidationDate')), data.get('risk'), data.get('temperature'), data.get('analyst'), True, data.get('originator'), data.get('modality'), datetime.now()))
             cursor.execute("SELECT id FROM cri_cra_dev.crm.operations ORDER BY id DESC LIMIT 1")
             new_id = cursor.fetchone().id
@@ -288,8 +288,12 @@ def add_structuring_operation():
 def get_structuring_operations():
     conn = get_db_connection()
     try:
+        include_liquidated = request.args.get('includeLiquidated', 'false').lower() == 'true'
         with conn.cursor() as cursor:
-            cursor.execute("SELECT o.id, o.name, o.area, o.pipeline_stage as stage, o.liquidation_date, o.risk, o.temperature, o.structuring_analyst as analyst, o.is_active, o.originator, o.modality, o.created_at, mg.name as master_group_name FROM cri_cra_dev.crm.operations o JOIN cri_cra_dev.crm.master_groups mg ON o.master_group_id = mg.id WHERE o.is_structuring = TRUE")
+            if include_liquidated:
+                cursor.execute("SELECT o.id, o.name, o.area, o.pipeline_stage as stage, o.liquidation_date, o.risk, o.temperature, o.structuring_analyst as analyst, o.is_active, o.originator, o.modality, o.created_at, mg.name as master_group_name FROM cri_cra_dev.crm.operations o JOIN cri_cra_dev.crm.master_groups mg ON o.master_group_id = mg.id WHERE o.is_structuring = TRUE OR (o.is_structuring = FALSE AND o.was_structured = TRUE) OR (o.is_structuring = FALSE AND EXISTS(SELECT 1 FROM cri_cra_dev.crm.operation_stages WHERE operation_id = o.id))")
+            else:
+                cursor.execute("SELECT o.id, o.name, o.area, o.pipeline_stage as stage, o.liquidation_date, o.risk, o.temperature, o.structuring_analyst as analyst, o.is_active, o.originator, o.modality, o.created_at, mg.name as master_group_name FROM cri_cra_dev.crm.operations o JOIN cri_cra_dev.crm.master_groups mg ON o.master_group_id = mg.id WHERE o.is_structuring = TRUE")
             sos = [format_row(r, cursor) for r in cursor.fetchall()]
             
             for so in sos:

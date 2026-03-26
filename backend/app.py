@@ -125,7 +125,7 @@ def fetch_full_operation(cursor, operation_id):
         'description': operation_db.get('description'),
         'status': operation_db.get('status') or 'Ativa',
         'movedToLegacyDate': safe_isoformat(operation_db.get('moved_to_legacy_date')),
-        'litigationLawyerComments': operation_db.get('litigation_lawyer_comments'),
+        'wasStructured': operation_db.get('was_structured') or False,
         'notes': None # Initialize notes as None
     }
 
@@ -307,7 +307,7 @@ def manage_operations_collection():
                         },
                         'description': op_db.get('description'),
                         'status': op_db.get('status') or 'Ativa',
-                        'litigationLawyerComments': op_db.get('litigation_lawyer_comments'),
+                        'wasStructured': op_db.get('was_structured') or False,
                         'projects': [], 'guarantees': [], 'events': [], 'taskRules': [], 'ratingHistory': [], 'tasks': [], 'contacts': [],
                         'notes': notes_map.get(op_id)
                     }
@@ -425,7 +425,7 @@ def manage_operations_collection():
                         call_frequency=?, df_frequency=?, segmento=?, rating_operation=?, watchlist=?, 
                         ltv=?, dscr=?, monitoring_news=?, monitoring_fii_report=?, monitoring_operational_info=?, 
                         monitoring_receivables_portfolio=?, monitoring_construction_report=?, monitoring_commercial_info=?, 
-                        monitoring_spe_dfs=?, estimated_date=?, status=?, description=?, litigation_lawyer_comments=?, master_group_id=?, economic_group_id=?,
+                        monitoring_spe_dfs=?, estimated_date=?, status=?, description=?, master_group_id=?, economic_group_id=?,
                         is_structuring=FALSE, is_active=TRUE
                         WHERE id=?
                     """, (
@@ -436,12 +436,12 @@ def manage_operations_collection():
                         dm.get('news'), dm.get('fiiReport'), dm.get('operationalInfo'), 
                         dm.get('receivablesPortfolio'), dm.get('monthlyConstructionReport'), 
                         dm.get('monthlyCommercialInfo'), dm.get('speDfs'), est_date, 
-                        data.get('status', 'Ativa'), data.get('description'), data.get('litigationLawyerComments'), data.get('masterGroupId'), data.get('economicGroupId'),
+                        data.get('status', 'Ativa'), data.get('description'), data.get('masterGroupId'), data.get('economicGroupId'),
                         structuring_op_id
                     ))
                     new_op_id = structuring_op_id
                 else:
-                    cursor.execute( "INSERT INTO cri_cra_dev.crm.operations (name, area, operation_type, maturity_date, responsible_analyst, structuring_analyst, review_frequency, call_frequency, df_frequency, segmento, rating_operation, watchlist, ltv, dscr, monitoring_news, monitoring_fii_report, monitoring_operational_info, monitoring_receivables_portfolio, monitoring_construction_report, monitoring_commercial_info, monitoring_spe_dfs, estimated_date, status, description, litigation_lawyer_comments, master_group_id, economic_group_id, is_structuring, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, FALSE, TRUE)", (data['name'], data['area'], data['operationType'], maturity_date, data['responsibleAnalyst'], data.get('structuringAnalyst'), data['reviewFrequency'], data['callFrequency'], data['dfFrequency'], data['segmento'], data['ratingOperation'], data['watchlist'], data.get('covenants', {}).get('ltv'), data.get('covenants', {}).get('dscr'), dm.get('news'), dm.get('fiiReport'), dm.get('operationalInfo'), dm.get('receivablesPortfolio'), dm.get('monthlyConstructionReport'), dm.get('monthlyCommercialInfo'), dm.get('speDfs'), est_date, data.get('status', 'Ativa'), data.get('description'), data.get('litigationLawyerComments'), data.get('masterGroupId'), data.get('economicGroupId')) )
+                    cursor.execute( "INSERT INTO cri_cra_dev.crm.operations (name, area, operation_type, maturity_date, responsible_analyst, structuring_analyst, review_frequency, call_frequency, df_frequency, segmento, rating_operation, watchlist, ltv, dscr, monitoring_news, monitoring_fii_report, monitoring_operational_info, monitoring_receivables_portfolio, monitoring_construction_report, monitoring_commercial_info, monitoring_spe_dfs, estimated_date, status, description, master_group_id, economic_group_id, is_structuring, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, FALSE, TRUE)", (data['name'], data['area'], data['operationType'], maturity_date, data['responsibleAnalyst'], data.get('structuringAnalyst'), data['reviewFrequency'], data['callFrequency'], data['dfFrequency'], data['segmento'], data['ratingOperation'], data['watchlist'], data.get('covenants', {}).get('ltv'), data.get('covenants', {}).get('dscr'), dm.get('news'), dm.get('fiiReport'), dm.get('operationalInfo'), dm.get('receivablesPortfolio'), dm.get('monthlyConstructionReport'), dm.get('monthlyCommercialInfo'), dm.get('speDfs'), est_date, data.get('status', 'Ativa'), data.get('description'), data.get('masterGroupId'), data.get('economicGroupId')) )
                     cursor.execute("SELECT id FROM cri_cra_dev.crm.operations WHERE name = ? ORDER BY id DESC LIMIT 1", (data['name'],))
                     new_op_id = cursor.fetchone().id
                 
@@ -577,17 +577,18 @@ def _update_operation_db_internal(cursor, op_id, data):
     
     est_date_val = data.get('estimatedDate')
     if est_date_val == "": est_date_val = None
+    final_est_date = parse_iso_date(est_date_val) if 'estimatedDate' in data else old_op_db.get('estimated_date')
     
     final_maturity_date = parse_iso_date(data.get('maturityDate')) if 'maturityDate' in data else old_op_db.get('maturity_date')
     final_description = data.get('description', old_op_db.get('description'))
-    final_litigation_lawyer_comments = data.get('litigationLawyerComments', old_op_db.get('litigation_lawyer_comments'))
     final_status = data.get('status', old_op_db.get('status'))
     final_moved_to_legacy_date = parse_iso_date(data.get('movedToLegacyDate')) if 'movedToLegacyDate' in data else old_op_db.get('moved_to_legacy_date')
+    final_was_structured = data.get('wasStructured') if 'wasStructured' in data else old_op_db.get('was_structured')
 
     final_master_group_id = data.get('masterGroupId', old_op_db.get('master_group_id'))
     final_economic_group_id = data.get('economicGroupId', old_op_db.get('economic_group_id'))
 
-    cursor.execute( "UPDATE cri_cra_dev.crm.operations SET name = ?, area = ?, rating_operation = ?, watchlist = ?, ltv = ?, dscr = ?, estimated_date = ?, maturity_date = ?, responsible_analyst = ?, structuring_analyst = ?, segmento = ?, description = ?, litigation_lawyer_comments = ?, status = ?, moved_to_legacy_date = ?, master_group_id = ?, economic_group_id = ? WHERE id = ?", (data.get('name', old_op_db.get('name')), data.get('area', old_op_db.get('area')), data.get('ratingOperation', old_op_db.get('rating_operation')), data.get('watchlist', old_op_db.get('watchlist')), cov.get('ltv', old_op_db.get('ltv')), cov.get('dscr', old_op_db.get('dscr')), final_est_date, final_maturity_date, data.get('responsibleAnalyst', old_op_db.get('responsible_analyst')), data.get('structuringAnalyst', old_op_db.get('structuring_analyst')), data.get('segmento', old_op_db.get('segmento')), final_description, final_litigation_lawyer_comments, final_status, final_moved_to_legacy_date, final_master_group_id, final_economic_group_id, op_id) )
+    cursor.execute( "UPDATE cri_cra_dev.crm.operations SET name = ?, area = ?, rating_operation = ?, watchlist = ?, ltv = ?, dscr = ?, estimated_date = ?, maturity_date = ?, responsible_analyst = ?, structuring_analyst = ?, segmento = ?, description = ?, status = ?, moved_to_legacy_date = ?, master_group_id = ?, economic_group_id = ?, was_structured = ? WHERE id = ?", (data.get('name', old_op_db.get('name')), data.get('area', old_op_db.get('area')), data.get('ratingOperation', old_op_db.get('rating_operation')), data.get('watchlist', old_op_db.get('watchlist')), cov.get('ltv', old_op_db.get('ltv')), cov.get('dscr', old_op_db.get('dscr')), final_est_date, final_maturity_date, data.get('responsibleAnalyst', old_op_db.get('responsible_analyst')), data.get('structuringAnalyst', old_op_db.get('structuring_analyst')), data.get('segmento', old_op_db.get('segmento')), final_description, final_status, final_moved_to_legacy_date, final_master_group_id, final_economic_group_id, final_was_structured, op_id) )
     
     if 'notes' in data:
         cursor.execute("SELECT 1 FROM cri_cra_dev.crm.operation_review_notes WHERE operation_id = ?", (op_id,))
