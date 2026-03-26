@@ -7,6 +7,8 @@ interface PorFundoTabProps {
     apiUrl: string;
     showToast: (msg: string, type: 'success' | 'error') => void;
     onEditOperation: (op: StructuringOperation) => void;
+    pushToGenericQueue?: (url: string, method: string, payload: any) => void;
+    onCreateOperation?: () => void;
 }
 
 const formatCurrency = (val: number) => `R$ ${(val).toFixed(2)}M`;
@@ -19,7 +21,7 @@ const getRiscoValor = (riscoData: any[], info: string) => {
     return item ? (item.Valor || 0) : 0;
 };
 
-const PorFundoTab: React.FC<PorFundoTabProps> = ({ operations, apiUrl, showToast, onEditOperation }) => {
+const PorFundoTab: React.FC<PorFundoTabProps> = ({ operations, apiUrl, showToast, onEditOperation, pushToGenericQueue, onCreateOperation }) => {
     const [funds, setFunds] = useState<string[]>([]);
     const [selectedFund, setSelectedFund] = useState<string>('');
     const [isLoading, setIsLoading] = useState(false);
@@ -37,7 +39,7 @@ const PorFundoTab: React.FC<PorFundoTabProps> = ({ operations, apiUrl, showToast
     const [isFetchingFund, setIsFetchingFund] = useState(false);
     
     const [selectedTemperatures, setSelectedTemperatures] = useState<string[]>(ALL_TEMPERATURES);
-    const [overrides, setOverrides] = useState<Record<number, any>>({});
+    const [overrides, setOverrides] = useState<Record<string, any>>({});
 
     useEffect(() => {
         fetchApi(`${apiUrl}/api/fund-simulator/funds`)
@@ -82,7 +84,7 @@ const PorFundoTab: React.FC<PorFundoTabProps> = ({ operations, apiUrl, showToast
 
     const saveInputs = async () => {
         try {
-            const newOverrides: Record<number, any> = { ...overrides };
+            const newOverrides: Record<string, any> = { ...overrides };
             simulatedOps.forEach(op => {
                 newOverrides[op.id] = {
                     volume: op.volume,
@@ -93,16 +95,22 @@ const PorFundoTab: React.FC<PorFundoTabProps> = ({ operations, apiUrl, showToast
             });
             const payload = { ...inputs, simulated_ops_overrides: JSON.stringify(newOverrides) };
 
-            const res = await fetchApi(`${apiUrl}/api/fund-simulator/inputs/${encodeURIComponent(selectedFund)}`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-            });
-            if (res.ok) {
-                setOverrides(newOverrides);
-                showToast("Valores salvos com sucesso", "success");
+            setOverrides(newOverrides);
+
+            if (pushToGenericQueue) {
+                pushToGenericQueue(`${apiUrl}/api/fund-simulator/inputs/${encodeURIComponent(selectedFund)}`, 'POST', payload);
+                showToast("Premissas na fila de salvação (sync-queue)", "success");
             } else {
-                throw new Error("Erro na API");
+                const res = await fetchApi(`${apiUrl}/api/fund-simulator/inputs/${encodeURIComponent(selectedFund)}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                if (res.ok) {
+                    showToast("Valores salvos com sucesso", "success");
+                } else {
+                    throw new Error("Erro na API");
+                }
             }
         } catch (error) {
             console.error(error);
@@ -127,32 +135,42 @@ const PorFundoTab: React.FC<PorFundoTabProps> = ({ operations, apiUrl, showToast
             o.series?.some(s => s.fund === selectedFund) &&
             selectedTemperatures.includes(o.temperature || 'N/D')
         );
-        return matching.map(o => {
-            const mySeries = o.series?.find(s => s.fund === selectedFund);
-            const ov = overrides[o.id] || {};
-            return {
-                id: o.id,
-                name: o.name,
-                volume: ov.volume !== undefined ? ov.volume : (mySeries?.volume || 0),
-                liquidationDate: o.liquidationDate,
-                rate: ov.rate !== undefined ? ov.rate : ((mySeries?.rate && !isNaN(Number(mySeries.rate))) ? (Number(mySeries.rate) * 100).toFixed(2).replace('.', ',') : (mySeries?.rate || '')),
-                indexer: ov.indexer !== undefined ? ov.indexer : (mySeries?.indexer || 'CDI'),
-                isActiveInSimulation: ov.isActiveInSimulation !== undefined ? ov.isActiveInSimulation : true,
-                originalOp: o
-            };
+        const rows: any[] = [];
+        matching.forEach(o => {
+            const seriesNoFundo = o.series?.filter(s => s.fund === selectedFund) || [];
+            seriesNoFundo.forEach((s) => {
+                const uniqueId = s.id ? `${o.id}_${s.id}` : `${o.id}_${s.name.replace(/\s+/g, '')}`;
+                const ov = overrides[uniqueId] || {};
+                rows.push({
+                    id: uniqueId,
+                    name: `${o.name} - ${s.name}`,
+                    volume: ov.volume !== undefined ? ov.volume : (s.volume || 0),
+                    liquidationDate: o.liquidationDate,
+                    rate: ov.rate !== undefined ? ov.rate : ((s.rate && !isNaN(Number(s.rate))) ? (Number(s.rate) * 100).toFixed(2).replace('.', ',') : (s.rate || '')),
+                    indexer: ov.indexer !== undefined ? ov.indexer : (s.indexer || 'CDI'),
+                    isActiveInSimulation: ov.isActiveInSimulation !== undefined ? ov.isActiveInSimulation : true,
+                    originalOp: o
+                });
+            });
         });
+        return rows;
     }, [operations, selectedFund, selectedTemperatures, overrides]);
 
     // Estado local para simulação das saídas
     const [simulatedOps, setSimulatedOps] = useState(opSaidasBase);
     const [isSimulating, setIsSimulating] = useState(false);
+    const [isAddingNewOp, setIsAddingNewOp] = useState(false);
+    const [selectedOpIdToAdd, setSelectedOpIdToAdd] = useState<number | ''>('');
+    const availableOps = useMemo(() => {
+        return operations.filter(o => o.isActive !== false);
+    }, [operations]);
 
     useEffect(() => {
         setSimulatedOps(opSaidasBase);
         setIsSimulating(false);
     }, [opSaidasBase]);
 
-    const handleSimulateChange = (id: number, field: string, value: string | number | boolean) => {
+    const handleSimulateChange = (id: string | number, field: string, value: string | number | boolean) => {
         setIsSimulating(true);
         setSimulatedOps(prev => prev.map(op => op.id === id ? { ...op, [field]: value } : op));
     };
@@ -444,6 +462,60 @@ const PorFundoTab: React.FC<PorFundoTabProps> = ({ operations, apiUrl, showToast
                                         <td className="p-3 text-right text-gray-400 dark:text-gray-500 text-sm align-top pt-5">{plAtual ? formatPercent((o.volume / plAtual) * 100) : '-'}</td>
                                     </tr>
                                 ))}
+
+                                {/* Adicionar Operação */}
+                                <tr className="border-b border-gray-50 dark:border-gray-700/30">
+                                    <td colSpan={3} className="p-3 bg-gray-50/20 dark:bg-gray-800/10">
+                                        {!isAddingNewOp ? (
+                                            <button onClick={() => setIsAddingNewOp(true)} className="w-full py-2.5 border-2 border-dashed border-gray-200 dark:border-gray-700 rounded-lg text-sm text-gray-500 hover:text-blue-500 hover:border-blue-300 dark:hover:border-blue-600 transition-colors bg-white/50 dark:bg-gray-800/50">
+                                                + Adicionar operação ao Liquidador
+                                            </button>
+                                        ) : (
+                                            <div className="p-4 border border-blue-100 dark:border-blue-900/30 bg-blue-50/30 dark:bg-blue-900/10 rounded-xl space-y-4">
+                                                <div className="flex justify-between items-center">
+                                                    <span className="text-sm font-semibold text-gray-700 dark:text-gray-300 flex items-center gap-1.5">
+                                                        <svg className="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v3m0 0v3m0-3h3m-3 0H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                                        Incluir Operação no Mix de Liquidação
+                                                    </span>
+                                                    <button onClick={() => { setIsAddingNewOp(false); setSelectedOpIdToAdd(''); }} className="text-gray-400 hover:text-red-500 transition-colors p-1"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg></button>
+                                                </div>
+                                                <div className="flex gap-2">
+                                                    <select 
+                                                        className="flex-1 text-sm border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                                                        value={selectedOpIdToAdd}
+                                                        onChange={e => setSelectedOpIdToAdd(e.target.value === '' ? '' : Number(e.target.value))}
+                                                    >
+                                                        <option value="">-- Selecione uma operação existente ativa --</option>
+                                                        {availableOps.map(op => <option key={op.id} value={op.id}>{op.name}</option>)}
+                                                    </select>
+                                                    <button 
+                                                        disabled={!selectedOpIdToAdd}
+                                                        onClick={() => {
+                                                            if (!selectedOpIdToAdd) return;
+                                                            const op = operations.find(o => o.id === selectedOpIdToAdd);
+                                                            if (!op) return;
+                                                            const updatedOp = { ...op, series: [...(op.series || []), { name: `Nova Série - ${selectedFund}`, rate: '', indexer: 'CDI', volume: 0, fund: selectedFund }] };
+                                                            onEditOperation(updatedOp);
+                                                            setIsAddingNewOp(false);
+                                                            setSelectedOpIdToAdd('');
+                                                        }}
+                                                        className="px-4 py-2 bg-blue-600 text-white text-sm font-bold rounded-md hover:bg-blue-700 disabled:opacity-50 transition-colors shadow-sm"
+                                                    >
+                                                        Vincular
+                                                    </button>
+                                                </div>
+                                                {onCreateOperation && (
+                                                    <div className="pt-3 border-t border-blue-100 dark:border-blue-800/30 text-center flex items-center justify-center gap-1.5">
+                                                        <span className="text-xs text-gray-500 dark:text-gray-400">A operação que você procura não existe? </span>
+                                                        <button onClick={onCreateOperation} className="text-xs text-blue-600 dark:text-blue-400 font-bold hover:underline">
+                                                            Criar Nova Operação em Estruturação
+                                                        </button>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
+                                    </td>
+                                </tr>
 
                                 {/* Nova Linha de Destaque: Caixa após Saídas */}
                                 <tr className="bg-blue-50/50 dark:bg-blue-900/20 border-t border-blue-100 dark:border-blue-800/40">

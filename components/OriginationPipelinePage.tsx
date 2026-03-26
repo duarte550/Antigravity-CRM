@@ -934,8 +934,13 @@ const OriginationPipelinePage: React.FC<OriginationPipelinePageProps> = ({ onNav
                         operations={filteredOperations} 
                         apiUrl={apiUrl} 
                         showToast={showToast} 
+                        pushToGenericQueue={pushToGenericQueue}
                         onEditOperation={(op) => {
                             setOperationToEdit(op);
+                            setIsFormOpen(true);
+                        }}
+                        onCreateOperation={() => {
+                            setOperationToEdit(null);
                             setIsFormOpen(true);
                         }}
                     />
