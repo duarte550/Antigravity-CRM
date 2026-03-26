@@ -205,15 +205,7 @@ const OriginationPipelinePage: React.FC<OriginationPipelinePageProps> = ({ onNav
     
     // In background sync
     try {
-      const payload = {
-          name: updatedOp.name,
-          stage: updatedOp.stage,
-          liquidationDate: updatedOp.liquidationDate,
-          risk: updatedOp.risk,
-          temperature: updatedOp.temperature,
-          isActive: updatedOp.isActive,
-          series: updatedOp.series
-      };
+      const payload = { ...updatedOp };
       if (pushToGenericQueue) {
          pushToGenericQueue(`${apiUrl}/api/structuring-operations/${id}`, 'PUT', payload);
          if (field === 'isActive' && value === false) {
@@ -756,6 +748,9 @@ const OriginationPipelinePage: React.FC<OriginationPipelinePageProps> = ({ onNav
                                     <th scope="col" className="px-4 py-3 border-b dark:border-gray-700 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600" onClick={() => toggleResumoSort('_lastEvent')}>
                                         Último evento {resumoSortConfig.key === '_lastEvent' && (resumoSortConfig.desc ? '↓' : '↑')}
                                     </th>
+                                    <th scope="col" className="px-4 py-3 border-b dark:border-gray-700">
+                                        Observações
+                                    </th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -778,6 +773,19 @@ const OriginationPipelinePage: React.FC<OriginationPipelinePageProps> = ({ onNav
                                         <td className="px-4 py-3 text-right">{op._avgRateStr}</td>
                                         <td className="px-4 py-3 text-sm font-medium">{op.stage}</td>
                                         <td className="px-4 py-3 text-xs text-gray-500 dark:text-gray-400 truncate max-w-[150px]" title={op._lastEvent}>{op._lastEvent}</td>
+                                        <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
+                                            <input 
+                                              type="text" 
+                                              defaultValue={op.description || ''}
+                                              onBlur={(e) => {
+                                                if (e.target.value !== (op.description || '')) {
+                                                   handleUpdateField(op.id, 'description', e.target.value);
+                                                }
+                                              }}
+                                              className="w-full min-w-[150px] bg-transparent border-b border-transparent hover:border-gray-300 dark:hover:border-gray-600 focus:border-blue-500 focus:ring-0 text-xs px-1 py-0.5 transition-colors dark:text-gray-300"
+                                              placeholder="Adicionar obs..."
+                                            />
+                                        </td>
                                     </tr>
                                 )})}
                             </tbody>

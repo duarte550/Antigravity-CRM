@@ -291,9 +291,9 @@ def get_structuring_operations():
         include_liquidated = request.args.get('includeLiquidated', 'false').lower() == 'true'
         with conn.cursor() as cursor:
             if include_liquidated:
-                cursor.execute("SELECT o.id, o.name, o.area, o.pipeline_stage as stage, o.liquidation_date, o.risk, o.temperature, o.structuring_analyst as analyst, o.is_active, o.originator, o.modality, o.created_at, mg.name as master_group_name FROM cri_cra_dev.crm.operations o JOIN cri_cra_dev.crm.master_groups mg ON o.master_group_id = mg.id WHERE o.is_structuring = TRUE OR (o.is_structuring = FALSE AND o.was_structured = TRUE) OR (o.is_structuring = FALSE AND EXISTS(SELECT 1 FROM cri_cra_dev.crm.operation_stages WHERE operation_id = o.id))")
+                cursor.execute("SELECT o.id, o.name, o.area, o.pipeline_stage as stage, o.liquidation_date, o.risk, o.temperature, o.structuring_analyst as analyst, o.is_active, o.originator, o.modality, o.created_at, o.description, mg.name as master_group_name FROM cri_cra_dev.crm.operations o JOIN cri_cra_dev.crm.master_groups mg ON o.master_group_id = mg.id WHERE o.is_structuring = TRUE OR (o.is_structuring = FALSE AND o.was_structured = TRUE) OR (o.is_structuring = FALSE AND EXISTS(SELECT 1 FROM cri_cra_dev.crm.operation_stages WHERE operation_id = o.id))")
             else:
-                cursor.execute("SELECT o.id, o.name, o.area, o.pipeline_stage as stage, o.liquidation_date, o.risk, o.temperature, o.structuring_analyst as analyst, o.is_active, o.originator, o.modality, o.created_at, mg.name as master_group_name FROM cri_cra_dev.crm.operations o JOIN cri_cra_dev.crm.master_groups mg ON o.master_group_id = mg.id WHERE o.is_structuring = TRUE")
+                cursor.execute("SELECT o.id, o.name, o.area, o.pipeline_stage as stage, o.liquidation_date, o.risk, o.temperature, o.structuring_analyst as analyst, o.is_active, o.originator, o.modality, o.created_at, o.description, mg.name as master_group_name FROM cri_cra_dev.crm.operations o JOIN cri_cra_dev.crm.master_groups mg ON o.master_group_id = mg.id WHERE o.is_structuring = TRUE")
             sos = [format_row(r, cursor) for r in cursor.fetchall()]
             
             for so in sos:
@@ -349,7 +349,7 @@ def manage_structuring_operation(so_id):
     try:
         if request.method == 'GET':
             with conn.cursor() as cursor:
-                cursor.execute("SELECT o.id, o.master_group_id, o.name, o.area, o.pipeline_stage as stage, o.liquidation_date, o.risk, o.temperature, o.structuring_analyst as analyst, o.is_active, o.originator, o.modality, o.created_at, mg.name as master_group_name FROM cri_cra_dev.crm.operations o JOIN cri_cra_dev.crm.master_groups mg ON o.master_group_id = mg.id WHERE o.id = ? AND o.is_structuring = TRUE", (so_id,))
+                cursor.execute("SELECT o.id, o.master_group_id, o.name, o.area, o.pipeline_stage as stage, o.liquidation_date, o.risk, o.temperature, o.structuring_analyst as analyst, o.is_active, o.originator, o.modality, o.created_at, o.description, mg.name as master_group_name FROM cri_cra_dev.crm.operations o JOIN cri_cra_dev.crm.master_groups mg ON o.master_group_id = mg.id WHERE o.id = ? AND o.is_structuring = TRUE", (so_id,))
                 so_row = cursor.fetchone()
                 if not so_row:
                     return jsonify({"error": "Not found"}), 404
@@ -435,8 +435,8 @@ def manage_structuring_operation(so_id):
                 else:
                     new_economic_group_id = old_op.get('economic_group_id') if new_economic_group_id is None else new_economic_group_id
 
-                cursor.execute("UPDATE cri_cra_dev.crm.operations SET name=?, area=?, pipeline_stage=?, liquidation_date=?, risk=?, temperature=?, is_active=?, structuring_analyst=?, originator=?, modality=?, economic_group_id=? WHERE id=?",
-                               (data.get('name'), new_area, data.get('stage'), parse_iso_date(data.get('liquidationDate')), data.get('risk'), data.get('temperature'), is_active_val, data.get('analyst'), data.get('originator'), data.get('modality'), new_economic_group_id, so_id))
+                cursor.execute("UPDATE cri_cra_dev.crm.operations SET name=?, area=?, pipeline_stage=?, liquidation_date=?, risk=?, temperature=?, is_active=?, structuring_analyst=?, originator=?, modality=?, economic_group_id=?, description=? WHERE id=?",
+                               (data.get('name'), new_area, data.get('stage'), parse_iso_date(data.get('liquidationDate')), data.get('risk'), data.get('temperature'), is_active_val, data.get('analyst'), data.get('originator'), data.get('modality'), new_economic_group_id, data.get('description'), so_id))
                                
                 cursor.execute("DELETE FROM cri_cra_dev.crm.operation_series WHERE operation_id=?", (so_id,))
                 series = data.get('series', [])
