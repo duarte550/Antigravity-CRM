@@ -276,41 +276,44 @@ def update_schema():
             for table_name, columns in SCHEMA.items():
                 print(f"Ensuring schema logic for {table_name}...")
                 
-                # Build CREATE TABLE
-                cols_sql = ",\n                    ".join(columns)
-                create_sql = f"CREATE TABLE IF NOT EXISTS {table_name} (\n                    {cols_sql}\n                )"
-                cursor.execute(create_sql)
-
-                # Describe table to find missing columns
                 try:
-                    cursor.execute(f"DESCRIBE {table_name}")
-                    existing_cols = {row.col_name.lower() for row in cursor.fetchall()}
-                    
-                    for col_def in columns:
-                        if col_def.upper().startswith(("PRIMARY KEY", "FOREIGN KEY")):
-                            continue
+                    # Build CREATE TABLE
+                    cols_sql = ",\n                    ".join(columns)
+                    create_sql = f"CREATE TABLE IF NOT EXISTS {table_name} (\n                    {cols_sql}\n                )"
+                    cursor.execute(create_sql)
+
+                    # Describe table to find missing columns
+                    try:
+                        cursor.execute(f"DESCRIBE {table_name}")
+                        existing_cols = {row.col_name.lower() for row in cursor.fetchall()}
                         
-                        parts = col_def.split(maxsplit=1)
-                        col_name = parts[0]
-                        
-                        # Check if this column needs adding
-                        if col_name.lower() not in existing_cols:
-                            clean_type = parts[1]
-                            # Remove IDENTITY and constraints syntax for the ADD COLUMN command
-                            clean_type = re.sub(r'(?i)GENERATED\s+BY\s+DEFAULT\s+AS\s+IDENTITY', '', clean_type)
-                            clean_type = re.sub(r'(?i)PRIMARY\s+KEY', '', clean_type)
-                            # Removing NOT NULL so add column doesn't break due to existing data
-                            clean_type = re.sub(r'(?i)NOT\s+NULL', '', clean_type)
-                            clean_type = clean_type.strip()
+                        for col_def in columns:
+                            if col_def.upper().startswith(("PRIMARY KEY", "FOREIGN KEY")):
+                                continue
                             
-                            try:
-                                alter_sql = f"ALTER TABLE {table_name} ADD COLUMN {col_name} {clean_type}"
-                                cursor.execute(alter_sql)
-                                print(f"  Added column {col_name} to {table_name}")
-                            except Exception as e:
-                                print(f"  Failed to add column {col_name} to {table_name}: {e}")
+                            parts = col_def.split(maxsplit=1)
+                            col_name = parts[0]
+                            
+                            # Check if this column needs adding
+                            if col_name.lower() not in existing_cols:
+                                clean_type = parts[1]
+                                # Remove IDENTITY and constraints syntax for the ADD COLUMN command
+                                clean_type = re.sub(r'(?i)GENERATED\s+BY\s+DEFAULT\s+AS\s+IDENTITY', '', clean_type)
+                                clean_type = re.sub(r'(?i)PRIMARY\s+KEY', '', clean_type)
+                                # Removing NOT NULL so add column doesn't break due to existing data
+                                clean_type = re.sub(r'(?i)NOT\s+NULL', '', clean_type)
+                                clean_type = clean_type.strip()
+                                
+                                try:
+                                    alter_sql = f"ALTER TABLE {table_name} ADD COLUMN {col_name} {clean_type}"
+                                    cursor.execute(alter_sql)
+                                    print(f"  Added column {col_name} to {table_name}")
+                                except Exception as e:
+                                    print(f"  Failed to add column {col_name} to {table_name}: {e}")
+                    except Exception as e:
+                        print(f"Could not describe and sync columns for {table_name}: {e}")
                 except Exception as e:
-                    print(f"Could not describe and sync columns for {table_name}: {e}")
+                    print(f"Error executing CREATE TABLE or processing {table_name}: {e}")
 
             # 3. Post-sync adjustments (dropping NOT NULL constraints from old mandatory fields)
             nullable_cols = ['operation_type', 'maturity_date', 'responsible_analyst', 'review_frequency', 
