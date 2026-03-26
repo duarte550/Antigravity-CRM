@@ -29,5 +29,5 @@ COPY . .
 EXPOSE 3000
 
 # Configura o Gunicorn para iniciar o app do Flask
-# Utiliza o app:app por referenciar o arquivo app.py e a variável 'app' correspondente à instância do Flask
-CMD gunicorn --bind 0.0.0.0:$PORT --workers 4 --threads 4 --timeout 600 app:app
+# Executa primeiro o update_db.py para preparar as tabelas e não dar timeout no Gunicorn
+CMD python update_db.py && gunicorn --bind 0.0.0.0:$PORT --workers 4 --threads 4 --timeout 600 app:app

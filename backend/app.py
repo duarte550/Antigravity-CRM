@@ -23,16 +23,13 @@ app.register_blueprint(economic_groups_bp)
 app.register_blueprint(fund_simulator_bp)
 logging.basicConfig(level=logging.INFO)
 
-# Run schema updates on startup
-try:
-    update_db.update_schema()
-except Exception as e:
-    logging.warning(f"Could not run schema updates on startup: {e}")
+# Schema is now updated via Docker CMD before gunicorn starts
+# update_db.update_schema() has been removed from here to prevent worker timeouts.
 
 # Configuração de CORS dinâmica baseada em variável de ambiente.
 allowed_origins_env = os.environ.get('ALLOWED_ORIGINS', 'http://localhost:3000,http://localhost:5173,https://front-crm-cri.azurewebsites.net')
-allowed_origins = [origin.strip() for origin in allowed_origins_env.split(',') if origin.strip()]
-CORS(app, supports_credentials=True, origins = allowed_origins)
+
+CORS(app, supports_credentials=True, origins = ['https://front-crm-cri.azurewebsites.net'])
 
 
 # Regras de negócio centralizadas
@@ -1201,4 +1198,5 @@ def serve_react_app(path):
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 3000))
     print(f"Running app on port {port}")
+    app.run(host='0.0.0.0', port=port)
     app.run(host='0.0.0.0', port=port)
