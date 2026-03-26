@@ -161,6 +161,7 @@ const PorFundoTab: React.FC<PorFundoTabProps> = ({ operations, apiUrl, showToast
     const [isSimulating, setIsSimulating] = useState(false);
     const [isAddingNewOp, setIsAddingNewOp] = useState(false);
     const [selectedOpIdToAdd, setSelectedOpIdToAdd] = useState<number | ''>('');
+    const [opSearchTerm, setOpSearchTerm] = useState('');
     const availableOps = useMemo(() => {
         return operations.filter(o => o.isActive !== false);
     }, [operations]);
@@ -477,16 +478,30 @@ const PorFundoTab: React.FC<PorFundoTabProps> = ({ operations, apiUrl, showToast
                                                         <svg className="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v3m0 0v3m0-3h3m-3 0H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                                                         Incluir Operação no Mix de Liquidação
                                                     </span>
-                                                    <button onClick={() => { setIsAddingNewOp(false); setSelectedOpIdToAdd(''); }} className="text-gray-400 hover:text-red-500 transition-colors p-1"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg></button>
+                                                    <button onClick={() => { setIsAddingNewOp(false); setSelectedOpIdToAdd(''); setOpSearchTerm(''); }} className="text-gray-400 hover:text-red-500 transition-colors p-1"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg></button>
                                                 </div>
-                                                <div className="flex gap-2">
+                                                
+                                                <div className="relative flex-1">
+                                                    <svg className="w-4 h-4 text-gray-400 absolute left-3 top-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+                                                    <input 
+                                                        type="text" 
+                                                        autoFocus
+                                                        placeholder="Buscar operação ativa..."
+                                                        className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 placeholder-gray-400"
+                                                        value={opSearchTerm}
+                                                        onChange={(e) => setOpSearchTerm(e.target.value)}
+                                                    />
+                                                </div>
+
+                                                <div className="flex gap-2 items-stretch">
                                                     <select 
-                                                        className="flex-1 text-sm border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                                                        className="flex-1 text-sm border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 p-1"
                                                         value={selectedOpIdToAdd}
                                                         onChange={e => setSelectedOpIdToAdd(e.target.value === '' ? '' : Number(e.target.value))}
+                                                        size={4}
                                                     >
-                                                        <option value="">-- Selecione uma operação existente ativa --</option>
-                                                        {availableOps.map(op => <option key={op.id} value={op.id}>{op.name}</option>)}
+                                                        {availableOps.filter(op => op.name.toLowerCase().includes(opSearchTerm.toLowerCase())).map(op => <option key={op.id} value={op.id} className="cursor-pointer py-1.5 px-2 hover:bg-gray-100 dark:hover:bg-gray-700/50 rounded">{op.name}</option>)}
+                                                        {availableOps.filter(op => op.name.toLowerCase().includes(opSearchTerm.toLowerCase())).length === 0 && <option disabled className="text-gray-400 italic py-1 px-2">Nenhuma operação encontrada...</option>}
                                                     </select>
                                                     <button 
                                                         disabled={!selectedOpIdToAdd}
@@ -498,8 +513,9 @@ const PorFundoTab: React.FC<PorFundoTabProps> = ({ operations, apiUrl, showToast
                                                             onEditOperation(updatedOp);
                                                             setIsAddingNewOp(false);
                                                             setSelectedOpIdToAdd('');
+                                                            setOpSearchTerm('');
                                                         }}
-                                                        className="px-4 py-2 bg-blue-600 text-white text-sm font-bold rounded-md hover:bg-blue-700 disabled:opacity-50 transition-colors shadow-sm"
+                                                        className="px-4 py-2 w-32 bg-blue-600 text-white text-sm font-bold rounded-md hover:bg-blue-700 disabled:opacity-50 transition-colors shadow-sm self-stretch flex items-center justify-center"
                                                     >
                                                         Vincular
                                                     </button>
