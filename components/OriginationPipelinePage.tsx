@@ -667,7 +667,7 @@ const OriginationPipelinePage: React.FC<OriginationPipelinePageProps> = ({ onNav
             <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
                 <div className="bg-white dark:bg-gray-800 rounded-xl p-5 shadow-sm border border-gray-100 dark:border-gray-700 flex flex-col justify-center">
                     <p className="text-gray-500 dark:text-gray-400 text-sm font-medium">Volume Total</p>
-                    <h2 className="text-3xl font-bold text-gray-900 dark:text-white mt-1">R$ {(totalVolume).toFixed(1)}M</h2>
+                    <h2 className="text-3xl font-bold text-gray-900 dark:text-white mt-1">R$ {(totalVolume / 1000000).toFixed(1)}M</h2>
                     
                     <div className="mt-4 pt-3 border-t border-gray-100 dark:border-gray-700 flex justify-between text-sm">
                         <div className="text-center">
@@ -704,7 +704,7 @@ const OriginationPipelinePage: React.FC<OriginationPipelinePageProps> = ({ onNav
                      <div className="flex h-20 items-end gap-1.5 px-1 border-b border-gray-200 dark:border-gray-700 pb-1">
                         {chartLabels.length > 0 ? chartLabels.map(l => (
                             <div key={l} className="flex-1 flex flex-col justify-end items-center group relative h-full">
-                                <div className="absolute bottom-full mb-1 opacity-0 group-hover:opacity-100 bg-gray-800 text-white text-[10px] py-0.5 px-1.5 rounded z-10 whitespace-nowrap">{(volumeByMonth[l]).toFixed(1)}M</div>
+                                <div className="absolute bottom-full mb-1 opacity-0 group-hover:opacity-100 bg-gray-800 text-white text-[10px] py-0.5 px-1.5 rounded z-10 whitespace-nowrap">{(volumeByMonth[l]/1000000).toFixed(1)}M</div>
                                 <div className="bg-blue-500 dark:bg-blue-600 rounded-t-sm w-full transition-all hover:bg-blue-400" style={{ height: `${(volumeByMonth[l]/chartMax)*100}%` }}></div>
                                 <span className="text-[9px] text-gray-400 mt-1 absolute top-full pt-0.5">{l}</span>
                             </div>
@@ -844,7 +844,7 @@ const OriginationPipelinePage: React.FC<OriginationPipelinePageProps> = ({ onNav
                                                 {op.temperature || 'N/D'}
                                             </span>
                                         </td>
-                                        <td className="px-4 py-3 text-right">R$ {(op._totalVol).toFixed(2)}M</td>
+                                        <td className="px-4 py-3 text-right">R$ {(op._totalVol / 1000000).toFixed(2)}M</td>
                                         <td className="px-4 py-3 text-right">{op._avgRateStr}</td>
                                         <td className="px-4 py-3 text-sm font-medium">{op.stage}</td>
                                         <td className="px-4 py-3 text-xs text-gray-500 dark:text-gray-400 truncate max-w-[150px]" title={op._lastEvent}>{op._lastEvent}</td>
@@ -949,7 +949,7 @@ const OriginationPipelinePage: React.FC<OriginationPipelinePageProps> = ({ onNav
                                             <div className="flex justify-between">
                                                 <span className="text-gray-500">Volume:</span>
                                                 <span className="font-medium text-gray-900 dark:text-white">
-                                                    {op.series && op.series.length > 0 ? `R$ ${(op.series.reduce((acc, s) => acc + (s.volume || 0), 0)).toFixed(2)}M` : '-'}
+                                                    {op.series && op.series.length > 0 ? `R$ ${(op.series.reduce((acc, s) => acc + (s.volume || 0), 0) / 1000000).toFixed(2)}M` : '-'}
                                                 </span>
                                             </div>
                                             <div className="flex justify-between">
@@ -1003,8 +1003,8 @@ const OriginationPipelinePage: React.FC<OriginationPipelinePageProps> = ({ onNav
                         {/* Summary by Fund side-by-side config */}
                         <div className="flex gap-4 text-xs">
                              <div className="bg-white dark:bg-gray-800 p-2 rounded shadow-sm border border-gray-200 dark:border-gray-700 flex gap-4">
-                                <div><span className="text-gray-500 mr-2">Vol. Liq:</span><span className="font-semibold text-green-600">R$ {(Object.values(summaries.fundSummary).reduce((a,b)=>a+b.liq,0)).toFixed(1)}M</span></div>
-                                <div><span className="text-gray-500 mr-2">Vol. Est:</span><span className="font-semibold text-blue-600">R$ {(Object.values(summaries.fundSummary).reduce((a,b)=>a+b.est,0)).toFixed(1)}M</span></div>
+                                <div><span className="text-gray-500 mr-2">Vol. Liq:</span><span className="font-semibold text-green-600">R$ {(Object.values(summaries.fundSummary).reduce((a,b)=>a+b.liq,0)/1000000).toFixed(1)}M</span></div>
+                                <div><span className="text-gray-500 mr-2">Vol. Est:</span><span className="font-semibold text-blue-600">R$ {(Object.values(summaries.fundSummary).reduce((a,b)=>a+b.est,0)/1000000).toFixed(1)}M</span></div>
                              </div>
                         </div>
                      </div>
@@ -1049,7 +1049,7 @@ const OriginationPipelinePage: React.FC<OriginationPipelinePageProps> = ({ onNav
                                         <td className="px-5 py-3 text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap">{row.analyst}</td>
                                         <td className="px-5 py-3">{row.fund}</td>
                                         <td className="px-5 py-3 text-right font-medium text-gray-900 dark:text-white whitespace-nowrap">
-                                            {row.volume ? `R$ ${(row.volume).toFixed(2)}M` : '-'}
+                                            {row.volume ? `R$ ${(row.volume / 1000000).toFixed(2)}M` : '-'}
                                         </td>
                                         <td className="px-5 py-3">
                                             <div className="flex gap-1">

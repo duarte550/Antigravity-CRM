@@ -9,7 +9,7 @@ interface PorFundoTabProps {
     onEditOperation: (op: StructuringOperation) => void;
 }
 
-const formatCurrency = (val: number) => `R$ ${(val).toFixed(2)}M`;
+const formatCurrency = (val: number) => `R$ ${(val / 1000000).toFixed(2)}M`;
 const formatPercent = (val: number) => `${val.toFixed(2)}%`;
 
 const getRiscoValor = (riscoData: any[], info: string) => {

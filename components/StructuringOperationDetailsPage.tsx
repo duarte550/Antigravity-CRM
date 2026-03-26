@@ -388,7 +388,7 @@ const StructuringOperationDetailsPage: React.FC<StructuringOperationDetailsPageP
             <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Volume Total (R$)</p>
             {operation.series && operation.series.length > 0 ? (
                 <p className="mt-1 font-semibold text-gray-900 dark:text-white text-lg">
-                  R$ {(operation.series.reduce((acc, s) => acc + (s.volume || 0), 0)).toFixed(2)}M
+                  R$ {(operation.series.reduce((acc, s) => acc + (s.volume || 0), 0) / 1000000).toFixed(2)}M
                 </p>
             ) : (
                 <input
@@ -600,7 +600,7 @@ const StructuringOperationDetailsPage: React.FC<StructuringOperationDetailsPageP
                          <div>
                            <p className="text-gray-500 dark:text-gray-400">Volume</p>
                            <p className="font-medium text-gray-900 dark:text-white">
-                             {series.volume ? `R$ ${(series.volume).toFixed(2)}M` : 'N/A'}
+                             {series.volume ? `R$ ${(series.volume / 1000000).toFixed(2)}M` : 'N/A'}
                            </p>
                          </div>
                          <div>

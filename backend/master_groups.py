@@ -442,8 +442,12 @@ def manage_structuring_operation(so_id):
                 
                 so['tasks'] = generate_tasks_for_operation(so, task_exceptions)
                 
-                cursor.execute("SELECT * FROM cri_cra_dev.crm.master_group_contacts WHERE master_group_id = ?", (so['master_group_id'],))
-                so['contacts'] = [format_row(r, cursor) for r in cursor.fetchall()]
+                try:
+                    cursor.execute("SELECT * FROM cri_cra_dev.crm.master_group_contacts WHERE master_group_id = ?", (so['master_group_id'],))
+                    so['contacts'] = [format_row(r, cursor) for r in cursor.fetchall()]
+                except Exception as e:
+                    print(f"Skipping contacts due to missing table/error: {e}")
+                    so['contacts'] = []
                 
                 return jsonify(so)
         elif request.method == 'PUT':
