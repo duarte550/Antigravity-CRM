@@ -165,6 +165,15 @@ export interface Operation {
   status?: OperationStatus;
   lastUpdated?: number;
   movedToLegacyDate?: string; // ISO string
+  litigationLawyerComments?: string | null;
+  litigationComments?: LitigationComment[];
+}
+
+export interface LitigationComment {
+    id: number;
+    description: string;
+    createdAt: string;
+    userName?: string;
 }
 
 export interface AuditLog {

@@ -86,7 +86,8 @@ def fetch_full_operation(cursor, operation_id):
     sejam convertidas para camelCase para o frontend.
     """
     cursor.execute("""
-        SELECT o.*, mg.name AS master_group_name, eg.name AS economic_group_name 
+        SELECT o.*, mg.name AS master_group_name, eg.name AS economic_group_name,
+        COALESCE(eg.rating, mg.rating) AS rating_group
         FROM cri_cra_dev.crm.operations o
         LEFT JOIN cri_cra_dev.crm.master_groups mg ON o.master_group_id = mg.id
         LEFT JOIN cri_cra_dev.crm.economic_groups eg ON o.economic_group_id = eg.id
@@ -124,6 +125,7 @@ def fetch_full_operation(cursor, operation_id):
         'description': operation_db.get('description'),
         'status': operation_db.get('status') or 'Ativa',
         'movedToLegacyDate': safe_isoformat(operation_db.get('moved_to_legacy_date')),
+        'litigationLawyerComments': operation_db.get('litigation_lawyer_comments'),
         'notes': None # Initialize notes as None
     }
 
@@ -192,6 +194,16 @@ def fetch_full_operation(cursor, operation_id):
         app.logger.warning("Erro ao buscar contatos ou tabela não atualizada: %s", e)
         operation['contacts'] = []
 
+    cursor.execute("SELECT * FROM cri_cra_dev.crm.operation_litigation_comments WHERE operation_id = ? ORDER BY date DESC", (operation_id,))
+    try:
+        db_litigation = [format_row(r, cursor) for r in cursor.fetchall()]
+        operation['litigationComments'] = [{
+            'id': c.get('id'), 'createdAt': safe_isoformat(c.get('date')), 'description': c.get('description'), 'userName': c.get('user_name')
+        } for c in db_litigation]
+    except Exception as e:
+        app.logger.warning("Erro ao buscar comentarios litigio: %s", e)
+        operation['litigationComments'] = []
+
     cursor.execute("SELECT * FROM cri_cra_dev.crm.rating_history WHERE operation_id = ? ORDER BY date DESC", (operation_id,))
     db_rh = [format_row(r, cursor) for r in cursor.fetchall()]
     operation['ratingHistory'] = [{
@@ -246,7 +258,7 @@ def manage_operations_collection():
         try:
             with conn.cursor() as cursor:
                 cursor.execute("""
-                    SELECT o.*, mg.name AS master_group_name, eg.name AS economic_group_name 
+                    SELECT o.*, mg.name AS master_group_name, eg.name AS economic_group_name, COALESCE(eg.rating, mg.rating) AS rating_group
                     FROM cri_cra_dev.crm.operations o
                     LEFT JOIN cri_cra_dev.crm.master_groups mg ON o.master_group_id = mg.id
                     LEFT JOIN cri_cra_dev.crm.economic_groups eg ON o.economic_group_id = eg.id
@@ -295,6 +307,7 @@ def manage_operations_collection():
                         },
                         'description': op_db.get('description'),
                         'status': op_db.get('status') or 'Ativa',
+                        'litigationLawyerComments': op_db.get('litigation_lawyer_comments'),
                         'projects': [], 'guarantees': [], 'events': [], 'taskRules': [], 'ratingHistory': [], 'tasks': [], 'contacts': [],
                         'notes': notes_map.get(op_id)
                     }
@@ -409,26 +422,26 @@ def manage_operations_collection():
                     cursor.execute("""
                         UPDATE cri_cra_dev.crm.operations SET 
                         name=?, area=?, operation_type=?, maturity_date=?, responsible_analyst=?, structuring_analyst=?, review_frequency=?, 
-                        call_frequency=?, df_frequency=?, segmento=?, rating_operation=?, rating_group=?, watchlist=?, 
+                        call_frequency=?, df_frequency=?, segmento=?, rating_operation=?, watchlist=?, 
                         ltv=?, dscr=?, monitoring_news=?, monitoring_fii_report=?, monitoring_operational_info=?, 
                         monitoring_receivables_portfolio=?, monitoring_construction_report=?, monitoring_commercial_info=?, 
-                        monitoring_spe_dfs=?, estimated_date=?, status=?, description=?, master_group_id=?, economic_group_id=?,
+                        monitoring_spe_dfs=?, estimated_date=?, status=?, description=?, litigation_lawyer_comments=?, master_group_id=?, economic_group_id=?,
                         is_structuring=FALSE, is_active=TRUE
                         WHERE id=?
                     """, (
                         data['name'], data['area'], data['operationType'], maturity_date, data['responsibleAnalyst'], data.get('structuringAnalyst'),
                         data['reviewFrequency'], data['callFrequency'], data['dfFrequency'], data['segmento'], 
-                        data['ratingOperation'], data['ratingGroup'], data['watchlist'], 
+                        data['ratingOperation'], data['watchlist'], 
                         data.get('covenants', {}).get('ltv'), data.get('covenants', {}).get('dscr'), 
                         dm.get('news'), dm.get('fiiReport'), dm.get('operationalInfo'), 
                         dm.get('receivablesPortfolio'), dm.get('monthlyConstructionReport'), 
                         dm.get('monthlyCommercialInfo'), dm.get('speDfs'), est_date, 
-                        data.get('status', 'Ativa'), data.get('description'), data.get('masterGroupId'), data.get('economicGroupId'),
+                        data.get('status', 'Ativa'), data.get('description'), data.get('litigationLawyerComments'), data.get('masterGroupId'), data.get('economicGroupId'),
                         structuring_op_id
                     ))
                     new_op_id = structuring_op_id
                 else:
-                    cursor.execute( "INSERT INTO cri_cra_dev.crm.operations (name, area, operation_type, maturity_date, responsible_analyst, structuring_analyst, review_frequency, call_frequency, df_frequency, segmento, rating_operation, rating_group, watchlist, ltv, dscr, monitoring_news, monitoring_fii_report, monitoring_operational_info, monitoring_receivables_portfolio, monitoring_construction_report, monitoring_commercial_info, monitoring_spe_dfs, estimated_date, status, description, master_group_id, economic_group_id, is_structuring, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, FALSE, TRUE)", (data['name'], data['area'], data['operationType'], maturity_date, data['responsibleAnalyst'], data.get('structuringAnalyst'), data['reviewFrequency'], data['callFrequency'], data['dfFrequency'], data['segmento'], data['ratingOperation'], data['ratingGroup'], data['watchlist'], data.get('covenants', {}).get('ltv'), data.get('covenants', {}).get('dscr'), dm.get('news'), dm.get('fiiReport'), dm.get('operationalInfo'), dm.get('receivablesPortfolio'), dm.get('monthlyConstructionReport'), dm.get('monthlyCommercialInfo'), dm.get('speDfs'), est_date, data.get('status', 'Ativa'), data.get('description'), data.get('masterGroupId'), data.get('economicGroupId')) )
+                    cursor.execute( "INSERT INTO cri_cra_dev.crm.operations (name, area, operation_type, maturity_date, responsible_analyst, structuring_analyst, review_frequency, call_frequency, df_frequency, segmento, rating_operation, watchlist, ltv, dscr, monitoring_news, monitoring_fii_report, monitoring_operational_info, monitoring_receivables_portfolio, monitoring_construction_report, monitoring_commercial_info, monitoring_spe_dfs, estimated_date, status, description, litigation_lawyer_comments, master_group_id, economic_group_id, is_structuring, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, FALSE, TRUE)", (data['name'], data['area'], data['operationType'], maturity_date, data['responsibleAnalyst'], data.get('structuringAnalyst'), data['reviewFrequency'], data['callFrequency'], data['dfFrequency'], data['segmento'], data['ratingOperation'], data['watchlist'], data.get('covenants', {}).get('ltv'), data.get('covenants', {}).get('dscr'), dm.get('news'), dm.get('fiiReport'), dm.get('operationalInfo'), dm.get('receivablesPortfolio'), dm.get('monthlyConstructionReport'), dm.get('monthlyCommercialInfo'), dm.get('speDfs'), est_date, data.get('status', 'Ativa'), data.get('description'), data.get('litigationLawyerComments'), data.get('masterGroupId'), data.get('economicGroupId')) )
                     cursor.execute("SELECT id FROM cri_cra_dev.crm.operations WHERE name = ? ORDER BY id DESC LIMIT 1", (data['name'],))
                     new_op_id = cursor.fetchone().id
                 
@@ -558,7 +571,6 @@ def _update_operation_db_internal(cursor, op_id, data):
         final_economic_group_id = data.get('economicGroupId', old_op_db.get('economic_group_id'))
         if final_economic_group_id:
             cursor.execute("UPDATE cri_cra_dev.crm.economic_groups SET rating = ? WHERE id = ?", (new_rating_group, final_economic_group_id))
-            cursor.execute("UPDATE cri_cra_dev.crm.operations SET rating_group = ? WHERE economic_group_id = ? AND id != ? AND (is_structuring IS NULL OR is_structuring = FALSE)", (new_rating_group, final_economic_group_id, op_id))
             log_action(cursor, data.get('responsibleAnalyst', 'System'), 'UPDATE', 'EconomicGroup', final_economic_group_id, f"Rating do Grupo Econômico atualizado para {new_rating_group} via operação {op_id}.")
 
     cov = data.get('covenants', {})
@@ -566,16 +578,16 @@ def _update_operation_db_internal(cursor, op_id, data):
     est_date_val = data.get('estimatedDate')
     if est_date_val == "": est_date_val = None
     
-    final_est_date = parse_iso_date(est_date_val) if 'estimatedDate' in data else old_op_db.get('estimated_date')
     final_maturity_date = parse_iso_date(data.get('maturityDate')) if 'maturityDate' in data else old_op_db.get('maturity_date')
     final_description = data.get('description', old_op_db.get('description'))
+    final_litigation_lawyer_comments = data.get('litigationLawyerComments', old_op_db.get('litigation_lawyer_comments'))
     final_status = data.get('status', old_op_db.get('status'))
     final_moved_to_legacy_date = parse_iso_date(data.get('movedToLegacyDate')) if 'movedToLegacyDate' in data else old_op_db.get('moved_to_legacy_date')
 
     final_master_group_id = data.get('masterGroupId', old_op_db.get('master_group_id'))
     final_economic_group_id = data.get('economicGroupId', old_op_db.get('economic_group_id'))
 
-    cursor.execute( "UPDATE cri_cra_dev.crm.operations SET name = ?, area = ?, rating_operation = ?, rating_group = ?, watchlist = ?, ltv = ?, dscr = ?, estimated_date = ?, maturity_date = ?, responsible_analyst = ?, structuring_analyst = ?, segmento = ?, description = ?, status = ?, moved_to_legacy_date = ?, master_group_id = ?, economic_group_id = ? WHERE id = ?", (data.get('name', old_op_db.get('name')), data.get('area', old_op_db.get('area')), data.get('ratingOperation', old_op_db.get('rating_operation')), new_rating_group, data.get('watchlist', old_op_db.get('watchlist')), cov.get('ltv', old_op_db.get('ltv')), cov.get('dscr', old_op_db.get('dscr')), final_est_date, final_maturity_date, data.get('responsibleAnalyst', old_op_db.get('responsible_analyst')), data.get('structuringAnalyst', old_op_db.get('structuring_analyst')), data.get('segmento', old_op_db.get('segmento')), final_description, final_status, final_moved_to_legacy_date, final_master_group_id, final_economic_group_id, op_id) )
+    cursor.execute( "UPDATE cri_cra_dev.crm.operations SET name = ?, area = ?, rating_operation = ?, watchlist = ?, ltv = ?, dscr = ?, estimated_date = ?, maturity_date = ?, responsible_analyst = ?, structuring_analyst = ?, segmento = ?, description = ?, litigation_lawyer_comments = ?, status = ?, moved_to_legacy_date = ?, master_group_id = ?, economic_group_id = ? WHERE id = ?", (data.get('name', old_op_db.get('name')), data.get('area', old_op_db.get('area')), data.get('ratingOperation', old_op_db.get('rating_operation')), data.get('watchlist', old_op_db.get('watchlist')), cov.get('ltv', old_op_db.get('ltv')), cov.get('dscr', old_op_db.get('dscr')), final_est_date, final_maturity_date, data.get('responsibleAnalyst', old_op_db.get('responsible_analyst')), data.get('structuringAnalyst', old_op_db.get('structuring_analyst')), data.get('segmento', old_op_db.get('segmento')), final_description, final_litigation_lawyer_comments, final_status, final_moved_to_legacy_date, final_master_group_id, final_economic_group_id, op_id) )
     
     if 'notes' in data:
         cursor.execute("SELECT 1 FROM cri_cra_dev.crm.operation_review_notes WHERE operation_id = ?", (op_id,))
@@ -666,6 +678,29 @@ def _update_operation_db_internal(cursor, op_id, data):
             client_event_id = rh.get('eventId')
             db_event_id_for_rh = client_event_id_to_db_id_map.get(str(client_event_id), client_event_id)
             cursor.execute("INSERT INTO cri_cra_dev.crm.rating_history (operation_id, date, rating_operation, rating_group, rating_master_group, watchlist, sentiment, event_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", (op_id, rh.get('date'), rh.get('ratingOperation'), rh.get('ratingGroup'), rh.get('ratingMasterGroup'), rh.get('watchlist'), rh.get('sentiment'), db_event_id_for_rh))
+
+    old_watchlist = old_op_db.get('watchlist')
+    new_watchlist = data.get('watchlist', old_watchlist)
+    
+    cursor.execute("SELECT COUNT(*) as count FROM cri_cra_dev.crm.operation_litigation_comments WHERE operation_id = ?", (op_id,))
+    litigation_count_row = cursor.fetchone()
+    has_litigation_comments = litigation_count_row.count > 0 if litigation_count_row else False
+
+    if new_watchlist in ['Rosa', 'Vermelho'] and old_watchlist not in ['Rosa', 'Vermelho'] and not has_litigation_comments:
+        has_litigation_rule = any(r.get('name') == 'Revisão Advogados de Litígio' for r in data.get('taskRules', []))
+        
+        cursor.execute("SELECT 1 FROM cri_cra_dev.crm.task_rules WHERE operation_id = ? AND name = 'Revisão Advogados de Litígio'", (op_id,))
+        db_has_rule = cursor.fetchone()
+        
+        if not has_litigation_rule and not db_has_rule:
+            if 'taskRules' not in data:
+                data['taskRules'] = []
+            data['taskRules'].append({
+                'name': 'Revisão Advogados de Litígio',
+                'frequency': 'Sem Prazo',
+                'description': 'Passar a documentação da operação com os advogados de litígio devido a mudança do farol para Rosa ou Vermelho.',
+                'priority': 'Alta'
+            })
 
     cursor.execute("SELECT id, name FROM cri_cra_dev.crm.task_rules WHERE operation_id = ?", (op_id,))
     db_rules_map = {row.id: row.name for row in cursor.fetchall()}
@@ -775,11 +810,13 @@ def sync_operation_rules():
         with conn.cursor() as cursor:
             fixed_count = 0
             
-            # 1. Busca operações que não possuem NENHUMA regra de tarefa (Criação Inicial)
+            # 3. Busca operações que não possuem NENHUMA regra de tarefa (Criação Inicial)
             cursor.execute("""
-                SELECT o.id, o.name, o.rating_group, o.review_frequency, o.call_frequency, o.df_frequency, 
+                SELECT o.id, o.name, COALESCE(eg.rating, m.rating) as rating_group, o.review_frequency, o.call_frequency, o.df_frequency, 
                        o.maturity_date, o.monitoring_news, o.rating_operation, o.watchlist, o.responsible_analyst
                 FROM cri_cra_dev.crm.operations o
+                LEFT JOIN cri_cra_dev.crm.economic_groups eg ON o.economic_group_id = eg.id
+                LEFT JOIN cri_cra_dev.crm.master_groups m ON o.master_group_id = m.id
                 LEFT JOIN cri_cra_dev.crm.task_rules tr ON o.id = tr.operation_id
                 WHERE tr.operation_id IS NULL
                 LIMIT 10
@@ -1097,6 +1134,59 @@ def manage_operation_risk(op_id, risk_id):
     finally:
         if conn: conn.close()
 
+@app.route('/api/operations/<int:op_id>/litigation-comments', methods=['POST'])
+def add_operation_litigation_comment(op_id):
+    conn = get_db_connection()
+    try:
+        data = request.json
+        now = datetime.now()
+        with conn.cursor() as cursor:
+            cursor.execute(
+                "INSERT INTO cri_cra_dev.crm.operation_litigation_comments (operation_id, date, description, user_name) VALUES (?, ?, ?, ?)",
+                (op_id, now, data['description'], data.get('userName', 'Analista'))
+            )
+            comment_id = cursor.lastrowid
+            log_action(cursor, data.get('userName', 'System'), 'CREATE', 'LitigationComment', comment_id or 0, "Comentário de litígio adicionado.")
+        conn.commit()
+        
+        with conn.cursor() as cursor:
+            updated_op = fetch_full_operation(cursor, op_id)
+        return jsonify(updated_op), 201
+    except Exception as e:
+        app.logger.error(f"Error adding litigation comment to operation {op_id}: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if conn: conn.close()
+
+@app.route('/api/operations/<int:op_id>/litigation-comments/<int:comment_id>', methods=['PUT', 'DELETE'])
+def manage_operation_litigation_comment(op_id, comment_id):
+    conn = get_db_connection()
+    try:
+        if request.method == 'PUT':
+            data = request.json
+            now = datetime.now()
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    "UPDATE cri_cra_dev.crm.operation_litigation_comments SET description = ?, date = ?, user_name = ? WHERE id = ? AND operation_id = ?",
+                    (data['description'], now, data.get('userName', 'Analista'), comment_id, op_id)
+                )
+                log_action(cursor, data.get('userName', 'System'), 'UPDATE', 'LitigationComment', comment_id, "Comentário de litígio atualizado.")
+            conn.commit()
+        elif request.method == 'DELETE':
+            user_name = request.args.get('userName', 'System')
+            with conn.cursor() as cursor:
+                cursor.execute("DELETE FROM cri_cra_dev.crm.operation_litigation_comments WHERE id = ? AND operation_id = ?", (comment_id, op_id))
+                log_action(cursor, user_name, 'DELETE', 'LitigationComment', comment_id, f"Comentário de litígio deletado.")
+            conn.commit()
+        
+        with conn.cursor() as cursor:
+            updated_op = fetch_full_operation(cursor, op_id)
+        return jsonify(updated_op)
+    except Exception as e:
+        app.logger.error(f"Error managing litigation comment {comment_id} for operation {op_id}: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if conn: conn.close()
 
 # ================== Servidor de Frontend ==================
 @app.route('/', defaults={'path': ''})

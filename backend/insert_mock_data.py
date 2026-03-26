@@ -47,9 +47,9 @@ def run_mock_data():
             print("Inserting Active Operation...")
             cursor.execute("""
                 INSERT INTO cri_cra_dev.crm.operations 
-                (name, area, operation_type, maturity_date, responsible_analyst, review_frequency, call_frequency, df_frequency, segmento, rating_operation, rating_group, watchlist, status, description, master_group_id) 
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, ("Alpha Towers CRI (Mock)", "Imobiliário", "CRI", (date.today() + timedelta(days=365)).isoformat(), "João Silva", "Semestral", "Mensal", "Trimestral", "Residencial", "Ba2", "Ba2", "Amarelo", "Ativa", "Operação de teste", mg_id))
+                (name, area, operation_type, maturity_date, responsible_analyst, review_frequency, call_frequency, df_frequency, segmento, rating_operation, watchlist, status, description, master_group_id) 
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, ("Alpha Towers CRI (Mock)", "Imobiliário", "CRI", (date.today() + timedelta(days=365)).isoformat(), "João Silva", "Semestral", "Mensal", "Trimestral", "Residencial", "Ba2", "Amarelo", "Ativa", "Operação de teste", mg_id))
             
             cursor.execute("SELECT MAX(id) as id FROM cri_cra_dev.crm.operations")
             row = cursor.fetchone()

@@ -8,6 +8,8 @@ import WatchlistHistoryChart from './WatchlistHistoryChart';
 import WatchlistSummary from './WatchlistSummary';
 import WatchlistReportModal from './WatchlistReportModal';
 import Modal from './Modal';
+import LitigationCommentsSection from './LitigationCommentsSection';
+import { Scale } from 'lucide-react';
 
 
 interface WatchlistPageProps {
@@ -23,6 +25,8 @@ const WatchlistPage: React.FC<WatchlistPageProps> = ({ operations, onUpdateOpera
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isReportModalOpen, setIsReportModalOpen] = useState(false);
     const [operationToEdit, setOperationToEdit] = useState<Operation | null>(null);
+    const [litigationCommentsOperation, setLitigationCommentsOperation] = useState<Operation | null>(null);
+    const [litigationCommentsTemp, setLitigationCommentsTemp] = useState<string>('');
     
     // State for editing existing events
     const [editingHistoryEntry, setEditingHistoryEntry] = useState<RatingHistoryEntry | null>(null);
@@ -231,6 +235,17 @@ const WatchlistPage: React.FC<WatchlistPageProps> = ({ operations, onUpdateOpera
                 />
             )}
 
+            {litigationCommentsOperation && (
+                <Modal isOpen={true} onClose={() => setLitigationCommentsOperation(null)} title={`Comentários Advogado Litígio - ${litigationCommentsOperation.name}`}>
+                    <div className="bg-white dark:bg-gray-800 space-y-4 max-h-[80vh] overflow-y-auto">
+                        <LitigationCommentsSection 
+                           operation={litigationCommentsOperation} 
+                           onUpdateOperation={onUpdateOperation} 
+                        />
+                    </div>
+                </Modal>
+            )}
+
             {isReportModalOpen && (
                 <WatchlistReportModal
                     operations={operations}
@@ -294,6 +309,10 @@ const WatchlistPage: React.FC<WatchlistPageProps> = ({ operations, onUpdateOpera
                             isExpanded={expandedOpId === op.id}
                             onToggle={() => setExpandedOpId(prev => prev === op.id ? null : op.id)}
                             onOpenUpdateModal={() => handleOpenModal(op)}
+                            onOpenLitigationComments={() => {
+                                setLitigationCommentsOperation(op);
+                                setLitigationCommentsTemp(op.litigationLawyerComments || '');
+                            }}
                             onEditEvent={(historyEntry, event) => handleEditEvent(op, historyEntry, event)}
                             onDeleteEvent={(historyEntryId, eventId) => handleDeleteEvent(op, historyEntryId, eventId)}
                         />
@@ -335,11 +354,12 @@ interface OperationCardProps {
     isExpanded: boolean;
     onToggle: () => void;
     onOpenUpdateModal: () => void;
+    onOpenLitigationComments: () => void;
     onEditEvent: (historyEntry: RatingHistoryEntry, event: Event) => void;
     onDeleteEvent: (historyEntryId: number, eventId: number) => void;
 }
 
-const OperationCard: React.FC<OperationCardProps> = ({ operation, isExpanded, onToggle, onOpenUpdateModal, onEditEvent, onDeleteEvent }) => {
+const OperationCard: React.FC<OperationCardProps> = ({ operation, isExpanded, onToggle, onOpenUpdateModal, onOpenLitigationComments, onEditEvent, onDeleteEvent }) => {
     const [showFullHistory, setShowFullHistory] = useState(false);
     const scrollContainerRef = useRef<HTMLDivElement>(null);
 
@@ -575,9 +595,17 @@ const OperationCard: React.FC<OperationCardProps> = ({ operation, isExpanded, on
             {isExpanded && (
                 <div className="p-4 border-t border-gray-200 dark:border-gray-700 bg-white/50 dark:bg-gray-800/50 space-y-4">
                     <div className="flex justify-between items-center mb-4">
-                        <h4 className="font-semibold text-gray-700 dark:text-gray-300">
-                            {showFullHistory ? 'Histórico Completo' : 'Última Atualização & Linha do Tempo'}
-                        </h4>
+                        <div className="flex gap-4 items-center">
+                            <h4 className="font-semibold text-gray-700 dark:text-gray-300">
+                                {showFullHistory ? 'Histórico Completo' : 'Última Atualização & Linha do Tempo'}
+                            </h4>
+                            <button 
+                                onClick={(e) => { e.stopPropagation(); onOpenLitigationComments(); }}
+                                className="text-xs flex items-center gap-1.5 px-3 py-1.5 bg-red-100 dark:bg-red-900/40 text-red-800 dark:text-red-200 rounded-md hover:bg-red-200 dark:hover:bg-red-900/60 transition-colors font-medium border border-red-200 dark:border-red-800/60"
+                            >
+                                <Scale className="w-3.5 h-3.5" /> Comentários Advogado de Litígio
+                            </button>
+                        </div>
                         <button 
                             onClick={() => setShowFullHistory(!showFullHistory)}
                             className="text-sm text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 underline font-medium"

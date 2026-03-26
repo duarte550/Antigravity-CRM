@@ -13,6 +13,7 @@ import RatingHistoryChart from './RatingHistoryChart';
 import EventHistory from './EventHistory';
 import OperationForm from './OperationForm';
 import ContactForm from './ContactForm';
+import LitigationCommentsSection from './LitigationCommentsSection';
 
 import RiskForm from './RiskForm';
 import { X, Edit2, Plus, Trash2, AlertTriangle, Users } from 'lucide-react';
@@ -89,6 +90,7 @@ const OperationDetail: React.FC<OperationDetailProps> = ({ operation, onUpdateOp
     const [isSavingNotes, setIsSavingNotes] = useState(false);
     const [isSavingRisk, setIsSavingRisk] = useState(false);
 
+
     const handleSaveDescription = async () => {
         setIsSavingDescription(true);
         try {
@@ -112,6 +114,8 @@ const OperationDetail: React.FC<OperationDetailProps> = ({ operation, onUpdateOp
             setIsSavingNotes(false);
         }
     };
+
+
 
     const handleAddRisk = async (riskData: Omit<OperationRisk, 'id' | 'createdAt' | 'updatedAt'>) => {
         setIsSavingRisk(true);
@@ -929,6 +933,15 @@ ${event.nextSteps ? stripHtml(event.nextSteps) : 'Nenhum'}
                     )
                 )}
             </div>
+
+            {/* Comentários Advogado de Litígio */}
+            <LitigationCommentsSection 
+                operation={operation}
+                onUpdateOperation={onUpdateOperation}
+                apiUrl={apiUrl}
+                showToast={showToast}
+                setIsSyncing={setIsSyncing}
+            />
 
             {/* Risks and Points of Attention Section */}
             <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-lg dark:border dark:border-gray-700 mb-8">

@@ -42,8 +42,8 @@ INSERT INTO cri_cra_dev.crm.guarantees (id, name) VALUES
 -- Operação 1: Brookfield Eldorado Flamengo
 -- ===============================================================
 -- Inserir Operação
-INSERT INTO cri_cra_dev.crm.operations (id, name, area, operation_type, segmento, maturity_date, responsible_analyst, rating_operation, rating_group, watchlist, review_frequency, call_frequency, df_frequency)
-VALUES (1, 'Brookfield Eldorado Flamengo', 'CRI', 'CRI', 'Asset Finance', '2034-01-01T00:00:00', 'Analista A', 'Baa3', 'Baa1', 'Verde', 'Anual', 'Semestral', 'Trimestral');
+INSERT INTO cri_cra_dev.crm.operations (id, name, area, operation_type, segmento, maturity_date, responsible_analyst, rating_operation, watchlist, review_frequency, call_frequency, df_frequency)
+VALUES (1, 'Brookfield Eldorado Flamengo', 'CRI', 'CRI', 'Asset Finance', '2034-01-01T00:00:00', 'Analista A', 'Baa3', 'Verde', 'Anual', 'Semestral', 'Trimestral');
 -- Ligar Projetos
 INSERT INTO cri_cra_dev.crm.operation_projects (operation_id, project_id) VALUES (1, 1);
 -- Inserir Regras de Tarefas
@@ -58,46 +58,46 @@ INSERT INTO cri_cra_dev.crm.task_rules (operation_id, name, frequency, start_dat
 -- Para economizar espaço, o restante das operações será resumido.
 
 -- Operação 2: Brookfield BRPR
-INSERT INTO cri_cra_dev.crm.operations (id, name, area, operation_type, segmento, maturity_date, responsible_analyst, rating_operation, rating_group, watchlist, review_frequency, call_frequency, df_frequency)
-VALUES (2, 'Brookfield BRPR', 'CRI', 'CRI', 'Asset Finance', '2034-01-01T00:00:00', 'Analista A', 'Baa3', 'Baa1', 'Verde', 'Anual', 'Semestral', 'Trimestral');
+INSERT INTO cri_cra_dev.crm.operations (id, name, area, operation_type, segmento, maturity_date, responsible_analyst, rating_operation, watchlist, review_frequency, call_frequency, df_frequency)
+VALUES (2, 'Brookfield BRPR', 'CRI', 'CRI', 'Asset Finance', '2034-01-01T00:00:00', 'Analista A', 'Baa3', 'Verde', 'Anual', 'Semestral', 'Trimestral');
 INSERT INTO cri_cra_dev.crm.operation_projects (operation_id, project_id) VALUES (2, 2);
 INSERT INTO cri_cra_dev.crm.task_rules (operation_id, name, frequency, start_date, end_date) VALUES (2, 'Revisão Gerencial', 'Anual', current_timestamp(), '2034-01-01T00:00:00'), (2, 'Call de Acompanhamento', 'Semestral', current_timestamp(), '2034-01-01T00:00:00');
 
 -- Operação 3: Brookfield Sucupira
-INSERT INTO cri_cra_dev.crm.operations (id, name, area, operation_type, segmento, maturity_date, responsible_analyst, rating_operation, rating_group, watchlist, review_frequency, call_frequency, df_frequency)
-VALUES (3, 'Brookfield Sucupira', 'CRI', 'CRI', 'Asset Finance', '2034-01-01T00:00:00', 'Analista A', 'Baa3', 'Baa1', 'Verde', 'Anual', 'Semestral', 'Trimestral');
+INSERT INTO cri_cra_dev.crm.operations (id, name, area, operation_type, segmento, maturity_date, responsible_analyst, rating_operation, watchlist, review_frequency, call_frequency, df_frequency)
+VALUES (3, 'Brookfield Sucupira', 'CRI', 'CRI', 'Asset Finance', '2034-01-01T00:00:00', 'Analista A', 'Baa3', 'Verde', 'Anual', 'Semestral', 'Trimestral');
 INSERT INTO cri_cra_dev.crm.operation_projects (operation_id, project_id) VALUES (3, 3);
 INSERT INTO cri_cra_dev.crm.task_rules (operation_id, name, frequency, start_date, end_date) VALUES (3, 'Revisão Gerencial', 'Anual', current_timestamp(), '2034-01-01T00:00:00'), (3, 'Call de Acompanhamento', 'Semestral', current_timestamp(), '2034-01-01T00:00:00');
 
 -- Operação 4: Brookfield Ed Sigma
-INSERT INTO cri_cra_dev.crm.operations (id, name, area, operation_type, segmento, maturity_date, responsible_analyst, rating_operation, rating_group, watchlist, review_frequency, call_frequency, df_frequency)
-VALUES (4, 'Brookfield Ed Sigma', 'CRI', 'CRI', 'Asset Finance', '2034-01-01T00:00:00', 'Analista A', 'Baa3', 'Baa1', 'Verde', 'Anual', 'Semestral', 'Trimestral');
+INSERT INTO cri_cra_dev.crm.operations (id, name, area, operation_type, segmento, maturity_date, responsible_analyst, rating_operation, watchlist, review_frequency, call_frequency, df_frequency)
+VALUES (4, 'Brookfield Ed Sigma', 'CRI', 'CRI', 'Asset Finance', '2034-01-01T00:00:00', 'Analista A', 'Baa3', 'Verde', 'Anual', 'Semestral', 'Trimestral');
 INSERT INTO cri_cra_dev.crm.operation_projects (operation_id, project_id) VALUES (4, 4);
 INSERT INTO cri_cra_dev.crm.task_rules (operation_id, name, frequency, start_date, end_date) VALUES (4, 'Revisão Gerencial', 'Anual', current_timestamp(), '2034-01-01T00:00:00'), (4, 'Call de Acompanhamento', 'Semestral', current_timestamp(), '2034-01-01T00:00:00');
 
 -- Operação 5: BC Fund
-INSERT INTO cri_cra_dev.crm.operations (id, name, area, operation_type, segmento, maturity_date, responsible_analyst, rating_operation, rating_group, watchlist, review_frequency, call_frequency, df_frequency)
-VALUES (5, 'BC Fund', 'CRI', 'CRI', 'Asset Finance - FII', '2034-01-01T00:00:00', 'Analista B', 'Baa3', 'Baa1', 'Verde', 'Anual', 'Trimestral', 'Trimestral');
+INSERT INTO cri_cra_dev.crm.operations (id, name, area, operation_type, segmento, maturity_date, responsible_analyst, rating_operation, watchlist, review_frequency, call_frequency, df_frequency)
+VALUES (5, 'BC Fund', 'CRI', 'CRI', 'Asset Finance - FII', '2034-01-01T00:00:00', 'Analista B', 'Baa3', 'Verde', 'Anual', 'Trimestral', 'Trimestral');
 INSERT INTO cri_cra_dev.crm.operation_projects (operation_id, project_id) VALUES (5, 5);
 INSERT INTO cri_cra_dev.crm.task_rules (operation_id, name, frequency, start_date, end_date) VALUES (5, 'Revisão Gerencial', 'Anual', current_timestamp(), '2034-01-01T00:00:00'), (5, 'Verificar relatório FII', 'Mensal', current_timestamp(), '2034-01-01T00:00:00'), (5, 'Call de Acompanhamento', 'Trimestral', current_timestamp(), '2034-01-01T00:00:00');
 
 -- ... (Continue para todas as 22 operações)
 
 -- Operação 6: UBS
-INSERT INTO cri_cra_dev.crm.operations (id, name, area, operation_type, segmento, maturity_date, responsible_analyst, rating_operation, rating_group, watchlist, review_frequency, call_frequency, df_frequency)
-VALUES (6, 'UBS', 'CRI', 'CRI', 'Asset Finance - FII', '2034-01-01T00:00:00', 'Analista B', 'Baa3', 'Baa1', 'Verde', 'Anual', 'Trimestral', 'Trimestral');
+INSERT INTO cri_cra_dev.crm.operations (id, name, area, operation_type, segmento, maturity_date, responsible_analyst, rating_operation, watchlist, review_frequency, call_frequency, df_frequency)
+VALUES (6, 'UBS', 'CRI', 'CRI', 'Asset Finance - FII', '2034-01-01T00:00:00', 'Analista B', 'Baa3', 'Verde', 'Anual', 'Trimestral', 'Trimestral');
 INSERT INTO cri_cra_dev.crm.operation_projects (operation_id, project_id) VALUES (6, 6);
 INSERT INTO cri_cra_dev.crm.task_rules (operation_id, name, frequency, start_date, end_date) VALUES (6, 'Revisão Gerencial', 'Anual', current_timestamp(), '2034-01-01T00:00:00'), (6, 'Verificar relatório FII', 'Mensal', current_timestamp(), '2034-01-01T00:00:00'), (6, 'Call de Acompanhamento', 'Trimestral', current_timestamp(), '2034-01-01T00:00:00');
 
 -- Operação 7: Morumbi RB
-INSERT INTO cri_cra_dev.crm.operations (id, name, area, operation_type, segmento, maturity_date, responsible_analyst, rating_operation, rating_group, watchlist, review_frequency, call_frequency, df_frequency)
-VALUES (7, 'Morumbi RB', 'CRI', 'CRI', 'Asset Finance - FII', '2034-01-01T00:00:00', 'Analista B', 'Baa3', 'Baa1', 'Verde', 'Semestral', 'Trimestral', 'Trimestral');
+INSERT INTO cri_cra_dev.crm.operations (id, name, area, operation_type, segmento, maturity_date, responsible_analyst, rating_operation, watchlist, review_frequency, call_frequency, df_frequency)
+VALUES (7, 'Morumbi RB', 'CRI', 'CRI', 'Asset Finance - FII', '2034-01-01T00:00:00', 'Analista B', 'Baa3', 'Verde', 'Semestral', 'Trimestral', 'Trimestral');
 INSERT INTO cri_cra_dev.crm.operation_projects (operation_id, project_id) VALUES (7, 7);
 INSERT INTO cri_cra_dev.crm.task_rules (operation_id, name, frequency, start_date, end_date) VALUES (7, 'Revisão Gerencial', 'Semestral', current_timestamp(), '2034-01-01T00:00:00'), (7, 'Verificar relatório FII', 'Mensal', current_timestamp(), '2034-01-01T00:00:00'), (7, 'Call de Acompanhamento', 'Trimestral', current_timestamp(), '2034-01-01T00:00:00');
 
 -- Operação 8: Brookfield EZ Tower
-INSERT INTO cri_cra_dev.crm.operations (id, name, area, operation_type, segmento, maturity_date, responsible_analyst, rating_operation, rating_group, watchlist, review_frequency, call_frequency, df_frequency)
-VALUES (8, 'Brookfield EZ Tower', 'CRI', 'CRI', 'Asset Finance - FII', '2034-01-01T00:00:00', 'Analista A', 'Baa3', 'Baa1', 'Verde', 'Anual', 'Trimestral', 'Trimestral');
+INSERT INTO cri_cra_dev.crm.operations (id, name, area, operation_type, segmento, maturity_date, responsible_analyst, rating_operation, watchlist, review_frequency, call_frequency, df_frequency)
+VALUES (8, 'Brookfield EZ Tower', 'CRI', 'CRI', 'Asset Finance - FII', '2034-01-01T00:00:00', 'Analista A', 'Baa3', 'Verde', 'Anual', 'Trimestral', 'Trimestral');
 INSERT INTO cri_cra_dev.crm.operation_projects (operation_id, project_id) VALUES (8, 8);
 INSERT INTO cri_cra_dev.crm.task_rules (operation_id, name, frequency, start_date, end_date) VALUES (8, 'Revisão Gerencial', 'Anual', current_timestamp(), '2034-01-01T00:00:00'), (8, 'Verificar relatório FII', 'Mensal', current_timestamp(), '2034-01-01T00:00:00'), (8, 'Call de Acompanhamento', 'Trimestral', current_timestamp(), '2034-01-01T00:00:00');
 
@@ -115,8 +115,8 @@ FROM cri_cra_dev.crm.operations;
 
 
 -- Exemplo final para a operação 'GTIS Extra'
-INSERT INTO cri_cra_dev.crm.operations (id, name, area, operation_type, segmento, maturity_date, responsible_analyst, rating_operation, rating_group, watchlist, review_frequency, call_frequency, df_frequency)
-VALUES (21, 'GTIS Extra', 'CRI', 'CRI', 'Projeto específico', '2028-01-01T00:00:00', 'Analista C', 'Ba1', 'Baa4', 'Verde', 'Semestral', 'Mensal', 'Semestral');
+INSERT INTO cri_cra_dev.crm.operations (id, name, area, operation_type, segmento, maturity_date, responsible_analyst, rating_operation, watchlist, review_frequency, call_frequency, df_frequency)
+VALUES (21, 'GTIS Extra', 'CRI', 'CRI', 'Projeto específico', '2028-01-01T00:00:00', 'Analista C', 'Ba1', 'Verde', 'Semestral', 'Mensal', 'Semestral');
 INSERT INTO cri_cra_dev.crm.operation_projects (operation_id, project_id) VALUES (21, 23);
 INSERT INTO cri_cra_dev.crm.task_rules (operation_id, name, frequency, start_date, end_date) VALUES
 (21, 'Revisão Gerencial', 'Semestral', current_timestamp(), '2028-01-01T00:00:00'),
@@ -124,7 +124,7 @@ INSERT INTO cri_cra_dev.crm.task_rules (operation_id, name, frequency, start_dat
 (21, 'Relatório mensal de obras', 'Mensal', current_timestamp(), '2028-01-01T00:00:00');
 
 -- Exemplo final para a operação 'FII Estoque Even'
-INSERT INTO cri_cra_dev.crm.operations (id, name, area, operation_type, segmento, maturity_date, responsible_analyst, rating_operation, rating_group, watchlist, review_frequency, call_frequency, df_frequency)
+INSERT INTO cri_cra_dev.crm.operations (id, name, area, operation_type, segmento, maturity_date, responsible_analyst, rating_operation, watchlist, review_frequency, call_frequency, df_frequency)
 VALUES (22, 'FII Estoque Even', 'CRI', 'CRI', 'Projeto específico', '2029-01-01T00:00:00', 'Analista C', 'Baa3', 'Baa1', 'Verde', 'Anual', 'Mensal', 'Trimestral');
 INSERT INTO cri_cra_dev.crm.operation_projects (operation_id, project_id) VALUES (22, 24);
 INSERT INTO cri_cra_dev.crm.task_rules (operation_id, name, frequency, start_date, end_date) VALUES
