@@ -3,6 +3,7 @@ import { Page, StructuringOperation, Event, Contact, StructuringOperationStage }
 import EventForm from './EventForm';
 import OperationForm from './OperationForm';
 import AdHocTaskForm from './AdHocTaskForm';
+import AnalystSelect from './AnalystSelect';
 import { TaskRule } from '../types';
 import { fetchApi } from '../utils/api';
 
@@ -34,6 +35,8 @@ const StructuringOperationDetailsPage: React.FC<StructuringOperationDetailsPageP
   const [isMigratingToActive, setIsMigratingToActive] = useState(false);
   const [stageToComplete, setStageToComplete] = useState<StructuringOperationStage | null>(null);
   const [selectedEventForModal, setSelectedEventForModal] = useState<Event | null>(null);
+  const [isEditingAnalyst, setIsEditingAnalyst] = useState(false);
+  const [analystDraft, setAnalystDraft] = useState('');
 
   useEffect(() => {
     fetchOperation();
@@ -350,14 +353,49 @@ const StructuringOperationDetailsPage: React.FC<StructuringOperationDetailsPageP
         
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 p-6 bg-gray-50 dark:bg-gray-800/50">
           <div>
-            <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Analista</p>
-            <input
-              type="text"
-              placeholder="Ex: João Silva"
-              value={operation.analyst || ''}
-              onChange={(e) => handleUpdateOperation({ analyst: e.target.value })}
-              className="mt-1 w-full text-sm border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-            />
+            <div className="flex justify-between items-center">
+              <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Analista</p>
+              {!isEditingAnalyst && (
+                <button 
+                  onClick={() => { setAnalystDraft(operation.analyst || ''); setIsEditingAnalyst(true); }} 
+                  className="text-xs text-blue-600 dark:text-blue-400 hover:underline"
+                >
+                  Editar
+                </button>
+              )}
+            </div>
+            {isEditingAnalyst ? (
+              <div className="flex flex-col gap-2 mt-1">
+                <AnalystSelect
+                  id="analyst-edit"
+                  value={analystDraft}
+                  onChange={setAnalystDraft}
+                  apiUrl={apiUrl}
+                  className="w-full text-sm"
+                />
+                <div className="flex gap-3 justify-end mt-1">
+                  <button 
+                    onClick={() => setIsEditingAnalyst(false)} 
+                    className="text-xs text-gray-500 hover:underline"
+                  >
+                    Cancelar
+                  </button>
+                  <button 
+                    onClick={() => { 
+                      handleUpdateOperation({ analyst: analystDraft }); 
+                      setIsEditingAnalyst(false); 
+                    }} 
+                    className="text-xs text-blue-600 font-bold hover:underline"
+                  >
+                    Salvar
+                  </button>
+                </div>
+              </div>
+            ) : (
+                <p className="mt-1 text-sm font-semibold text-gray-900 dark:text-white">
+                  {operation.analyst || 'Não informado'}
+                </p>
+            )}
           </div>
           <div>
             <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Risco</p>
@@ -385,10 +423,10 @@ const StructuringOperationDetailsPage: React.FC<StructuringOperationDetailsPageP
             </select>
           </div>
           <div>
-            <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Volume Total (R$)</p>
+            <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Volume Total (R$ milhões)</p>
             {operation.series && operation.series.length > 0 ? (
                 <p className="mt-1 font-semibold text-gray-900 dark:text-white text-lg">
-                  R$ {(operation.series.reduce((acc, s) => acc + (s.volume || 0), 0) / 1000000).toFixed(2)}M
+                  R$ {(operation.series.reduce((acc, s) => acc + (s.volume || 0), 0)).toFixed(2)}M
                 </p>
             ) : (
                 <input
@@ -399,7 +437,7 @@ const StructuringOperationDetailsPage: React.FC<StructuringOperationDetailsPageP
                      handleUpdateOperation({ series: [{ name: 'Série Única', volume: newVol }] });
                   }}
                   className="mt-1 w-full text-sm border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                  placeholder="Ex: 50000000"
+                  placeholder="Ex: 50"
                 />
             )}
           </div>
@@ -558,13 +596,33 @@ const StructuringOperationDetailsPage: React.FC<StructuringOperationDetailsPageP
                 Séries da Dívida
               </h2>
               {!isEditingSeries ? (
-                  <button onClick={() => { setSeriesDraft(operation.series || []); setIsEditingSeries(true); }} className="text-xs text-blue-600 dark:text-blue-400 hover:underline">
+                  <button onClick={() => { 
+                      const formattedDraft = (operation.series || []).map(s => ({
+                          ...s,
+                          rate: (s.rate && !isNaN(Number(s.rate))) ? (Number(s.rate) * 100).toFixed(2).replace('.', ',') : (s.rate || '')
+                      }));
+                      setSeriesDraft(formattedDraft); 
+                      setIsEditingSeries(true); 
+                  }} className="text-xs text-blue-600 dark:text-blue-400 hover:underline">
                       Editar Séries
                   </button>
               ) : (
                   <div className="flex gap-2">
                       <button onClick={() => setIsEditingSeries(false)} className="text-xs text-gray-500 hover:underline">Cancelar</button>
-                      <button onClick={() => handleUpdateOperation({ series: seriesDraft })} className="text-xs text-blue-600 font-bold hover:underline">Salvar</button>
+                      <button onClick={() => {
+                          const payloadSeries = seriesDraft.map(s => {
+                              let dbRate = String(s.rate || '');
+                              if (dbRate) {
+                                  let rStr = dbRate.replace('%', '').trim().replace(',', '.');
+                                  const num = Number(rStr);
+                                  if (!isNaN(num)) {
+                                      dbRate = (num / 100).toString();
+                                  }
+                              }
+                              return { ...s, rate: dbRate };
+                          });
+                          handleUpdateOperation({ series: payloadSeries });
+                      }} className="text-xs text-blue-600 font-bold hover:underline">Salvar</button>
                   </div>
               )}
             </div>
@@ -577,14 +635,27 @@ const StructuringOperationDetailsPage: React.FC<StructuringOperationDetailsPageP
                                <div className="grid grid-cols-2 gap-3">
                                    <div><p className="text-xs text-gray-500">Nome</p><input className="w-full text-sm border p-1 rounded" value={s.name || ''} onChange={(e) => { const n = [...seriesDraft]; n[idx].name = e.target.value; setSeriesDraft(n); }} /></div>
                                    <div><p className="text-xs text-gray-500">Indexador</p><input className="w-full text-sm border p-1 rounded" value={s.indexer || ''} onChange={(e) => { const n = [...seriesDraft]; n[idx].indexer = e.target.value; setSeriesDraft(n); }} /></div>
-                                   <div><p className="text-xs text-gray-500">Taxa</p><input className="w-full text-sm border p-1 rounded" value={s.rate || ''} onChange={(e) => { const n = [...seriesDraft]; n[idx].rate = e.target.value; setSeriesDraft(n); }} /></div>
-                                   <div><p className="text-xs text-gray-500">Volume (R$)</p><input type="number" className="w-full text-sm border p-1 rounded" value={s.volume || ''} onChange={(e) => { const n = [...seriesDraft]; n[idx].volume = Number(e.target.value); setSeriesDraft(n); }} /></div>
+                                   <div><p className="text-xs text-gray-500">Taxa</p><input className="w-full text-sm border p-1 rounded" value={s.rate || ''} onChange={(e) => { const n = [...seriesDraft]; n[idx].rate = e.target.value; setSeriesDraft(n); }} placeholder="Ex: 9,20%" /></div>
+                                   <div><p className="text-xs text-gray-500">Volume (R$ MM)</p><input type="number" className="w-full text-sm border p-1 rounded" value={s.volume || ''} onChange={(e) => { const n = [...seriesDraft]; n[idx].volume = Number(e.target.value); setSeriesDraft(n); }} /></div>
                                    <div className="col-span-2"><p className="text-xs text-gray-500">Fundo</p><input className="w-full text-sm border p-1 rounded" value={s.fund || ''} onChange={(e) => { const n = [...seriesDraft]; n[idx].fund = e.target.value; setSeriesDraft(n); }} /></div>
                                </div>
                            </div>
                        ))}
                        <button onClick={() => setSeriesDraft([...seriesDraft, { name: 'Nova Série', indexer: 'CDI', rate: '', volume: 0, fund: '' }])} className="w-full py-2 border-2 border-dashed rounded text-sm text-gray-500 hover:text-blue-500">+ Adicionar Opção de Série</button>
-                       <button onClick={() => handleUpdateOperation({ series: seriesDraft })} className="w-full py-2 bg-blue-600 text-white rounded font-bold hover:bg-blue-700 transition">Salvar Alterações</button>
+                       <button onClick={() => {
+                          const payloadSeries = seriesDraft.map(s => {
+                              let dbRate = String(s.rate || '');
+                              if (dbRate) {
+                                  let rStr = dbRate.replace('%', '').trim().replace(',', '.');
+                                  const num = Number(rStr);
+                                  if (!isNaN(num)) {
+                                      dbRate = (num / 100).toString();
+                                  }
+                              }
+                              return { ...s, rate: dbRate };
+                          });
+                          handleUpdateOperation({ series: payloadSeries });
+                       }} className="w-full py-2 bg-blue-600 text-white rounded font-bold hover:bg-blue-700 transition">Salvar Alterações</button>
                    </div>
                ) : operation.series && operation.series.length > 0 ? (
                  <div className="space-y-4">
@@ -593,14 +664,14 @@ const StructuringOperationDetailsPage: React.FC<StructuringOperationDetailsPageP
                        <div className="flex justify-between items-start mb-3">
                          <h3 className="font-semibold text-gray-900 dark:text-white text-lg">{series.name}</h3>
                          <span className="text-sm font-medium px-2 py-1 bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400 rounded-md">
-                           {series.indexer || 'N/A'} {series.rate ? `+ ${series.rate}` : ''}
+                           {series.indexer || 'N/A'} {series.rate ? `+ ${!isNaN(Number(series.rate)) ? (Number(series.rate) * 100).toFixed(2).replace('.', ',') + '%' : series.rate}` : ''}
                          </span>
                        </div>
                        <div className="grid grid-cols-2 gap-4 text-sm">
                          <div>
                            <p className="text-gray-500 dark:text-gray-400">Volume</p>
                            <p className="font-medium text-gray-900 dark:text-white">
-                             {series.volume ? `R$ ${(series.volume / 1000000).toFixed(2)}M` : 'N/A'}
+                             {series.volume ? `R$ ${(series.volume).toFixed(2)}M` : 'N/A'}
                            </p>
                          </div>
                          <div>

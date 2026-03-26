@@ -248,6 +248,27 @@ def fetch_full_operation(cursor, operation_id):
     return operation
 
 # ================== Rotas da API ==================
+@app.route('/api/analysts', methods=['GET'])
+def get_analysts():
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute("""
+                SELECT DISTINCT responsible_analyst AS analyst FROM cri_cra_dev.crm.operations WHERE responsible_analyst IS NOT NULL AND TRIM(responsible_analyst) != ''
+                UNION
+                SELECT DISTINCT structuring_analyst AS analyst FROM cri_cra_dev.crm.operations WHERE structuring_analyst IS NOT NULL AND TRIM(structuring_analyst) != ''
+                UNION
+                SELECT DISTINCT registered_by AS analyst FROM cri_cra_dev.crm.events WHERE registered_by IS NOT NULL AND TRIM(registered_by) != ''
+                ORDER BY analyst
+            """)
+            analysts = [row.analyst for row in cursor.fetchall() if row.analyst.strip() != '']
+        return jsonify(analysts)
+    except Exception as e:
+        app.logger.error(f"Error in /api/analysts: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn: conn.close()
+
 @app.route('/api/operations', methods=['GET', 'POST'])
 def manage_operations_collection():
     conn = get_db_connection()

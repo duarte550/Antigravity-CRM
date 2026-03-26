@@ -9,7 +9,7 @@ interface PorFundoTabProps {
     onEditOperation: (op: StructuringOperation) => void;
 }
 
-const formatCurrency = (val: number) => `R$ ${(val / 1000000).toFixed(2)}M`;
+const formatCurrency = (val: number) => `R$ ${(val).toFixed(2)}M`;
 const formatPercent = (val: number) => `${val.toFixed(2)}%`;
 
 const getRiscoValor = (riscoData: any[], info: string) => {
@@ -89,11 +89,11 @@ const PorFundoTab: React.FC<PorFundoTabProps> = ({ operations, apiUrl, showToast
     // Derived Data
     const dataRef = riscoData.length > 0 ? new Date(riscoData[0].Data).toLocaleDateString('pt-BR') : '';
 
-    const plAtual = getRiscoValor(riscoData, 'PL - Financeiro');
-    const caixaAtual = getRiscoValor(riscoData, 'Caixa Líquido - Financeiro');
-    const lciAtual = getRiscoValor(riscoData, 'LCI - Financeiro');
-    const compromissadasAtual = getRiscoValor(riscoData, 'Compromissadas - Financeiro');
-    const compromissadasReversas = getRiscoValor(riscoData, 'Repo - Financeiro');
+    const plAtual = getRiscoValor(riscoData, 'PL - Financeiro') / 1000000;
+    const caixaAtual = getRiscoValor(riscoData, 'Caixa Líquido - Financeiro') / 1000000;
+    const lciAtual = getRiscoValor(riscoData, 'LCI - Financeiro') / 1000000;
+    const compromissadasAtual = getRiscoValor(riscoData, 'Compromissadas - Financeiro') / 1000000;
+    const compromissadasReversas = getRiscoValor(riscoData, 'Repo - Financeiro') / 1000000;
 
     const totalEntradas = inputs.emission + inputs.prepayment + inputs.repurchases + inputs.new_repo;
 
@@ -106,7 +106,7 @@ const PorFundoTab: React.FC<PorFundoTabProps> = ({ operations, apiUrl, showToast
                 name: o.name,
                 volume: mySeries?.volume || 0,
                 liquidationDate: o.liquidationDate,
-                rate: mySeries?.rate || '',
+                rate: (mySeries?.rate && !isNaN(Number(mySeries.rate))) ? (Number(mySeries.rate) * 100).toFixed(2).replace('.', ',') : (mySeries?.rate || ''),
                 indexer: mySeries?.indexer || 'CDI',
                 originalOp: o
             };
@@ -151,24 +151,26 @@ const PorFundoTab: React.FC<PorFundoTabProps> = ({ operations, apiUrl, showToast
         let sumVol = 0;
         let sumProd = 0;
         ops.forEach(o => {
-            const r = parseFloat((o.rate || '').replace(/[^0-9.-]/g, ''));
+            const rString = String(o.rate || '').replace(',', '.');
+            const r = parseFloat(rString.replace(/[^0-9.-]/g, ''));
             if (!isNaN(r) && o.volume) {
                 sumVol += o.volume;
-                sumProd += r * o.volume;
+                sumProd += (r / 100) * o.volume;
             }
         });
-        return sumVol > 0 ? (sumProd / sumVol) : null;
+        return sumVol > 0 ? (sumProd / sumVol) * 100 : null;
     };
 
     const calcFinalTax = (idx: string) => {
-        let financialHoje = getRiscoValor(riscoData, `CRI ${idx} - Financeiro`);
+        let financialHoje = getRiscoValor(riscoData, `CRI ${idx} - Financeiro`) / 1000000;
         let taxHoje = getRiscoValor(riscoData, `Taxa Média Curva ${idx}`);
 
         let sumVolPipe = 0;
         let sumProdPipe = 0;
         const ops = simulatedOps.filter(o => o.indexer.toUpperCase() === idx.toUpperCase());
         ops.forEach(o => {
-            const r = parseFloat((o.rate || '').replace(/[^0-9.-]/g, ''));
+            const rString = String(o.rate || '').replace(',', '.');
+            const r = parseFloat(rString.replace(/[^0-9.-]/g, ''));
             if (!isNaN(r) && o.volume) {
                 sumVolPipe += o.volume;
                 sumProdPipe += (r / 100) * o.volume; // treat as decimal internally

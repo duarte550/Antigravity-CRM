@@ -238,6 +238,7 @@ export interface Contact {
   email?: string;
   phone?: string;
   role?: string;
+  operationName?: string;
 }
 
 export interface StructuringOperationSeries {
@@ -310,6 +311,7 @@ export interface EconomicGroup {
   ratingHistory?: RatingHistoryEntry[];
   risks?: OperationRisk[];
   createdAt?: string;
+  contacts?: Contact[];
 }
 
 export interface MasterGroup {

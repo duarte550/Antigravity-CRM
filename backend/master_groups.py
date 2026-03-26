@@ -133,6 +133,28 @@ def fetch_full_master_group(cursor, mg_id):
         'updatedAt': safe_isoformat(r.get('updated_at')),
         'masterGroupId': r.get('master_group_id')
     } for r in mg_risks]
+    # Fetch consolidated contacts
+    cursor.execute("""
+        SELECT id, master_group_id, null as operation_id, name, email, phone, role, null as operation_name
+        FROM cri_cra_dev.crm.master_group_contacts
+        WHERE master_group_id = ?
+        UNION ALL
+        SELECT oc.id, null as master_group_id, oc.operation_id, oc.name, oc.email, oc.phone, oc.role, o.name as operation_name
+        FROM cri_cra_dev.crm.operation_contacts oc
+        JOIN cri_cra_dev.crm.operations o ON o.id = oc.operation_id
+        WHERE o.master_group_id = ?
+    """, (mg_id, mg_id))
+    contacts_rows = [format_row(r, cursor) for r in cursor.fetchall()]
+    mg['contacts'] = [{
+        'id': c.get('id'),
+        'name': c.get('name'),
+        'email': c.get('email'),
+        'phone': c.get('phone'),
+        'role': c.get('role'),
+        'masterGroupId': c.get('master_group_id'),
+        'operationId': c.get('operation_id'),
+        'operationName': c.get('operation_name')
+    } for c in contacts_rows]
     
     return mg
 

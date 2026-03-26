@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { Page, MasterGroup, StructuringOperation, Event, OperationRisk } from '../types';
+import { Page, MasterGroup, StructuringOperation, Event, OperationRisk, Contact } from '../types';
 import EventForm from './EventForm';
 import StructuringOperationForm from './StructuringOperationForm';
+import ContactForm from './ContactForm';
 
 import EventHistory from './EventHistory';
 import RatingHistoryChart from './RatingHistoryChart';
 import RiskForm from './RiskForm';
-import { AlertTriangle, Plus, Edit2, Trash2 } from 'lucide-react';
+import { AlertTriangle, Plus, Edit2, Trash2, Users } from 'lucide-react';
 import { ArrowUpIcon, ArrowRightIcon, ArrowDownIcon } from './icons/Icons';
 import Modal from './Modal';
 import { fetchApi } from '../utils/api';
@@ -47,6 +48,10 @@ const MasterGroupDetailsPage: React.FC<MasterGroupDetailsPageProps> = ({ masterG
   // States for Risks
   const [isAddingRisk, setIsAddingRisk] = useState(false);
   const [editingRisk, setEditingRisk] = useState<OperationRisk | null>(null);
+
+  // States for Contacts
+  const [isAddingContact, setIsAddingContact] = useState(false);
+  const [editingContact, setEditingContact] = useState<Contact | null>(null);
 
   // States for Event History
   const [eventDateFilter, setEventDateFilter] = useState({ start: '', end: '' });
@@ -141,6 +146,60 @@ const MasterGroupDetailsPage: React.FC<MasterGroupDetailsPageProps> = ({ masterG
           console.error("Error deleting risk:", e);
           showToast('Erro ao remover risco.', 'error');
       }
+  };
+
+  const handleSaveContact = async (contactData: any) => {
+    try {
+      if (editingContact) {
+        if (editingContact.operationId) {
+            await fetchApi(`${apiUrl}/api/operations/${editingContact.operationId}/contacts/${editingContact.id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(contactData)
+            });
+        } else {
+            await fetchApi(`${apiUrl}/api/master-groups/${masterGroupId}/contacts/${editingContact.id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(contactData)
+            });
+        }
+        showToast('Contato atualizado.', 'success');
+      } else {
+        await fetchApi(`${apiUrl}/api/master-groups/${masterGroupId}/contacts`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(contactData)
+        });
+        showToast('Contato adicionado.', 'success');
+      }
+      setIsAddingContact(false);
+      setEditingContact(null);
+      fetchMasterGroup();
+    } catch (e) {
+      console.error(e);
+      showToast('Erro ao salvar contato.', 'error');
+    }
+  };
+
+  const handleDeleteContact = async (contact: any) => {
+    if (!window.confirm("Certeza que deseja remover este contato?")) return;
+    try {
+      if (contact.operationId) {
+          await fetchApi(`${apiUrl}/api/operations/${contact.operationId}/contacts/${contact.id}`, {
+              method: 'DELETE'
+          });
+      } else {
+          await fetchApi(`${apiUrl}/api/master-groups/${masterGroupId}/contacts/${contact.id}`, {
+              method: 'DELETE'
+          });
+      }
+      showToast('Contato removido.', 'success');
+      fetchMasterGroup();
+    } catch (e) {
+      console.error(e);
+      showToast('Erro ao remover contato.', 'error');
+    }
   };
 
   const handleAddEvent = async (eventData: Omit<Event, 'id'>) => {
@@ -389,6 +448,84 @@ const MasterGroupDetailsPage: React.FC<MasterGroupDetailsPageProps> = ({ masterG
                           className="mt-3 text-sm text-orange-600 dark:text-orange-500 hover:text-orange-700 dark:hover:text-orange-400 font-bold uppercase tracking-wider"
                       >
                           Clique para adicionar o primeiro
+                      </button>
+                  </div>
+              )}
+          </div>
+
+          
+          {/* Contacts */}
+          {isAddingContact && (
+              <ContactForm
+                  onClose={() => setIsAddingContact(false)}
+                  onSave={handleSaveContact}
+              />
+          )}
+          {editingContact && (
+              <ContactForm
+                  onClose={() => setEditingContact(null)}
+                  onSave={handleSaveContact}
+                  initialData={editingContact}
+              />
+          )}
+
+          <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-lg dark:border dark:border-gray-700 mb-6">
+              <div className="flex justify-between items-center mb-6">
+                  <div className="flex items-center gap-2">
+                      <Users className="w-6 h-6 text-blue-500" />
+                      <h3 className="text-xl font-bold text-gray-700 dark:text-gray-200">Contatos (Consolidado)</h3>
+                  </div>
+                  <button 
+                      onClick={() => setIsAddingContact(true)}
+                      className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition-colors text-sm font-medium shadow-sm"
+                  >
+                      <Plus className="w-4 h-4" /> Novo Contato (Grupo)
+                  </button>
+              </div>
+
+              {masterGroup.contacts && masterGroup.contacts.length > 0 ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {masterGroup.contacts.map((contact) => (
+                          <div key={contact.id} className="bg-gray-50 dark:bg-gray-700/50 p-4 rounded-lg border border-gray-200 dark:border-gray-600 relative group">
+                              <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                  <button onClick={() => setEditingContact(contact)} className="p-1 hover:bg-white dark:hover:bg-gray-600 rounded text-gray-400 hover:text-blue-600 transition-colors">
+                                      <Edit2 className="w-3.5 h-3.5" />
+                                  </button>
+                                  <button onClick={() => handleDeleteContact(contact)} className="p-1 hover:bg-white dark:hover:bg-gray-600 rounded text-gray-400 hover:text-red-600 transition-colors">
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                              </div>
+                              <div className="flex justify-between items-start mb-1 pr-12">
+                                  <h4 className="font-bold text-gray-800 dark:text-gray-200">{contact.name}</h4>
+                              </div>
+                              {contact.role && <p className="text-sm text-gray-500 dark:text-gray-400 mb-2 font-medium">{contact.role}</p>}
+                              <div className="space-y-1 text-sm text-gray-600 dark:text-gray-300 mb-3">
+                                  {contact.email && <p className="truncate" title={contact.email}><a href={`mailto:${contact.email}`} className="text-blue-600 hover:underline">{contact.email}</a></p>}
+                                  {contact.phone && <p>{contact.phone}</p>}
+                              </div>
+                              <div className="pt-3 border-t border-gray-200 dark:border-gray-600">
+                                  {contact.operationName ? (
+                                      <span className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-1 rounded bg-indigo-100 text-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-300">
+                                          Op: {contact.operationName}
+                                      </span>
+                                  ) : (
+                                      <span className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-1 rounded bg-gray-200 text-gray-800 dark:bg-gray-600 dark:text-gray-300">
+                                          Grupo Master
+                                      </span>
+                                  )}
+                              </div>
+                          </div>
+                      ))}
+                  </div>
+              ) : (
+                  <div className="text-center py-8 bg-gray-50 dark:bg-gray-800/50 rounded-lg border-2 border-dashed border-gray-200 dark:border-gray-700">
+                      <Users className="w-10 h-10 text-gray-300 dark:text-gray-600 mx-auto mb-2" />
+                      <p className="text-gray-500 dark:text-gray-400 font-medium">Nenhum contato cadastrado no grupo.</p>
+                      <button 
+                          onClick={() => setIsAddingContact(true)}
+                          className="mt-3 text-sm text-blue-600 dark:text-blue-500 hover:text-blue-700 dark:hover:text-blue-400 font-bold uppercase tracking-wider"
+                      >
+                          Adicionar primeiro contato
                       </button>
                   </div>
               )}

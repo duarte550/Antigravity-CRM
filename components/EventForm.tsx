@@ -4,6 +4,7 @@ import type { Event } from '../types';
 import Modal from './Modal';
 import { Label, Input, Select, FormRow } from './UI';
 import RichTextEditor from './RichTextEditor';
+import AnalystSelect from './AnalystSelect';
 
 interface EventFormProps {
   onClose: () => void;
@@ -82,7 +83,12 @@ const EventForm: React.FC<EventFormProps> = ({ onClose, onSave, analystName, pre
             </div>
             <div>
                 <Label htmlFor="registeredBy">Analista Responsável</Label>
-                <Input id="registeredBy" type="text" value={registeredBy} onChange={e => setRegisteredBy(e.target.value)} required />
+                <AnalystSelect 
+                    id="registeredBy" 
+                    value={registeredBy} 
+                    onChange={setRegisteredBy} 
+                    required 
+                />
             </div>
         </FormRow>
 

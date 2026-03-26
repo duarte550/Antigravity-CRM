@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { StructuringOperation, StructuringOperationSeries, Area, areaOptions } from '../types';
 import Modal from './Modal';
 import { Label, Input, Select, FormRow } from './UI';
+import AnalystSelect from './AnalystSelect';
 
 interface StructuringOperationFormProps {
   onClose: () => void;
@@ -35,7 +36,10 @@ const StructuringOperationForm: React.FC<StructuringOperationFormProps> = ({ onC
 
   const [series, setSeries] = useState<StructuringOperationSeries[]>(
     initialData?.series && initialData.series.length > 0
-      ? initialData.series
+      ? initialData.series.map(s => ({
+          ...s,
+          rate: (s.rate && !isNaN(Number(s.rate))) ? (Number(s.rate) * 100).toFixed(2).replace('.', ',') : (s.rate || '')
+        }))
       : [{ name: 'Série Única', rate: '', indexer: INDEXERS[0], volume: undefined, fund: '' }]
   );
 
@@ -74,9 +78,21 @@ const StructuringOperationForm: React.FC<StructuringOperationFormProps> = ({ onC
       return;
     }
 
+    const finalSeries = series.map(s => {
+        let dbRate = String(s.rate || '');
+        if (dbRate) {
+             let rStr = dbRate.replace('%', '').trim().replace(',', '.');
+             const num = Number(rStr);
+             if (!isNaN(num)) {
+                  dbRate = (num / 100).toString();
+             }
+        }
+        return { ...s, rate: dbRate };
+    });
+
     const payloadSeries = !initialData && initialVolume !== ''
       ? [{ name: 'A Definir', rate: '', indexer: initialIndexer, volume: Number(initialVolume), fund: '' }]
-      : series;
+      : finalSeries;
 
     setIsSubmitting(true);
     try {
@@ -193,7 +209,12 @@ const StructuringOperationForm: React.FC<StructuringOperationFormProps> = ({ onC
           </div>
           <div>
             <Label htmlFor="analyst">Analista</Label>
-            <Input id="analyst" type="text" value={analyst} onChange={e => setAnalyst(e.target.value)} required />
+            <AnalystSelect 
+              id="analyst" 
+              value={analyst} 
+              onChange={setAnalyst} 
+              required 
+            />
           </div>
         </FormRow>
 
@@ -269,7 +290,7 @@ const StructuringOperationForm: React.FC<StructuringOperationFormProps> = ({ onC
 
                   <FormRow>
                     <div>
-                      <Label htmlFor={`volume-${idx}`}>Volume (R$)</Label>
+                      <Label htmlFor={`volume-${idx}`}>Volume (R$ milhões)</Label>
                       <Input type="number" step="0.01" value={s.volume || ''} onChange={e => handleSeriesChange(idx, 'volume', parseFloat(e.target.value) || undefined)} />
                     </div>
                   </FormRow>
@@ -283,7 +304,7 @@ const StructuringOperationForm: React.FC<StructuringOperationFormProps> = ({ onC
                     </div>
                     <div>
                       <Label htmlFor={`rate-${idx}`}>Taxa</Label>
-                      <Input type="text" value={s.rate || ''} onChange={e => handleSeriesChange(idx, 'rate', e.target.value)} placeholder="Ex: + 2.5%" />
+                      <Input type="text" value={s.rate || ''} onChange={e => handleSeriesChange(idx, 'rate', e.target.value)} placeholder="Ex: 9,20%" />
                     </div>
                   </FormRow>
                 </div>

@@ -5,6 +5,7 @@ import { WatchlistStatus, ratingOptions, segmentoOptions, areaOptions } from '..
 import Modal from './Modal';
 import { Label, Input, Select, FormRow } from './UI';
 import RichTextEditor from './RichTextEditor';
+import AnalystSelect from './AnalystSelect';
 import { fetchApi } from '../utils/api';
 
 interface OperationFormProps {
@@ -201,7 +202,13 @@ const OperationForm: React.FC<OperationFormProps> = ({ onClose, onSave, initialD
             </div>
              <div>
                 <Label htmlFor="responsibleAnalyst">Analista Responsável</Label>
-                <Input id="responsibleAnalyst" type="text" value={responsibleAnalyst} onChange={e => setResponsibleAnalyst(e.target.value)} required />
+                <AnalystSelect 
+                    id="responsibleAnalyst" 
+                    value={responsibleAnalyst} 
+                    onChange={setResponsibleAnalyst} 
+                    apiUrl={apiUrl} 
+                    required 
+                />
             </div>
         </FormRow>
 

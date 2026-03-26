@@ -482,7 +482,7 @@ const OriginationPipelinePage: React.FC<OriginationPipelinePageProps> = ({ onNav
                 rates = [parseFloat(String(op.rate).replace(/[^0-9.-]/g, ''))].filter(r => !isNaN(r));
             }
             const avgRateVal = rates.length > 0 ? (rates.reduce((a,b)=>a+b,0) / rates.length) : -999;
-            const avgRateStr = rates.length > 0 ? avgRateVal.toFixed(2) + '%' : '-';
+            const avgRateStr = rates.length > 0 ? (avgRateVal * 100).toFixed(2).replace('.', ',') + '%' : '-';
             
             let indexers: string[] = [];
             if (hasSeries) {
@@ -703,7 +703,7 @@ const OriginationPipelinePage: React.FC<OriginationPipelinePageProps> = ({ onNav
             <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
                 <div className="bg-white dark:bg-gray-800 rounded-xl p-5 shadow-sm border border-gray-100 dark:border-gray-700 flex flex-col justify-center">
                     <p className="text-gray-500 dark:text-gray-400 text-sm font-medium">Volume Total</p>
-                    <h2 className="text-3xl font-bold text-gray-900 dark:text-white mt-1">R$ {(totalVolume / 1000000).toFixed(1)}M</h2>
+                    <h2 className="text-3xl font-bold text-gray-900 dark:text-white mt-1">R$ {(totalVolume).toFixed(2)}M</h2>
                     
                     <div className="mt-4 pt-3 border-t border-gray-100 dark:border-gray-700 flex justify-between text-sm">
                         <div className="text-center">
@@ -740,7 +740,7 @@ const OriginationPipelinePage: React.FC<OriginationPipelinePageProps> = ({ onNav
                      <div className="flex h-20 items-end gap-1.5 px-1 border-b border-gray-200 dark:border-gray-700 pb-1">
                         {chartLabels.length > 0 ? chartLabels.map(l => (
                             <div key={l} className="flex-1 flex flex-col justify-end items-center group relative h-full">
-                                <div className="absolute bottom-full mb-1 opacity-0 group-hover:opacity-100 bg-gray-800 text-white text-[10px] py-0.5 px-1.5 rounded z-10 whitespace-nowrap">{(volumeByMonth[l]/1000000).toFixed(1)}M</div>
+                                <div className="absolute bottom-full mb-1 opacity-0 group-hover:opacity-100 bg-gray-800 text-white text-[10px] py-0.5 px-1.5 rounded z-10 whitespace-nowrap">{(volumeByMonth[l]).toFixed(2)}M</div>
                                 <div className="bg-blue-500 dark:bg-blue-600 rounded-t-sm w-full transition-all hover:bg-blue-400" style={{ height: `${(volumeByMonth[l]/chartMax)*100}%` }}></div>
                                 <span className="text-[9px] text-gray-400 mt-1 absolute top-full pt-0.5">{l}</span>
                             </div>
@@ -758,8 +758,8 @@ const OriginationPipelinePage: React.FC<OriginationPipelinePageProps> = ({ onNav
                             {summaries.indexerAvg.length > 0 ? summaries.indexerAvg.map(sa => (
                                 <tr key={sa.indexer}>
                                     <td className="py-1 font-medium text-gray-900 dark:text-gray-200">{sa.indexer}</td>
-                                    <td className="py-1 text-right text-gray-600 dark:text-gray-300">{sa.avgLiq !== null ? sa.avgLiq.toFixed(2)+'%' : '-'}</td>
-                                    <td className="py-1 text-right text-gray-600 dark:text-gray-300">{sa.avgEst !== null ? sa.avgEst.toFixed(2)+'%' : '-'}</td>
+                                    <td className="py-1 text-right text-gray-600 dark:text-gray-300">{sa.avgLiq !== null ? (sa.avgLiq * 100).toFixed(2).replace('.', ',')+'%' : '-'}</td>
+                                    <td className="py-1 text-right text-gray-600 dark:text-gray-300">{sa.avgEst !== null ? (sa.avgEst * 100).toFixed(2).replace('.', ',')+'%' : '-'}</td>
                                 </tr>
                             )) : <tr><td colSpan={3} className="py-2 text-center text-gray-400">Nenhum indexador.</td></tr>}
                         </tbody>
@@ -883,7 +883,7 @@ const OriginationPipelinePage: React.FC<OriginationPipelinePageProps> = ({ onNav
                                                 {op.temperature || 'N/D'}
                                             </span>
                                         </td>
-                                        <td className="px-4 py-3 text-right">R$ {(op._totalVol / 1000000).toFixed(2)}M</td>
+                                        <td className="px-4 py-3 text-right">R$ {(op._totalVol).toFixed(2)}M</td>
                                         <td className="px-4 py-3 text-center">{op._indexerStr}</td>
                                         <td className="px-4 py-3 text-right">{op._avgRateStr}</td>
                                         <td className="px-4 py-3 text-sm font-medium">{op.stage}</td>
@@ -989,7 +989,7 @@ const OriginationPipelinePage: React.FC<OriginationPipelinePageProps> = ({ onNav
                                             <div className="flex justify-between">
                                                 <span className="text-gray-500">Volume:</span>
                                                 <span className="font-medium text-gray-900 dark:text-white">
-                                                    {op.series && op.series.length > 0 ? `R$ ${(op.series.reduce((acc, s) => acc + (s.volume || 0), 0) / 1000000).toFixed(2)}M` : '-'}
+                                                    {op.series && op.series.length > 0 ? `R$ ${(op.series.reduce((acc, s) => acc + (s.volume || 0), 0)).toFixed(2)}M` : '-'}
                                                 </span>
                                             </div>
                                             <div className="flex justify-between">
@@ -1043,8 +1043,8 @@ const OriginationPipelinePage: React.FC<OriginationPipelinePageProps> = ({ onNav
                         {/* Summary by Fund side-by-side config */}
                         <div className="flex gap-4 text-xs">
                              <div className="bg-white dark:bg-gray-800 p-2 rounded shadow-sm border border-gray-200 dark:border-gray-700 flex gap-4">
-                                <div><span className="text-gray-500 mr-2">Vol. Liq:</span><span className="font-semibold text-green-600">R$ {(Object.values(summaries.fundSummary).reduce((a,b)=>a+b.liq,0)/1000000).toFixed(1)}M</span></div>
-                                <div><span className="text-gray-500 mr-2">Vol. Est:</span><span className="font-semibold text-blue-600">R$ {(Object.values(summaries.fundSummary).reduce((a,b)=>a+b.est,0)/1000000).toFixed(1)}M</span></div>
+                                <div><span className="text-gray-500 mr-2">Vol. Liq:</span><span className="font-semibold text-green-600">R$ {(Object.values(summaries.fundSummary).reduce((a,b)=>a+b.liq,0)).toFixed(2)}M</span></div>
+                                <div><span className="text-gray-500 mr-2">Vol. Est:</span><span className="font-semibold text-blue-600">R$ {(Object.values(summaries.fundSummary).reduce((a,b)=>a+b.est,0)).toFixed(2)}M</span></div>
                              </div>
                         </div>
                      </div>
@@ -1089,12 +1089,12 @@ const OriginationPipelinePage: React.FC<OriginationPipelinePageProps> = ({ onNav
                                         <td className="px-5 py-3 text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap">{row.analyst}</td>
                                         <td className="px-5 py-3">{row.fund}</td>
                                         <td className="px-5 py-3 text-right font-medium text-gray-900 dark:text-white whitespace-nowrap">
-                                            {row.volume ? `R$ ${(row.volume / 1000000).toFixed(2)}M` : '-'}
+                                            {row.volume ? `R$ ${(row.volume).toFixed(2)}M` : '-'}
                                         </td>
                                         <td className="px-5 py-3">
                                             <div className="flex gap-1">
                                                 {row.indexer !== '-' && <span className="bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 px-1.5 py-0.5 rounded text-xs">{row.indexer}</span>}
-                                                {row.rate !== '-' && <span className="bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-400 px-1.5 py-0.5 rounded text-xs">+{row.rate}</span>}
+                                                {row.rate !== '-' && <span className="bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-400 px-1.5 py-0.5 rounded text-xs">+{!isNaN(Number(row.rate)) ? (Number(row.rate) * 100).toFixed(2).replace('.', ',') + '%' : row.rate}</span>}
                                             </div>
                                         </td>
                                     </tr>
