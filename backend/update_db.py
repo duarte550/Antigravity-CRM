@@ -234,6 +234,7 @@ SCHEMA = {
         "prepayment FLOAT",
         "repurchases FLOAT",
         "new_repo FLOAT",
+        "simulated_ops_overrides STRING",
         "updated_at TIMESTAMP"
     ]
 }

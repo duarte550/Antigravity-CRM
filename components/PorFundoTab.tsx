@@ -12,6 +12,8 @@ interface PorFundoTabProps {
 const formatCurrency = (val: number) => `R$ ${(val).toFixed(2)}M`;
 const formatPercent = (val: number) => `${val.toFixed(2)}%`;
 
+const ALL_TEMPERATURES = ['Quente', 'Morno', 'Frio', 'N/D'];
+
 const getRiscoValor = (riscoData: any[], info: string) => {
     const item = riscoData.find(d => d.Info === info);
     return item ? (item.Valor || 0) : 0;
@@ -27,11 +29,15 @@ const PorFundoTab: React.FC<PorFundoTabProps> = ({ operations, apiUrl, showToast
         emission: 0,
         prepayment: 0,
         repurchases: 0,
-        new_repo: 0
+        new_repo: 0,
+        simulated_ops_overrides: ""
     });
 
     // Internal loading state while fetching specific fund
     const [isFetchingFund, setIsFetchingFund] = useState(false);
+    
+    const [selectedTemperatures, setSelectedTemperatures] = useState<string[]>(ALL_TEMPERATURES);
+    const [overrides, setOverrides] = useState<Record<number, any>>({});
 
     useEffect(() => {
         fetchApi(`${apiUrl}/api/fund-simulator/funds`)
@@ -55,7 +61,13 @@ const PorFundoTab: React.FC<PorFundoTabProps> = ({ operations, apiUrl, showToast
             .then(res => res.json())
             .then(data => {
                 setRiscoData(data.riscoData || []);
-                setInputs(data.inputs || { emission: 0, prepayment: 0, repurchases: 0, new_repo: 0 });
+                const incInputs = data.inputs || { emission: 0, prepayment: 0, repurchases: 0, new_repo: 0, simulated_ops_overrides: "" };
+                setInputs(incInputs);
+                if (incInputs.simulated_ops_overrides) {
+                    try { setOverrides(JSON.parse(incInputs.simulated_ops_overrides)); } catch(e) {}
+                } else {
+                    setOverrides({});
+                }
             })
             .catch(err => {
                 console.error(err);
@@ -70,12 +82,24 @@ const PorFundoTab: React.FC<PorFundoTabProps> = ({ operations, apiUrl, showToast
 
     const saveInputs = async () => {
         try {
+            const newOverrides: Record<number, any> = { ...overrides };
+            simulatedOps.forEach(op => {
+                newOverrides[op.id] = {
+                    volume: op.volume,
+                    rate: op.rate,
+                    indexer: op.indexer,
+                    isActiveInSimulation: op.isActiveInSimulation !== false
+                };
+            });
+            const payload = { ...inputs, simulated_ops_overrides: JSON.stringify(newOverrides) };
+
             const res = await fetchApi(`${apiUrl}/api/fund-simulator/inputs/${encodeURIComponent(selectedFund)}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(inputs)
+                body: JSON.stringify(payload)
             });
             if (res.ok) {
+                setOverrides(newOverrides);
                 showToast("Valores salvos com sucesso", "success");
             } else {
                 throw new Error("Erro na API");
@@ -98,20 +122,26 @@ const PorFundoTab: React.FC<PorFundoTabProps> = ({ operations, apiUrl, showToast
     const totalEntradas = inputs.emission + inputs.prepayment + inputs.repurchases + inputs.new_repo;
 
     const opSaidasBase = useMemo(() => {
-        const matching = operations.filter(o => o.isActive !== false && o.series?.some(s => s.fund === selectedFund));
+        const matching = operations.filter(o => 
+            o.isActive !== false && 
+            o.series?.some(s => s.fund === selectedFund) &&
+            selectedTemperatures.includes(o.temperature || 'N/D')
+        );
         return matching.map(o => {
             const mySeries = o.series?.find(s => s.fund === selectedFund);
+            const ov = overrides[o.id] || {};
             return {
                 id: o.id,
                 name: o.name,
-                volume: mySeries?.volume || 0,
+                volume: ov.volume !== undefined ? ov.volume : (mySeries?.volume || 0),
                 liquidationDate: o.liquidationDate,
-                rate: (mySeries?.rate && !isNaN(Number(mySeries.rate))) ? (Number(mySeries.rate) * 100).toFixed(2).replace('.', ',') : (mySeries?.rate || ''),
-                indexer: mySeries?.indexer || 'CDI',
+                rate: ov.rate !== undefined ? ov.rate : ((mySeries?.rate && !isNaN(Number(mySeries.rate))) ? (Number(mySeries.rate) * 100).toFixed(2).replace('.', ',') : (mySeries?.rate || '')),
+                indexer: ov.indexer !== undefined ? ov.indexer : (mySeries?.indexer || 'CDI'),
+                isActiveInSimulation: ov.isActiveInSimulation !== undefined ? ov.isActiveInSimulation : true,
                 originalOp: o
             };
         });
-    }, [operations, selectedFund]);
+    }, [operations, selectedFund, selectedTemperatures, overrides]);
 
     // Estado local para simulação das saídas
     const [simulatedOps, setSimulatedOps] = useState(opSaidasBase);
@@ -122,7 +152,7 @@ const PorFundoTab: React.FC<PorFundoTabProps> = ({ operations, apiUrl, showToast
         setIsSimulating(false);
     }, [opSaidasBase]);
 
-    const handleSimulateChange = (id: number, field: string, value: string | number) => {
+    const handleSimulateChange = (id: number, field: string, value: string | number | boolean) => {
         setIsSimulating(true);
         setSimulatedOps(prev => prev.map(op => op.id === id ? { ...op, [field]: value } : op));
     };
@@ -133,7 +163,8 @@ const PorFundoTab: React.FC<PorFundoTabProps> = ({ operations, apiUrl, showToast
         showToast("Valores originais restaurados", "success");
     };
 
-    const sumSaidas = simulatedOps.reduce((acc, curr) => acc + Math.abs(curr.volume || 0), 0);
+    const activeOps = simulatedOps.filter(o => o.isActiveInSimulation !== false);
+    const sumSaidas = activeOps.reduce((acc, curr) => acc + Math.abs(curr.volume || 0), 0);
     const totalSaidas = -sumSaidas;
     // Conta final solicitada: caixa + lci + entradas + liquidações(como número negativo)
     const caixaApos = caixaAtual + lciAtual + totalEntradas + totalSaidas;
@@ -148,7 +179,7 @@ const PorFundoTab: React.FC<PorFundoTabProps> = ({ operations, apiUrl, showToast
     };
 
     const calcPipelineTaxMid = (idx: string) => {
-        const ops = simulatedOps.filter(o => o.indexer.toUpperCase() === idx.toUpperCase());
+        const ops = activeOps.filter(o => o.indexer.toUpperCase() === idx.toUpperCase());
         if (!ops.length) return null;
         let sumVol = 0;
         let sumProd = 0;
@@ -169,7 +200,7 @@ const PorFundoTab: React.FC<PorFundoTabProps> = ({ operations, apiUrl, showToast
 
         let sumVolPipe = 0;
         let sumProdPipe = 0;
-        const ops = simulatedOps.filter(o => o.indexer.toUpperCase() === idx.toUpperCase());
+        const ops = activeOps.filter(o => o.indexer.toUpperCase() === idx.toUpperCase());
         ops.forEach(o => {
             const rString = String(o.rate || '').replace(',', '.');
             const r = parseFloat(rString.replace(/[^0-9.-]/g, ''));
@@ -240,6 +271,33 @@ const PorFundoTab: React.FC<PorFundoTabProps> = ({ operations, apiUrl, showToast
                         Salvar Premissas
                     </button>
                 </div>
+            </div>
+
+            {/* Filtros de Pipeline */}
+            <div className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-100 dark:border-gray-700/80 shadow-sm flex items-center gap-4 flex-wrap">
+                <div className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300">
+                    <svg className="w-4 h-4 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 18.657A8 8 0 016.343 7.343S7 9 9 10c0-2 .5-5 2.986-7C14 5 16.09 5.777 17.656 7.343A7.975 7.975 0 0120 13a7.975 7.975 0 01-2.343 5.657z" /></svg>
+                    Filtrar Pipeline:
+                </div>
+                {ALL_TEMPERATURES.map(temp => (
+                    <label key={temp} className={`flex items-center gap-1.5 cursor-pointer bg-gray-50 hover:bg-gray-100 dark:bg-gray-900/50 dark:hover:bg-gray-700 px-3 py-1.5 rounded-lg border transition-colors ${selectedTemperatures.includes(temp) ? 'border-blue-300 dark:border-blue-600 bg-blue-50/50 dark:bg-blue-900/20' : 'border-gray-200 dark:border-gray-700'}`}>
+                        <input
+                            type="checkbox"
+                            className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 bg-white"
+                            checked={selectedTemperatures.includes(temp)}
+                            onChange={(e) => {
+                                if (e.target.checked) setSelectedTemperatures([...selectedTemperatures, temp]);
+                                else setSelectedTemperatures(selectedTemperatures.filter(t => t !== temp));
+                            }}
+                        />
+                        <span className={`text-xs font-bold ${
+                            temp === 'Quente' ? 'text-orange-600 dark:text-orange-400' :
+                            temp === 'Morno' ? 'text-amber-500 dark:text-amber-400' :
+                            temp === 'Frio' ? 'text-blue-500 dark:text-blue-400' :
+                            'text-gray-500 dark:text-gray-400'
+                        }`}>{temp}</span>
+                    </label>
+                ))}
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
@@ -338,10 +396,19 @@ const PorFundoTab: React.FC<PorFundoTabProps> = ({ operations, apiUrl, showToast
                                     <tr><td colSpan={3} className="p-6 text-center text-sm text-gray-400 italic">O pipeline não possui liquidações ativas para este fundo no momento.</td></tr>
                                 )}
                                 {simulatedOps.map((o) => (
-                                    <tr key={o.id} className="border-b border-gray-50 dark:border-gray-700/30 hover:bg-gray-50/50 dark:hover:bg-gray-800/50 transition-colors">
-                                        <td className="p-3 pl-8 text-xs">
-                                            <div className="flex justify-between items-start mb-1.5">
-                                                <span className="font-semibold text-gray-700 dark:text-gray-300">{o.name}</span>
+                                    <tr key={o.id} className={`border-b border-gray-50 dark:border-gray-700/30 hover:bg-gray-50/50 dark:hover:bg-gray-800/50 transition-colors ${o.isActiveInSimulation === false ? 'opacity-40 grayscale' : ''}`}>
+                                        <td className="p-3 pl-8 text-xs relative">
+                                            <div className="absolute left-2 top-4">
+                                                <input 
+                                                    type="checkbox" 
+                                                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer" 
+                                                    title="Incluir/Excluir operação da projeção final"
+                                                    checked={o.isActiveInSimulation !== false} 
+                                                    onChange={(e) => handleSimulateChange(o.id, 'isActiveInSimulation', e.target.checked)} 
+                                                />
+                                            </div>
+                                            <div className="flex justify-between items-start mb-1.5 ml-2">
+                                                <span className={`font-semibold ${o.isActiveInSimulation === false ? 'line-through text-gray-500' : 'text-gray-700 dark:text-gray-300'}`}>{o.name}</span>
                                                 <button onClick={() => onEditOperation(o.originalOp)} className="text-gray-300 hover:text-blue-500 transition-colors"><svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg></button>
                                             </div>
                                             <div className="flex gap-2">

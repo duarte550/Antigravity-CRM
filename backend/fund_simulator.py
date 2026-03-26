@@ -72,7 +72,7 @@ def get_fund_data(fund_name):
             cursor.execute("SELECT * FROM cri_cra_dev.crm.fund_allocation_inputs WHERE fund_name = ?", (fund_name,))
             input_row = cursor.fetchone()
             inputs = format_row(input_row, cursor) if input_row else {
-                "emission": 0.0, "prepayment": 0.0, "repurchases": 0.0, "new_repo": 0.0
+                "emission": 0.0, "prepayment": 0.0, "repurchases": 0.0, "new_repo": 0.0, "simulated_ops_overrides": None
             }
 
             return jsonify({
@@ -94,14 +94,14 @@ def save_fund_inputs(fund_name):
             if cursor.fetchone():
                 cursor.execute("""
                     UPDATE cri_cra_dev.crm.fund_allocation_inputs
-                    SET emission = ?, prepayment = ?, repurchases = ?, new_repo = ?, updated_at = CURRENT_TIMESTAMP()
+                    SET emission = ?, prepayment = ?, repurchases = ?, new_repo = ?, simulated_ops_overrides = ?, updated_at = CURRENT_TIMESTAMP()
                     WHERE fund_name = ?
-                """, (data.get('emission', 0.0), data.get('prepayment', 0.0), data.get('repurchases', 0.0), data.get('new_repo', 0.0), fund_name))
+                """, (data.get('emission', 0.0), data.get('prepayment', 0.0), data.get('repurchases', 0.0), data.get('new_repo', 0.0), data.get('simulated_ops_overrides'), fund_name))
             else:
                 cursor.execute("""
-                    INSERT INTO cri_cra_dev.crm.fund_allocation_inputs (fund_name, emission, prepayment, repurchases, new_repo, updated_at)
-                    VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP())
-                """, (fund_name, data.get('emission', 0.0), data.get('prepayment', 0.0), data.get('repurchases', 0.0), data.get('new_repo', 0.0)))
+                    INSERT INTO cri_cra_dev.crm.fund_allocation_inputs (fund_name, emission, prepayment, repurchases, new_repo, simulated_ops_overrides, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP())
+                """, (fund_name, data.get('emission', 0.0), data.get('prepayment', 0.0), data.get('repurchases', 0.0), data.get('new_repo', 0.0), data.get('simulated_ops_overrides')))
             conn.commit()
             return jsonify({"status": "success"})
     except Exception as e:
