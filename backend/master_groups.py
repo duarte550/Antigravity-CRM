@@ -296,23 +296,55 @@ def get_structuring_operations():
                 cursor.execute("SELECT o.id, o.name, o.area, o.pipeline_stage as stage, o.liquidation_date, o.risk, o.temperature, o.structuring_analyst as analyst, o.is_active, o.originator, o.modality, o.created_at, o.description, mg.name as master_group_name FROM cri_cra_dev.crm.operations o JOIN cri_cra_dev.crm.master_groups mg ON o.master_group_id = mg.id WHERE o.is_structuring = TRUE")
             sos = [format_row(r, cursor) for r in cursor.fetchall()]
             
+            so_ids = [so['id'] for so in sos]
+            
+            stages_by_op = defaultdict(list)
+            series_by_op = defaultdict(list)
+            events_by_op = defaultdict(list)
+            rules_by_op = defaultdict(list)
+            exceptions_by_op = defaultdict(set)
+            
+            if so_ids:
+                in_clause = ','.join(['?'] * len(so_ids))
+                
+                cursor.execute(f"SELECT * FROM cri_cra_dev.crm.operation_stages WHERE operation_id IN ({in_clause}) ORDER BY order_index", so_ids)
+                for r in cursor.fetchall():
+                    row = format_row(r, cursor)
+                    stages_by_op[row['operation_id']].append(row)
+                    
+                cursor.execute(f"SELECT * FROM cri_cra_dev.crm.operation_series WHERE operation_id IN ({in_clause})", so_ids)
+                for r in cursor.fetchall():
+                    row = format_row(r, cursor)
+                    series_by_op[row['operation_id']].append(row)
+                    
+                cursor.execute(f"SELECT * FROM cri_cra_dev.crm.events WHERE operation_id IN ({in_clause})", so_ids)
+                for r in cursor.fetchall():
+                    row = format_row(r, cursor)
+                    events_by_op[row['operation_id']].append(row)
+                    
+                cursor.execute(f"SELECT * FROM cri_cra_dev.crm.task_rules WHERE operation_id IN ({in_clause})", so_ids)
+                for r in cursor.fetchall():
+                    row = format_row(r, cursor)
+                    rules_by_op[row['operation_id']].append(row)
+                    
+                cursor.execute(f"SELECT operation_id, task_id FROM cri_cra_dev.crm.task_exceptions WHERE operation_id IN ({in_clause})", so_ids)
+                for r in cursor.fetchall():
+                    exceptions_by_op[r.operation_id].add(r.task_id)
+            
             for so in sos:
+                op_id = so['id']
                 so['liquidationDate'] = safe_isoformat(so.get('liquidation_date'))
                 so['createdAt'] = safe_isoformat(so.get('created_at'))
                 so['masterGroupName'] = so.get('master_group_name')
                 so['isActive'] = True if so.get('is_active') is None else bool(so.get('is_active'))
                 
-                cursor.execute("SELECT * FROM cri_cra_dev.crm.operation_stages WHERE operation_id = ? ORDER BY order_index", (so['id'],))
-                so['stages'] = [format_row(r, cursor) for r in cursor.fetchall()]
+                so['stages'] = stages_by_op.get(op_id, [])
                 
-                cursor.execute("SELECT * FROM cri_cra_dev.crm.operation_series WHERE operation_id = ?", (so['id'],))
-                series_rows = [format_row(r, cursor) for r in cursor.fetchall()]
                 so['series'] = [{
                     'id': s['id'], 'name': s['name'], 'rate': s.get('rate'), 'indexer': s.get('indexer'), 'volume': s.get('volume'), 'fund': s.get('fund')
-                } for s in series_rows]
+                } for s in series_by_op.get(op_id, [])]
                 
-                cursor.execute("SELECT * FROM cri_cra_dev.crm.events WHERE operation_id = ? ORDER BY date DESC LIMIT 3", (so['id'],))
-                events = [format_row(r, cursor) for r in cursor.fetchall()]
+                op_events = sorted(events_by_op.get(op_id, []), key=lambda x: str(x.get('date') or ''), reverse=True)[:3]
                 so['recentEvents'] = [{
                     'id': e.get('id'), 'date': safe_isoformat(e.get('date')),
                     'type': e.get('type'), 'title': e.get('title'), 'description': e.get('description'),
@@ -320,25 +352,22 @@ def get_structuring_operations():
                     'completedTaskId': e.get('completed_task_id'),
                     'isOrigination': e.get('is_origination') or False,
                     'operationStageId': e.get('operation_stage_id'),
-                    'structuringOperationStageId': e.get('operation_stage_id') # For frontend compatibility
-                } for e in events]
+                    'structuringOperationStageId': e.get('operation_stage_id')
+                } for e in op_events]
                 
-                cursor.execute("SELECT * FROM cri_cra_dev.crm.task_rules WHERE operation_id = ?", (so['id'],))
                 so['taskRules'] = [{
                     'id': r.get('id'), 'name': r.get('name'), 'frequency': r.get('frequency'),
                     'startDate': safe_isoformat(r.get('start_date')),
                     'endDate': safe_isoformat(r.get('end_date')),
                     'description': r.get('description'),
                     'priority': r.get('priority')
-                } for r in [format_row(row, cursor) for row in cursor.fetchall()]]
+                } for r in rules_by_op.get(op_id, [])]
                 
-                cursor.execute("SELECT task_id FROM cri_cra_dev.crm.task_exceptions WHERE operation_id = ?", (so['id'],))
-                task_exceptions = {row.task_id for row in cursor.fetchall()}
-                
-                so['tasks'] = generate_tasks_for_operation(so, task_exceptions)
+                so['tasks'] = generate_tasks_for_operation(so, exceptions_by_op.get(op_id, set()))
                 
             return jsonify(sos)
     except Exception as e:
+        logging.error(f"Error in /api/structuring-operations: {e}", exc_info=True)
         return jsonify({"error": str(e)}), 500
     finally:
         if conn: conn.close()
