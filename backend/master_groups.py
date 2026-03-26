@@ -291,9 +291,9 @@ def get_structuring_operations():
         include_liquidated = request.args.get('includeLiquidated', 'false').lower() == 'true'
         with conn.cursor() as cursor:
             if include_liquidated:
-                cursor.execute("SELECT o.id, o.name, o.area, o.pipeline_stage as stage, o.liquidation_date, o.risk, o.temperature, o.structuring_analyst as analyst, o.is_active, o.originator, o.modality, o.created_at, o.description, mg.name as master_group_name FROM cri_cra_dev.crm.operations o JOIN cri_cra_dev.crm.master_groups mg ON o.master_group_id = mg.id WHERE o.is_structuring = TRUE OR (o.is_structuring = FALSE AND o.was_structured = TRUE) OR (o.is_structuring = FALSE AND EXISTS(SELECT 1 FROM cri_cra_dev.crm.operation_stages WHERE operation_id = o.id))")
+                cursor.execute("SELECT o.id, o.name, o.area, o.pipeline_stage as stage, o.liquidation_date, o.risk, o.temperature, o.structuring_analyst as analyst, o.is_active, o.originator, o.modality, o.created_at, o.description, o.rate, o.indexer, o.volume, mg.name as master_group_name FROM cri_cra_dev.crm.operations o JOIN cri_cra_dev.crm.master_groups mg ON o.master_group_id = mg.id WHERE o.is_structuring = TRUE OR (o.is_structuring = FALSE AND o.was_structured = TRUE) OR (o.is_structuring = FALSE AND EXISTS(SELECT 1 FROM cri_cra_dev.crm.operation_stages WHERE operation_id = o.id))")
             else:
-                cursor.execute("SELECT o.id, o.name, o.area, o.pipeline_stage as stage, o.liquidation_date, o.risk, o.temperature, o.structuring_analyst as analyst, o.is_active, o.originator, o.modality, o.created_at, o.description, mg.name as master_group_name FROM cri_cra_dev.crm.operations o JOIN cri_cra_dev.crm.master_groups mg ON o.master_group_id = mg.id WHERE o.is_structuring = TRUE")
+                cursor.execute("SELECT o.id, o.name, o.area, o.pipeline_stage as stage, o.liquidation_date, o.risk, o.temperature, o.structuring_analyst as analyst, o.is_active, o.originator, o.modality, o.created_at, o.description, o.rate, o.indexer, o.volume, mg.name as master_group_name FROM cri_cra_dev.crm.operations o JOIN cri_cra_dev.crm.master_groups mg ON o.master_group_id = mg.id WHERE o.is_structuring = TRUE")
             sos = [format_row(r, cursor) for r in cursor.fetchall()]
             
             so_ids = [so['id'] for so in sos]
@@ -310,33 +310,36 @@ def get_structuring_operations():
                 cursor.execute(f"SELECT * FROM cri_cra_dev.crm.operation_stages WHERE operation_id IN ({in_clause}) ORDER BY order_index", so_ids)
                 for r in cursor.fetchall():
                     row = format_row(r, cursor)
-                    stages_by_op[row['operation_id']].append(row)
+                    stages_by_op[str(row['operation_id'])].append(row)
                     
                 cursor.execute(f"SELECT * FROM cri_cra_dev.crm.operation_series WHERE operation_id IN ({in_clause})", so_ids)
                 for r in cursor.fetchall():
                     row = format_row(r, cursor)
-                    series_by_op[row['operation_id']].append(row)
+                    series_by_op[str(row['operation_id'])].append(row)
                     
                 cursor.execute(f"SELECT * FROM cri_cra_dev.crm.events WHERE operation_id IN ({in_clause})", so_ids)
                 for r in cursor.fetchall():
                     row = format_row(r, cursor)
-                    events_by_op[row['operation_id']].append(row)
+                    events_by_op[str(row['operation_id'])].append(row)
                     
                 cursor.execute(f"SELECT * FROM cri_cra_dev.crm.task_rules WHERE operation_id IN ({in_clause})", so_ids)
                 for r in cursor.fetchall():
                     row = format_row(r, cursor)
-                    rules_by_op[row['operation_id']].append(row)
+                    rules_by_op[str(row['operation_id'])].append(row)
                     
                 cursor.execute(f"SELECT operation_id, task_id FROM cri_cra_dev.crm.task_exceptions WHERE operation_id IN ({in_clause})", so_ids)
                 for r in cursor.fetchall():
-                    exceptions_by_op[r.operation_id].add(r.task_id)
+                    exceptions_by_op[str(r.operation_id)].add(r.task_id)
             
             for so in sos:
-                op_id = so['id']
+                op_id = str(so['id'])
                 so['liquidationDate'] = safe_isoformat(so.get('liquidation_date'))
                 so['createdAt'] = safe_isoformat(so.get('created_at'))
                 so['masterGroupName'] = so.get('master_group_name')
                 so['isActive'] = True if so.get('is_active') is None else bool(so.get('is_active'))
+                so['rate'] = so.get('rate')
+                so['indexer'] = so.get('indexer')
+                so['volume'] = float(so.get('volume')) if so.get('volume') else 0.0
                 
                 so['stages'] = stages_by_op.get(op_id, [])
                 
@@ -378,7 +381,7 @@ def manage_structuring_operation(so_id):
     try:
         if request.method == 'GET':
             with conn.cursor() as cursor:
-                cursor.execute("SELECT o.id, o.master_group_id, o.name, o.area, o.pipeline_stage as stage, o.liquidation_date, o.risk, o.temperature, o.structuring_analyst as analyst, o.is_active, o.originator, o.modality, o.created_at, o.description, mg.name as master_group_name FROM cri_cra_dev.crm.operations o JOIN cri_cra_dev.crm.master_groups mg ON o.master_group_id = mg.id WHERE o.id = ? AND o.is_structuring = TRUE", (so_id,))
+                cursor.execute("SELECT o.id, o.master_group_id, o.name, o.area, o.pipeline_stage as stage, o.liquidation_date, o.risk, o.temperature, o.structuring_analyst as analyst, o.is_active, o.originator, o.modality, o.created_at, o.description, o.rate, o.indexer, o.volume, mg.name as master_group_name FROM cri_cra_dev.crm.operations o JOIN cri_cra_dev.crm.master_groups mg ON o.master_group_id = mg.id WHERE o.id = ? AND o.is_structuring = TRUE", (so_id,))
                 so_row = cursor.fetchone()
                 if not so_row:
                     return jsonify({"error": "Not found"}), 404
@@ -388,6 +391,9 @@ def manage_structuring_operation(so_id):
                 so['createdAt'] = safe_isoformat(so.get('created_at'))
                 so['masterGroupName'] = so.get('master_group_name')
                 so['isActive'] = True if so.get('is_active') is None else bool(so.get('is_active'))
+                so['rate'] = so.get('rate')
+                so['indexer'] = so.get('indexer')
+                so['volume'] = float(so.get('volume')) if so.get('volume') else 0.0
                 
                 cursor.execute("SELECT * FROM cri_cra_dev.crm.operation_stages WHERE operation_id = ? ORDER BY order_index", (so_id,))
                 stages_rows = cursor.fetchall()

@@ -379,7 +379,7 @@ const OriginationPipelinePage: React.FC<OriginationPipelinePageProps> = ({ onNav
   }, {} as Record<string, StructuringOperation[]>);
 
   // Metrics calculation
-  const totalVolume = filteredOperations.reduce((acc, op) => acc + (op.series?.reduce((sAcc, s) => sAcc + (s.volume || 0), 0) || 0), 0);
+  const totalVolume = filteredOperations.reduce((acc, op) => acc + (op.series && op.series.length > 0 ? op.series.reduce((sAcc, s) => sAcc + Number(s.volume || 0), 0) : Number(op.volume || 0)), 0);
   const highGradeCount = filteredOperations.filter(op => op.risk === 'High Grade').length;
   const highYieldCount = filteredOperations.filter(op => op.risk === 'High Yield').length;
   const tempFrio = filteredOperations.filter(op => op.temperature === 'Frio').length;
@@ -387,10 +387,10 @@ const OriginationPipelinePage: React.FC<OriginationPipelinePageProps> = ({ onNav
   const tempQuente = filteredOperations.filter(op => op.temperature === 'Quente').length;
 
   const volumeByMonth = filteredOperations.reduce((acc, op) => {
-      if (op.liquidationDate && op.series) {
+      if (op.liquidationDate) {
           const date = new Date(op.liquidationDate);
           const monthYear = `${date.getMonth() + 1}/${date.getFullYear().toString().slice(-2)}`;
-          const vol = op.series.reduce((sAcc, s) => sAcc + (s.volume || 0), 0);
+          const vol = op.series && op.series.length > 0 ? op.series.reduce((sAcc, s) => sAcc + Number(s.volume || 0), 0) : Number(op.volume || 0);
           acc[monthYear] = (acc[monthYear] || 0) + vol;
       }
       return acc;
@@ -404,19 +404,34 @@ const OriginationPipelinePage: React.FC<OriginationPipelinePageProps> = ({ onNav
 
   // Table Data (Flatten series)
   const allSeriesRows = useMemo(() => {
-      let rows = filteredOperations.flatMap(op => 
-          (op.series || []).map(s => ({
-              operationId: op.id,
-              operationName: op.name,
-              liquidationDate: op.liquidationDate,
-              analyst: op.analyst || op.recentEvents?.[0]?.registeredBy || 'Analista N/D',
-              seriesName: s.name,
-              fund: s.fund || 'N/D',
-              volume: s.volume || 0,
-              indexer: s.indexer || '-',
-              rate: s.rate || '-'
-          }))
-      );
+      let rows = filteredOperations.flatMap(op => {
+          const hasSeries = op.series && op.series.length > 0;
+          if (hasSeries) {
+              return op.series!.map(s => ({
+                  operationId: op.id,
+                  operationName: op.name,
+                  liquidationDate: op.liquidationDate,
+                  analyst: op.analyst || op.recentEvents?.[0]?.registeredBy || 'Analista N/D',
+                  seriesName: s.name,
+                  fund: s.fund || 'N/D',
+                  volume: Number(s.volume || 0),
+                  indexer: s.indexer || '-',
+                  rate: s.rate || '-'
+              }));
+          } else {
+              return [{
+                  operationId: op.id,
+                  operationName: op.name,
+                  liquidationDate: op.liquidationDate,
+                  analyst: op.analyst || op.recentEvents?.[0]?.registeredBy || 'Analista N/D',
+                  seriesName: 'Série Única (Padrão)',
+                  fund: 'N/D',
+                  volume: Number(op.volume || 0),
+                  indexer: op.indexer || '-',
+                  rate: op.rate || '-'
+              }];
+          }
+      });
 
       if (searchTerm) {
           const lower = searchTerm.toLowerCase();
@@ -457,10 +472,26 @@ const OriginationPipelinePage: React.FC<OriginationPipelinePageProps> = ({ onNav
         });
 
         let ops = baseOps.map(op => {
-            const totalVol = op.series?.reduce((acc, s) => acc + (s.volume || 0), 0) || 0;
-            const rates = op.series?.map(s => parseFloat((s.rate || '').replace(/[^0-9.-]/g, ''))).filter(r => !isNaN(r)) || [];
+            const hasSeries = op.series && op.series.length > 0;
+            const totalVol = hasSeries ? op.series!.reduce((acc, s) => acc + Number(s.volume || 0), 0) : Number(op.volume || 0);
+            
+            let rates: number[] = [];
+            if (hasSeries) {
+                rates = op.series!.map(s => parseFloat(String(s.rate || '').replace(/[^0-9.-]/g, ''))).filter(r => !isNaN(r));
+            } else if (op.rate) {
+                rates = [parseFloat(String(op.rate).replace(/[^0-9.-]/g, ''))].filter(r => !isNaN(r));
+            }
             const avgRateVal = rates.length > 0 ? (rates.reduce((a,b)=>a+b,0) / rates.length) : -999;
             const avgRateStr = rates.length > 0 ? avgRateVal.toFixed(2) + '%' : '-';
+            
+            let indexers: string[] = [];
+            if (hasSeries) {
+                indexers = op.series!.map(s => s.indexer || '').filter(Boolean);
+            } else if (op.indexer) {
+                indexers = [op.indexer];
+            }
+            const indexerStr = indexers.length > 0 ? Array.from(new Set(indexers)).join(', ') : '-';
+            
             const lastEvent = op.recentEvents && op.recentEvents.length > 0 ? op.recentEvents[0].title : '-';
 
             return {
@@ -468,6 +499,7 @@ const OriginationPipelinePage: React.FC<OriginationPipelinePageProps> = ({ onNav
                 _totalVol: totalVol,
                 _avgRateVal: avgRateVal,
                 _avgRateStr: avgRateStr,
+                _indexerStr: indexerStr,
                 _lastEvent: lastEvent
             };
         });
@@ -497,6 +529,7 @@ const OriginationPipelinePage: React.FC<OriginationPipelinePageProps> = ({ onNav
 
             if (resumoSortConfig.key === '_totalVol') { valA = a._totalVol; valB = b._totalVol; }
             if (resumoSortConfig.key === '_avgRateVal') { valA = a._avgRateVal; valB = b._avgRateVal; }
+            if (resumoSortConfig.key === '_indexerStr') { valA = a._indexerStr || ''; valB = b._indexerStr || ''; }
             if (resumoSortConfig.key === 'createdAt') {
                 valA = valA ? new Date(valA).getTime() : 0;
                 valB = valB ? new Date(valB).getTime() : 0;
@@ -524,14 +557,17 @@ const OriginationPipelinePage: React.FC<OriginationPipelinePageProps> = ({ onNav
 
       const processOpsForSummary = (ops: StructuringOperation[], type: 'liq' | 'est') => {
           ops.forEach(op => {
-              op.series?.forEach(s => {
+              const hasSeries = op.series && op.series.length > 0;
+              const items = hasSeries ? op.series! : [{ fund: 'N/D', indexer: op.indexer, rate: op.rate, volume: op.volume }];
+              
+              items.forEach(s => {
                   const fund = s.fund || 'N/D';
                   if (!fundSummary[fund]) fundSummary[fund] = { liq: 0, est: 0 };
-                  fundSummary[fund][type] += (s.volume || 0);
+                  fundSummary[fund][type] += Number(s.volume || 0);
 
                   const idx = s.indexer || 'N/D';
                   if (!indexerSummary[idx]) indexerSummary[idx] = { liqRates: [], estRates: [] };
-                  const rateNum = parseFloat((s.rate || '').replace(/[^0-9.]/g, ''));
+                  const rateNum = parseFloat(String(s.rate || '').replace(/[^0-9.]/g, ''));
                   if (!isNaN(rateNum)) {
                       if (type === 'liq') indexerSummary[idx].liqRates.push(rateNum);
                       else indexerSummary[idx].estRates.push(rateNum);
@@ -811,6 +847,9 @@ const OriginationPipelinePage: React.FC<OriginationPipelinePageProps> = ({ onNav
                                     <th scope="col" className="px-4 py-3 border-b dark:border-gray-700 text-right cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600" onClick={() => toggleResumoSort('_totalVol')}>
                                         Volume {resumoSortConfig.key === '_totalVol' && (resumoSortConfig.desc ? '↓' : '↑')}
                                     </th>
+                                    <th scope="col" className="px-4 py-3 border-b dark:border-gray-700 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600" onClick={() => toggleResumoSort('_indexerStr')}>
+                                        Indexador {resumoSortConfig.key === '_indexerStr' && (resumoSortConfig.desc ? '↓' : '↑')}
+                                    </th>
                                     <th scope="col" className="px-4 py-3 border-b dark:border-gray-700 text-right cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600" onClick={() => toggleResumoSort('_avgRateVal')}>
                                         Taxa (Média) {resumoSortConfig.key === '_avgRateVal' && (resumoSortConfig.desc ? '↓' : '↑')}
                                     </th>
@@ -845,6 +884,7 @@ const OriginationPipelinePage: React.FC<OriginationPipelinePageProps> = ({ onNav
                                             </span>
                                         </td>
                                         <td className="px-4 py-3 text-right">R$ {(op._totalVol / 1000000).toFixed(2)}M</td>
+                                        <td className="px-4 py-3 text-center">{op._indexerStr}</td>
                                         <td className="px-4 py-3 text-right">{op._avgRateStr}</td>
                                         <td className="px-4 py-3 text-sm font-medium">{op.stage}</td>
                                         <td className="px-4 py-3 text-xs text-gray-500 dark:text-gray-400 truncate max-w-[150px]" title={op._lastEvent}>{op._lastEvent}</td>

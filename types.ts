@@ -276,6 +276,9 @@ export interface StructuringOperation {
   analyst?: string;
   stages?: StructuringOperationStage[];
   isActive?: boolean;
+  rate?: string;
+  indexer?: string;
+  volume?: number;
   taskRules?: TaskRule[];
   tasks?: Task[];
   contacts?: Contact[];
