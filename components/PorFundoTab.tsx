@@ -133,8 +133,10 @@ const PorFundoTab: React.FC<PorFundoTabProps> = ({ operations, apiUrl, showToast
         showToast("Valores originais restaurados", "success");
     };
 
-    const totalSaidas = simulatedOps.reduce((acc, curr) => acc + curr.volume, 0);
-    const caixaApos = caixaAtual + totalEntradas - totalSaidas;
+    const sumSaidas = simulatedOps.reduce((acc, curr) => acc + Math.abs(curr.volume || 0), 0);
+    const totalSaidas = -sumSaidas;
+    // Conta final solicitada: caixa + lci + entradas + liquidações(como número negativo)
+    const caixaApos = caixaAtual + lciAtual + totalEntradas + totalSaidas;
     const caixaMenosComp = caixaApos + compromissadasReversas;
 
     const plFinal = plAtual + inputs.emission;
@@ -268,7 +270,7 @@ const PorFundoTab: React.FC<PorFundoTabProps> = ({ operations, apiUrl, showToast
                                 <tr className="border-b border-gray-100 dark:border-gray-700/80 bg-emerald-50/30 dark:bg-emerald-900/10">
                                     <td className="p-4 font-bold text-gray-900 dark:text-white flex items-center gap-2">
                                         <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>
-                                        (+) Previsão de Entradas
+                                        (+) Previsão de Entradas (R$ MM)
                                     </td>
                                     <td className="p-4 font-bold text-emerald-600 dark:text-emerald-400 text-right">{formatCurrency(totalEntradas)}</td>
                                     <td className="p-4 text-right font-medium text-emerald-600/70 dark:text-emerald-400/70">{plAtual ? formatPercent((totalEntradas / plAtual) * 100) : '-'}</td>
@@ -278,7 +280,7 @@ const PorFundoTab: React.FC<PorFundoTabProps> = ({ operations, apiUrl, showToast
                                     <td className="p-3 pl-8 text-gray-500 dark:text-gray-400 font-medium">Nova Emissão Acordada</td>
                                     <td className="p-2 py-3">
                                         <div className="flex items-center justify-end w-40 ml-auto bg-gray-50 dark:bg-gray-800/80 border border-gray-200 dark:border-gray-600/80 rounded-md shadow-inner focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-blue-500 transition-all hover:bg-white focus-within:bg-white overflow-hidden group/input">
-                                            <div className="px-2.5 py-1.5 flex items-center justify-center border-r border-gray-200 dark:border-gray-600/50 bg-gray-100/60 dark:bg-gray-900/50 text-gray-400 dark:text-gray-500 text-xs font-bold pointer-events-none group-focus-within/input:text-blue-500">R$</div>
+                                            <div className="px-2.5 py-1.5 flex items-center justify-center border-r border-gray-200 dark:border-gray-600/50 bg-gray-100/60 dark:bg-gray-900/50 text-gray-400 dark:text-gray-500 text-xs font-bold pointer-events-none group-focus-within/input:text-blue-500">R$ MM</div>
                                             <input type="number" value={inputs.emission} onChange={e => handleInputChange('emission', e.target.value)} className="w-full py-1.5 px-2 bg-transparent text-gray-900 dark:text-gray-100 text-right font-mono outline-none border-none shadow-none focus:ring-0" placeholder="0" />
                                         </div>
                                     </td>
@@ -288,7 +290,7 @@ const PorFundoTab: React.FC<PorFundoTabProps> = ({ operations, apiUrl, showToast
                                     <td className="p-3 pl-8 text-gray-500 dark:text-gray-400 font-medium">Pré-pagamentos Previstos</td>
                                     <td className="p-2 py-3">
                                         <div className="flex items-center justify-end w-40 ml-auto bg-gray-50 dark:bg-gray-800/80 border border-gray-200 dark:border-gray-600/80 rounded-md shadow-inner focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-blue-500 transition-all hover:bg-white focus-within:bg-white overflow-hidden group/input">
-                                            <div className="px-2.5 py-1.5 flex items-center justify-center border-r border-gray-200 dark:border-gray-600/50 bg-gray-100/60 dark:bg-gray-900/50 text-gray-400 dark:text-gray-500 text-xs font-bold pointer-events-none group-focus-within/input:text-blue-500">R$</div>
+                                            <div className="px-2.5 py-1.5 flex items-center justify-center border-r border-gray-200 dark:border-gray-600/50 bg-gray-100/60 dark:bg-gray-900/50 text-gray-400 dark:text-gray-500 text-xs font-bold pointer-events-none group-focus-within/input:text-blue-500">R$ MM</div>
                                             <input type="number" value={inputs.prepayment} onChange={e => handleInputChange('prepayment', e.target.value)} className="w-full py-1.5 px-2 bg-transparent text-gray-900 dark:text-gray-100 text-right font-mono outline-none border-none shadow-none focus:ring-0" placeholder="0" />
                                         </div>
                                     </td>
@@ -298,7 +300,7 @@ const PorFundoTab: React.FC<PorFundoTabProps> = ({ operations, apiUrl, showToast
                                     <td className="p-3 pl-8 text-gray-500 dark:text-gray-400 font-medium">Recompras (G. Econômico)</td>
                                     <td className="p-2 py-3">
                                         <div className="flex items-center justify-end w-40 ml-auto bg-gray-50 dark:bg-gray-800/80 border border-gray-200 dark:border-gray-600/80 rounded-md shadow-inner focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-blue-500 transition-all hover:bg-white focus-within:bg-white overflow-hidden group/input">
-                                            <div className="px-2.5 py-1.5 flex items-center justify-center border-r border-gray-200 dark:border-gray-600/50 bg-gray-100/60 dark:bg-gray-900/50 text-gray-400 dark:text-gray-500 text-xs font-bold pointer-events-none group-focus-within/input:text-blue-500">R$</div>
+                                            <div className="px-2.5 py-1.5 flex items-center justify-center border-r border-gray-200 dark:border-gray-600/50 bg-gray-100/60 dark:bg-gray-900/50 text-gray-400 dark:text-gray-500 text-xs font-bold pointer-events-none group-focus-within/input:text-blue-500">R$ MM</div>
                                             <input type="number" value={inputs.repurchases} onChange={e => handleInputChange('repurchases', e.target.value)} className="w-full py-1.5 px-2 bg-transparent text-gray-900 dark:text-gray-100 text-right font-mono outline-none border-none shadow-none focus:ring-0" placeholder="0" />
                                         </div>
                                     </td>
@@ -308,7 +310,7 @@ const PorFundoTab: React.FC<PorFundoTabProps> = ({ operations, apiUrl, showToast
                                     <td className="p-3 pl-8 text-gray-500 dark:text-gray-400 font-medium">Captação em Compromissadas</td>
                                     <td className="p-2 py-3">
                                         <div className="flex items-center justify-end w-40 ml-auto bg-gray-50 dark:bg-gray-800/80 border border-gray-200 dark:border-gray-600/80 rounded-md shadow-inner focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-blue-500 transition-all hover:bg-white focus-within:bg-white overflow-hidden group/input">
-                                            <div className="px-2.5 py-1.5 flex items-center justify-center border-r border-gray-200 dark:border-gray-600/50 bg-gray-100/60 dark:bg-gray-900/50 text-gray-400 dark:text-gray-500 text-xs font-bold pointer-events-none group-focus-within/input:text-blue-500">R$</div>
+                                            <div className="px-2.5 py-1.5 flex items-center justify-center border-r border-gray-200 dark:border-gray-600/50 bg-gray-100/60 dark:bg-gray-900/50 text-gray-400 dark:text-gray-500 text-xs font-bold pointer-events-none group-focus-within/input:text-blue-500">R$ MM</div>
                                             <input type="number" value={inputs.new_repo} onChange={e => handleInputChange('new_repo', e.target.value)} className="w-full py-1.5 px-2 bg-transparent text-gray-900 dark:text-gray-100 text-right font-mono outline-none border-none shadow-none focus:ring-0" placeholder="0" />
                                         </div>
                                     </td>
@@ -320,7 +322,7 @@ const PorFundoTab: React.FC<PorFundoTabProps> = ({ operations, apiUrl, showToast
                                     <td className="p-4 font-bold text-gray-900 dark:text-white flex justify-between items-center group/header relative">
                                         <div className="flex items-center gap-2">
                                             <div className="w-1.5 h-1.5 rounded-full bg-rose-500"></div>
-                                            (-) Liquidações
+                                            (-) Liquidações (R$ MM)
                                         </div>
                                         {isSimulating && (
                                             <button onClick={resetSimulation} className="absolute right-4 text-[10px] text-blue-600 dark:text-blue-400 bg-blue-100 dark:bg-blue-900/40 hover:bg-blue-200 dark:hover:bg-blue-800/60 px-2.5 py-1 rounded-md transition-all font-medium opacity-0 group-hover/header:opacity-100">
@@ -368,7 +370,7 @@ const PorFundoTab: React.FC<PorFundoTabProps> = ({ operations, apiUrl, showToast
                                         </td>
                                         <td className="p-3 align-top pt-4">
                                             <div className="flex items-center justify-end w-32 ml-auto bg-gray-50 dark:bg-gray-800/80 border border-gray-200 dark:border-gray-600/80 rounded-md shadow-inner focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-blue-500 transition-all hover:bg-white focus-within:bg-white overflow-hidden group/vol">
-                                                <div className="px-1.5 py-1.5 flex items-center justify-center border-r border-gray-200 dark:border-gray-600/50 bg-gray-100/60 dark:bg-gray-900/50 text-gray-400 dark:text-gray-500 text-[10px] font-bold pointer-events-none group-focus-within/vol:text-blue-500">R$</div>
+                                                <div className="px-1.5 py-1.5 flex items-center justify-center border-r border-gray-200 dark:border-gray-600/50 bg-gray-100/60 dark:bg-gray-900/50 text-gray-400 dark:text-gray-500 text-[10px] font-bold pointer-events-none group-focus-within/vol:text-blue-500">R$ MM</div>
                                                 <input type="number" value={o.volume} onChange={(e) => handleSimulateChange(o.id, 'volume', Number(e.target.value))} className="w-full py-1 px-1 bg-transparent text-gray-900 dark:text-gray-100 text-right font-mono text-sm outline-none border-none shadow-none focus:ring-0" placeholder="0" />
                                             </div>
                                         </td>
