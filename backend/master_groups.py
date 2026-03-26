@@ -390,7 +390,23 @@ def manage_structuring_operation(so_id):
                 so['isActive'] = True if so.get('is_active') is None else bool(so.get('is_active'))
                 
                 cursor.execute("SELECT * FROM cri_cra_dev.crm.operation_stages WHERE operation_id = ? ORDER BY order_index", (so_id,))
-                so['stages'] = [format_row(r, cursor) for r in cursor.fetchall()]
+                stages_rows = cursor.fetchall()
+                
+                if not stages_rows:
+                    # Missing stages! The user probably inserted this operation manually via SQL.
+                    # Let's generate the 5 default stages on-the-fly to prevent frontend crashes
+                    default_stages = ['Conversa Inicial', 'Term Sheet', 'Due Diligence', 'Aprovação Comitê', 'Liquidação / Fechamento']
+                    for idx, stage_name in enumerate(default_stages):
+                        cursor.execute("""
+                            INSERT INTO cri_cra_dev.crm.operation_stages (operation_id, name, order_index, is_completed)
+                            VALUES (?, ?, ?, FALSE)
+                        """, (so_id, stage_name, idx))
+                    conn.commit()
+                    # Re-fetch stages
+                    cursor.execute("SELECT * FROM cri_cra_dev.crm.operation_stages WHERE operation_id = ? ORDER BY order_index", (so_id,))
+                    stages_rows = cursor.fetchall()
+
+                so['stages'] = [format_row(r, cursor) for r in stages_rows]
                 
                 cursor.execute("SELECT * FROM cri_cra_dev.crm.operation_series WHERE operation_id = ?", (so_id,))
                 series_rows = [format_row(r, cursor) for r in cursor.fetchall()]

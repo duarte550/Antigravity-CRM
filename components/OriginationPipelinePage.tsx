@@ -54,6 +54,27 @@ const OriginationPipelinePage: React.FC<OriginationPipelinePageProps> = ({ onNav
 
 
 
+  const handleDeleteOrInactivate = async (opId: number, action: 'delete' | 'inactivate' | 'reactivate') => {
+      try {
+          if (action === 'delete') {
+              if (!confirm('Cortar o mal pela raiz? Deletar esta operação estruturada não tem volta.')) return;
+              const response = await fetchApi(`${apiUrl}/api/structuring-operations/${opId}`, { method: 'DELETE' });
+              if (!response.ok) throw new Error();
+              showToast('Operação apagada com sucesso!', 'success');
+          } else {
+              const isActive = action === 'reactivate';
+              const response = await fetchApi(`${apiUrl}/api/structuring-operations/${opId}`, {
+                  method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ isActive })
+              });
+              if (!response.ok) throw new Error();
+              showToast(isActive ? 'Operação reativada!' : 'Operação inativada!', 'success');
+          }
+          fetchOperations();
+      } catch (err) {
+          showToast(`Erro ao processar ação (${action})`, 'error');
+      }
+  };
+
   const handleUpdateStructuringOperation = async (updatedOp: StructuringOperation, syncToBackend?: boolean) => {
     setOperations(prev => prev.map(o => o.id === updatedOp.id ? updatedOp : o));
     if (syncToBackend) {
@@ -802,6 +823,9 @@ const OriginationPipelinePage: React.FC<OriginationPipelinePageProps> = ({ onNav
                                     <th scope="col" className="px-4 py-3 border-b dark:border-gray-700">
                                         Observações
                                     </th>
+                                    <th scope="col" className="px-4 py-3 border-b dark:border-gray-700 w-24 text-center">
+                                        Ações
+                                    </th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -836,6 +860,22 @@ const OriginationPipelinePage: React.FC<OriginationPipelinePageProps> = ({ onNav
                                               className="w-full min-w-[150px] bg-transparent border-b border-transparent hover:border-gray-300 dark:hover:border-gray-600 focus:border-blue-500 focus:ring-0 text-xs px-1 py-0.5 transition-colors dark:text-gray-300"
                                               placeholder="Adicionar obs..."
                                             />
+                                        </td>
+                                        <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
+                                            <div className="flex gap-2 justify-center">
+                                                {op.isActive !== false ? (
+                                                    <button onClick={() => handleDeleteOrInactivate(op.id, 'inactivate')} className="text-amber-500 hover:text-amber-700 p-1" title="Inativar">
+                                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" /></svg>
+                                                    </button>
+                                                ) : (
+                                                    <button onClick={() => handleDeleteOrInactivate(op.id, 'reactivate')} className="text-green-500 hover:text-green-700 p-1" title="Reativar">
+                                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+                                                    </button>
+                                                )}
+                                                <button onClick={() => handleDeleteOrInactivate(op.id, 'delete')} className="text-red-500 hover:text-red-700 p-1" title="Deletar">
+                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                                                </button>
+                                            </div>
                                         </td>
                                     </tr>
                                 )})}
