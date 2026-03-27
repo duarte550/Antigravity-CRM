@@ -6,7 +6,7 @@ from db import get_db_connection
 from task_engine import generate_tasks_for_operation
 import update_db
 from datetime import datetime, date, timedelta
-from utils import safe_isoformat, parse_iso_date
+from utils import safe_isoformat, parse_iso_date, get_next_unique_id
 from collections import defaultdict
 import json
 import logging
@@ -55,12 +55,14 @@ def format_row(row, cursor):
 
 def log_action(cursor, user_name, action, entity_type, entity_id, details=""):
     """Grava uma ação no log de auditoria."""
+    from utils import get_next_unique_id
+    new_audit_id = get_next_unique_id(cursor, 'audit_logs')
     cursor.execute(
         """
-        INSERT INTO cri_cra_dev.crm.audit_logs (timestamp, user_name, action, entity_type, entity_id, details)
-        VALUES (?, ?, ?, ?, ?, ?)
+        INSERT INTO cri_cra_dev.crm.audit_logs (id, timestamp, user_name, action, entity_type, entity_id, details)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
         """,
-        (datetime.now(), user_name, action, entity_type, str(entity_id), details)
+        (new_audit_id, datetime.now(), user_name, action, entity_type, str(entity_id), details)
     )
 
 def generate_diff_details(old_data: dict, new_data: dict, fields_to_compare: dict) -> str:
@@ -429,10 +431,10 @@ def manage_operations_collection():
                 structuring_op_id = data.get('structuringOperationId')
                 
                 if data.get('economicGroupId') == 'new' and data.get('newEGName'):
-                    cursor.execute("INSERT INTO cri_cra_dev.crm.economic_groups (name, master_group_id, rating) VALUES (?, ?, ?)",
-                                   (data.get('newEGName'), data.get('masterGroupId'), data.get('ratingGroup')))
-                    cursor.execute("SELECT id FROM cri_cra_dev.crm.economic_groups ORDER BY id DESC LIMIT 1")
-                    data['economicGroupId'] = cursor.fetchone().id
+                    new_eg_id = get_next_unique_id(cursor, 'economic_groups')
+                    cursor.execute("INSERT INTO cri_cra_dev.crm.economic_groups (id, name, master_group_id, rating) VALUES (?, ?, ?, ?)",
+                                   (new_eg_id, data.get('newEGName'), data.get('masterGroupId'), data.get('ratingGroup')))
+                    data['economicGroupId'] = new_eg_id
                 elif data.get('economicGroupId') == '':
                     data['economicGroupId'] = None
                 
@@ -459,9 +461,8 @@ def manage_operations_collection():
                     ))
                     new_op_id = structuring_op_id
                 else:
-                    cursor.execute( "INSERT INTO cri_cra_dev.crm.operations (name, area, operation_type, maturity_date, responsible_analyst, structuring_analyst, review_frequency, call_frequency, df_frequency, segmento, rating_operation, watchlist, ltv, dscr, monitoring_news, monitoring_fii_report, monitoring_operational_info, monitoring_receivables_portfolio, monitoring_construction_report, monitoring_commercial_info, monitoring_spe_dfs, estimated_date, status, description, master_group_id, economic_group_id, is_structuring, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, FALSE, TRUE)", (data['name'], data['area'], data['operationType'], maturity_date, data['responsibleAnalyst'], data.get('structuringAnalyst'), data['reviewFrequency'], data['callFrequency'], data['dfFrequency'], data['segmento'], data['ratingOperation'], data['watchlist'], data.get('covenants', {}).get('ltv'), data.get('covenants', {}).get('dscr'), dm.get('news'), dm.get('fiiReport'), dm.get('operationalInfo'), dm.get('receivablesPortfolio'), dm.get('monthlyConstructionReport'), dm.get('monthlyCommercialInfo'), dm.get('speDfs'), est_date, data.get('status', 'Ativa'), data.get('description'), data.get('masterGroupId'), data.get('economicGroupId')) )
-                    cursor.execute("SELECT id FROM cri_cra_dev.crm.operations WHERE name = ? ORDER BY id DESC LIMIT 1", (data['name'],))
-                    new_op_id = cursor.fetchone().id
+                    new_op_id = get_next_unique_id(cursor, 'operations')
+                    cursor.execute( "INSERT INTO cri_cra_dev.crm.operations (id, name, area, operation_type, maturity_date, responsible_analyst, structuring_analyst, review_frequency, call_frequency, df_frequency, segmento, rating_operation, watchlist, ltv, dscr, monitoring_news, monitoring_fii_report, monitoring_operational_info, monitoring_receivables_portfolio, monitoring_construction_report, monitoring_commercial_info, monitoring_spe_dfs, estimated_date, status, description, master_group_id, economic_group_id, is_structuring, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, FALSE, TRUE)", (new_op_id, data['name'], data['area'], data['operationType'], maturity_date, data['responsibleAnalyst'], data.get('structuringAnalyst'), data['reviewFrequency'], data['callFrequency'], data['dfFrequency'], data['segmento'], data['ratingOperation'], data['watchlist'], data.get('covenants', {}).get('ltv'), data.get('covenants', {}).get('dscr'), dm.get('news'), dm.get('fiiReport'), dm.get('operationalInfo'), dm.get('receivablesPortfolio'), dm.get('monthlyConstructionReport'), dm.get('monthlyCommercialInfo'), dm.get('speDfs'), est_date, data.get('status', 'Ativa'), data.get('description'), data.get('masterGroupId'), data.get('economicGroupId')) )
                 
                 # FIX: Handle saving projects and guarantees for new operations
                 for project in data.get('projects', []):
@@ -472,9 +473,8 @@ def manage_operations_collection():
                         if proj_row:
                             project_id = proj_row.id
                         else:
-                            cursor.execute("INSERT INTO cri_cra_dev.crm.projects (name) VALUES (?)", (project_name,))
-                            cursor.execute("SELECT id FROM cri_cra_dev.crm.projects WHERE name = ? ORDER BY id DESC LIMIT 1", (project_name,))
-                            project_id = cursor.fetchone().id
+                            project_id = get_next_unique_id(cursor, 'projects')
+                            cursor.execute("INSERT INTO cri_cra_dev.crm.projects (id, name) VALUES (?, ?)", (project_id, project_name))
                         cursor.execute("INSERT INTO cri_cra_dev.crm.operation_projects (operation_id, project_id) VALUES (?, ?)", (new_op_id, project_id))
                 
                 for guarantee in data.get('guarantees', []):
@@ -485,9 +485,8 @@ def manage_operations_collection():
                         if guar_row:
                             guarantee_id = guar_row.id
                         else:
-                            cursor.execute("INSERT INTO cri_cra_dev.crm.guarantees (name) VALUES (?)", (guarantee_name,))
-                            cursor.execute("SELECT id FROM cri_cra_dev.crm.guarantees WHERE name = ? ORDER BY id DESC LIMIT 1", (guarantee_name,))
-                            guarantee_id = cursor.fetchone().id
+                            guarantee_id = get_next_unique_id(cursor, 'guarantees')
+                            cursor.execute("INSERT INTO cri_cra_dev.crm.guarantees (id, name) VALUES (?, ?)", (guarantee_id, guarantee_name))
                         cursor.execute("INSERT INTO cri_cra_dev.crm.operation_guarantees (operation_id, guarantee_id) VALUES (?, ?)", (new_op_id, guarantee_id))
 
                 now = datetime.now()
@@ -495,9 +494,11 @@ def manage_operations_collection():
                 rules_to_add = [ {'name': 'Revisão Gerencial', 'frequency': gerencial_freq, 'desc': 'Revisão periódica gerencial.', 'priority': 'Alta'}, {'name': 'Revisão Política', 'frequency': politica_freq, 'desc': 'Revisão de política de crédito anual.', 'priority': 'Alta'}, {'name': 'Call de Acompanhamento', 'frequency': data['callFrequency'], 'desc': 'Call de acompanhamento.', 'priority': 'Média'}, {'name': 'Análise de DFs & Dívida', 'frequency': data['dfFrequency'], 'desc': 'Análise dos DFs.', 'priority': 'Média'} ]
                 if dm.get('news'): rules_to_add.append({'name': 'Monitorar Notícias', 'frequency': 'Semanal', 'desc': 'Acompanhar notícias.', 'priority': 'Baixa'})
                 for rule in rules_to_add:
-                    cursor.execute("INSERT INTO cri_cra_dev.crm.task_rules (operation_id, name, frequency, start_date, end_date, description, priority) VALUES (?, ?, ?, ?, ?, ?, ?)", (new_op_id, rule['name'], rule['frequency'], now, end_date, rule['desc'], rule.get('priority') or 'Média'))
+                    rule_id = get_next_unique_id(cursor, 'task_rules')
+                    cursor.execute("INSERT INTO cri_cra_dev.crm.task_rules (id, operation_id, name, frequency, start_date, end_date, description, priority) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", (rule_id, new_op_id, rule['name'], rule['frequency'], now, end_date, rule['desc'], rule.get('priority') or 'Média'))
                 
-                cursor.execute("INSERT INTO cri_cra_dev.crm.rating_history (operation_id, date, rating_operation, rating_group, rating_master_group, watchlist, sentiment) VALUES (?, ?, ?, ?, ?, ?, ?)", (new_op_id, now, data['ratingOperation'], data['ratingGroup'], data.get('ratingMasterGroup'), data['watchlist'], 'Neutro'))
+                rh_id = get_next_unique_id(cursor, 'rating_history')
+                cursor.execute("INSERT INTO cri_cra_dev.crm.rating_history (id, operation_id, date, rating_operation, rating_group, rating_master_group, watchlist, sentiment) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", (rh_id, new_op_id, now, data['ratingOperation'], data['ratingGroup'], data.get('ratingMasterGroup'), data['watchlist'], 'Neutro'))
                 
                 # Save notes if provided
                 if data.get('notes'):
@@ -559,10 +560,10 @@ def _update_operation_db_internal(cursor, op_id, data):
     old_rating_group, new_rating_group = old_op_db.get('rating_group'), data.get('ratingGroup', old_op_db.get('rating_group'))
     
     if data.get('economicGroupId') == 'new' and data.get('newEGName'):
-        cursor.execute("INSERT INTO cri_cra_dev.crm.economic_groups (name, master_group_id, rating) VALUES (?, ?, ?)",
-                       (data.get('newEGName'), data.get('masterGroupId'), new_rating_group))
-        cursor.execute("SELECT id FROM cri_cra_dev.crm.economic_groups ORDER BY id DESC LIMIT 1")
-        data['economicGroupId'] = cursor.fetchone().id
+        new_eg_id = get_next_unique_id(cursor, 'economic_groups')
+        cursor.execute("INSERT INTO cri_cra_dev.crm.economic_groups (id, name, master_group_id, rating) VALUES (?, ?, ?, ?)",
+                       (new_eg_id, data.get('newEGName'), data.get('masterGroupId'), new_rating_group))
+        data['economicGroupId'] = new_eg_id
     elif data.get('economicGroupId') == '':
         data['economicGroupId'] = None
     
@@ -629,9 +630,8 @@ def _update_operation_db_internal(cursor, op_id, data):
             proj_row = cursor.fetchone()
             project_id = proj_row.id if proj_row else None
             if not project_id:
-                cursor.execute("INSERT INTO cri_cra_dev.crm.projects (name) VALUES (?)", (project_name,))
-                cursor.execute("SELECT id FROM cri_cra_dev.crm.projects WHERE name = ? ORDER BY id DESC LIMIT 1", (project_name,))
-                project_id = cursor.fetchone().id
+                project_id = get_next_unique_id(cursor, 'projects')
+                cursor.execute("INSERT INTO cri_cra_dev.crm.projects (id, name) VALUES (?, ?)", (project_id, project_name))
             cursor.execute("INSERT INTO cri_cra_dev.crm.operation_projects (operation_id, project_id) VALUES (?, ?)", (op_id, project_id))
 
     cursor.execute("DELETE FROM cri_cra_dev.crm.operation_guarantees WHERE operation_id = ?", (op_id,))
@@ -642,9 +642,8 @@ def _update_operation_db_internal(cursor, op_id, data):
             guar_row = cursor.fetchone()
             guarantee_id = guar_row.id if guar_row else None
             if not guarantee_id:
-                cursor.execute("INSERT INTO cri_cra_dev.crm.guarantees (name) VALUES (?)", (guarantee_name,))
-                cursor.execute("SELECT id FROM cri_cra_dev.crm.guarantees WHERE name = ? ORDER BY id DESC LIMIT 1", (guarantee_name,))
-                guarantee_id = cursor.fetchone().id
+                guarantee_id = get_next_unique_id(cursor, 'guarantees')
+                cursor.execute("INSERT INTO cri_cra_dev.crm.guarantees (id, name) VALUES (?, ?)", (guarantee_id, guarantee_name))
             cursor.execute("INSERT INTO cri_cra_dev.crm.operation_guarantees (operation_id, guarantee_id) VALUES (?, ?)", (op_id, guarantee_id))
 
     client_event_id_to_db_id_map = {}
@@ -660,13 +659,10 @@ def _update_operation_db_internal(cursor, op_id, data):
             continue
 
         if event_id not in db_event_ids:
-            cursor.execute("INSERT INTO cri_cra_dev.crm.events (operation_id, date, type, title, description, registered_by, next_steps, completed_task_id, attention_points, our_attendees, operation_attendees) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", (op_id, event.get('date'), event.get('type'), event.get('title'), event.get('description'), event.get('registeredBy'), event.get('nextSteps'), event.get('completedTaskId'), event.get('attentionPoints'), event.get('ourAttendees'), event.get('operationAttendees')))
-            cursor.execute("SELECT id FROM cri_cra_dev.crm.events WHERE operation_id = ? AND date = ? AND title = ? ORDER BY id DESC LIMIT 1", (op_id, event.get('date'), event.get('title')))
-            new_event_row = cursor.fetchone()
-            if new_event_row:
-                db_event_id = new_event_row.id
-                client_event_id_to_db_id_map[event_id] = db_event_id
-                log_action(cursor, event.get('registeredBy'), 'CREATE', 'Event', db_event_id, f"Evento '{event.get('title')}' adicionado.")
+            db_event_id = get_next_unique_id(cursor, 'events')
+            cursor.execute("INSERT INTO cri_cra_dev.crm.events (id, operation_id, date, type, title, description, registered_by, next_steps, completed_task_id, attention_points, our_attendees, operation_attendees) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", (db_event_id, op_id, event.get('date'), event.get('type'), event.get('title'), event.get('description'), event.get('registeredBy'), event.get('nextSteps'), event.get('completedTaskId'), event.get('attentionPoints'), event.get('ourAttendees'), event.get('operationAttendees')))
+            client_event_id_to_db_id_map[event_id] = db_event_id
+            log_action(cursor, event.get('registeredBy'), 'CREATE', 'Event', db_event_id, f"Evento '{event.get('title')}' adicionado.")
         else:
             old_event = db_events[int(event_id)]
             def norm(v): return str(v).strip() if v is not None else ""
@@ -696,7 +692,8 @@ def _update_operation_db_internal(cursor, op_id, data):
         if rh.get('id') not in db_rh_ids:
             client_event_id = rh.get('eventId')
             db_event_id_for_rh = client_event_id_to_db_id_map.get(str(client_event_id), client_event_id)
-            cursor.execute("INSERT INTO cri_cra_dev.crm.rating_history (operation_id, date, rating_operation, rating_group, rating_master_group, watchlist, sentiment, event_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", (op_id, rh.get('date'), rh.get('ratingOperation'), rh.get('ratingGroup'), rh.get('ratingMasterGroup'), rh.get('watchlist'), rh.get('sentiment'), db_event_id_for_rh))
+            rh_id = get_next_unique_id(cursor, 'rating_history')
+            cursor.execute("INSERT INTO cri_cra_dev.crm.rating_history (id, operation_id, date, rating_operation, rating_group, rating_master_group, watchlist, sentiment, event_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", (rh_id, op_id, rh.get('date'), rh.get('ratingOperation'), rh.get('ratingGroup'), rh.get('ratingMasterGroup'), rh.get('watchlist'), rh.get('sentiment'), db_event_id_for_rh))
 
     old_watchlist = old_op_db.get('watchlist')
     new_watchlist = data.get('watchlist', old_watchlist)
@@ -734,7 +731,8 @@ def _update_operation_db_internal(cursor, op_id, data):
         if rule_id and rule_id in db_rules_map:
             cursor.execute("UPDATE cri_cra_dev.crm.task_rules SET name=?, frequency=?, start_date=?, end_date=?, description=?, priority=? WHERE id=?", (rule.get('name'), rule.get('frequency'), rule.get('startDate'), rule.get('endDate'), rule.get('description'), rule.get('priority') or 'Média', rule_id))
         elif not rule_id or rule_id not in db_rules_map:
-            cursor.execute("INSERT INTO cri_cra_dev.crm.task_rules (operation_id, name, frequency, start_date, end_date, description, priority) VALUES (?, ?, ?, ?, ?, ?, ?)", (op_id, rule.get('name'), rule.get('frequency'), rule.get('startDate'), rule.get('endDate'), rule.get('description'), rule.get('priority') or 'Média'))
+            new_rule_id = get_next_unique_id(cursor, 'task_rules')
+            cursor.execute("INSERT INTO cri_cra_dev.crm.task_rules (id, operation_id, name, frequency, start_date, end_date, description, priority) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", (new_rule_id, op_id, rule.get('name'), rule.get('frequency'), rule.get('startDate'), rule.get('endDate'), rule.get('description'), rule.get('priority') or 'Média'))
             log_action(cursor, data.get('responsibleAnalyst', 'System'), 'CREATE', 'TaskRule', 'new', f"Regra '{rule.get('name')}' adicionada.")
     
     if 'taskExceptions' in data:

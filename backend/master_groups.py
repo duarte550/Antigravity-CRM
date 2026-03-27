@@ -1,6 +1,6 @@
 from flask import Blueprint, jsonify, request
 from db import get_db_connection
-from utils import safe_isoformat, parse_iso_date
+from utils import safe_isoformat, parse_iso_date, get_next_unique_id
 from datetime import datetime
 import logging
 from task_engine import generate_tasks_for_operation
@@ -173,10 +173,9 @@ def manage_master_groups():
         elif request.method == 'POST':
             data = request.json
             with conn.cursor() as cursor:
-                cursor.execute("INSERT INTO cri_cra_dev.crm.master_groups (name, sector, rating) VALUES (?, ?, ?)", 
-                               (data.get('name'), data.get('sector'), data.get('rating')))
-                cursor.execute("SELECT id FROM cri_cra_dev.crm.master_groups ORDER BY id DESC LIMIT 1")
-                new_id = cursor.fetchone().id
+                new_id = get_next_unique_id(cursor, 'master_groups')
+                cursor.execute("INSERT INTO cri_cra_dev.crm.master_groups (id, name, sector, rating) VALUES (?, ?, ?, ?)", 
+                               (new_id, data.get('name'), data.get('sector'), data.get('rating')))
                 conn.commit()
                 return jsonify(fetch_full_master_group(cursor, new_id)), 201
     except Exception as e:
@@ -278,17 +277,15 @@ def add_structuring_operation():
             economic_group_id = data.get('economicGroupId')
             
             if economic_group_id == 'new' and data.get('newEGName'):
-                cursor.execute("INSERT INTO cri_cra_dev.crm.economic_groups (name, master_group_id, rating) VALUES (?, ?, ?)",
-                               (data.get('newEGName'), master_group_id, data.get('risk')))
-                cursor.execute("SELECT id FROM cri_cra_dev.crm.economic_groups ORDER BY id DESC LIMIT 1")
-                economic_group_id = cursor.fetchone().id
+                economic_group_id = get_next_unique_id(cursor, 'economic_groups')
+                cursor.execute("INSERT INTO cri_cra_dev.crm.economic_groups (id, name, master_group_id, rating) VALUES (?, ?, ?, ?)",
+                               (economic_group_id, data.get('newEGName'), master_group_id, data.get('risk')))
             elif economic_group_id == '':
                 economic_group_id = None
                 
-            cursor.execute("INSERT INTO cri_cra_dev.crm.operations (master_group_id, economic_group_id, name, area, pipeline_stage, liquidation_date, risk, temperature, structuring_analyst, is_active, originator, modality, created_at, is_structuring, was_structured) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, TRUE, TRUE)",
-                           (master_group_id, economic_group_id, data.get('name'), data.get('area'), data.get('stage', 'Conversa Inicial'), parse_iso_date(data.get('liquidationDate')), data.get('risk'), data.get('temperature'), data.get('analyst'), True, data.get('originator'), data.get('modality'), datetime.now()))
-            cursor.execute("SELECT id FROM cri_cra_dev.crm.operations ORDER BY id DESC LIMIT 1")
-            new_id = cursor.fetchone().id
+            new_id = get_next_unique_id(cursor, 'operations')
+            cursor.execute("INSERT INTO cri_cra_dev.crm.operations (id, master_group_id, economic_group_id, name, area, pipeline_stage, liquidation_date, risk, temperature, structuring_analyst, is_active, originator, modality, created_at, is_structuring, was_structured) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, TRUE, TRUE)",
+                           (new_id, master_group_id, economic_group_id, data.get('name'), data.get('area'), data.get('stage', 'Conversa Inicial'), parse_iso_date(data.get('liquidationDate')), data.get('risk'), data.get('temperature'), data.get('analyst'), True, data.get('originator'), data.get('modality'), datetime.now()))
             
             default_stages = ['Conversa Inicial', 'Term Sheet', 'Due Diligence', 'Aprovação', 'Liquidação']
             for idx, sn in enumerate(default_stages):
@@ -503,10 +500,9 @@ def manage_structuring_operation(so_id):
                 
                 new_economic_group_id = data.get('economicGroupId')
                 if new_economic_group_id == 'new' and data.get('newEGName'):
-                    cursor.execute("INSERT INTO cri_cra_dev.crm.economic_groups (name, master_group_id, rating) VALUES (?, ?, ?)",
-                                   (data.get('newEGName'), old_op.get('master_group_id'), data.get('risk')))
-                    cursor.execute("SELECT id FROM cri_cra_dev.crm.economic_groups ORDER BY id DESC LIMIT 1")
-                    new_economic_group_id = cursor.fetchone().id
+                    new_economic_group_id = get_next_unique_id(cursor, 'economic_groups')
+                    cursor.execute("INSERT INTO cri_cra_dev.crm.economic_groups (id, name, master_group_id, rating) VALUES (?, ?, ?, ?)",
+                                   (new_economic_group_id, data.get('newEGName'), old_op.get('master_group_id'), data.get('risk')))
                 elif new_economic_group_id == '':
                     new_economic_group_id = None
                 else:

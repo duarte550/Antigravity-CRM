@@ -1,6 +1,6 @@
 from flask import Blueprint, jsonify, request
 from db import get_db_connection
-from utils import safe_isoformat, parse_iso_date
+from utils import safe_isoformat, parse_iso_date, get_next_unique_id
 from datetime import datetime
 import logging
 from task_engine import generate_tasks_for_operation
@@ -135,10 +135,9 @@ def manage_economic_groups():
         elif request.method == 'POST':
             data = request.json
             with conn.cursor() as cursor:
-                cursor.execute("INSERT INTO cri_cra_dev.crm.economic_groups (master_group_id, name, sector, rating, created_at) VALUES (?, ?, ?, ?, ?)", 
-                               (data.get('masterGroupId'), data.get('name'), data.get('sector'), data.get('rating'), datetime.now()))
-                cursor.execute("SELECT id FROM cri_cra_dev.crm.economic_groups ORDER BY id DESC LIMIT 1")
-                new_id = cursor.fetchone().id
+                new_id = get_next_unique_id(cursor, 'economic_groups')
+                cursor.execute("INSERT INTO cri_cra_dev.crm.economic_groups (id, master_group_id, name, sector, rating, created_at) VALUES (?, ?, ?, ?, ?, ?)", 
+                               (new_id, data.get('masterGroupId'), data.get('name'), data.get('sector'), data.get('rating'), datetime.now()))
                 conn.commit()
                 return jsonify(fetch_full_economic_group(cursor, new_id)), 201
     except Exception as e:

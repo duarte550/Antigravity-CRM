@@ -35,3 +35,18 @@ def parse_iso_date(val):
 def format_row(row, cursor):
     """ Converts a cursor row into a dict using cursor.description """
     return {desc[0]: value for desc, value in zip(cursor.description, row)}
+
+def get_next_unique_id(cursor, table_name):
+    """
+    Gera o próximo ID único para uma tabela, garantindo que não há duplicatas,
+    já que o Databricks pode falhar ao aplicar restrições de unicidade de PK.
+    """
+    cursor.execute(f"SELECT COALESCE(MAX(id), 0) + 1 AS next_id FROM cri_cra_dev.crm.{table_name}")
+    next_id_row = cursor.fetchone()
+    next_id = int(next_id_row.next_id) if next_id_row and next_id_row.next_id else 1
+    
+    while True:
+        cursor.execute(f"SELECT id FROM cri_cra_dev.crm.{table_name} WHERE id = ?", (next_id,))
+        if not cursor.fetchone():
+            return next_id
+        next_id += 1
