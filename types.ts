@@ -287,6 +287,8 @@ export interface StructuringOperation {
   wasStructured?: boolean;
   description?: string | null;
   contactName?: string | null;
+  contactEmail?: string | null;
+  contactPhone?: string | null;
 }
 
 export interface EconomicGroup {

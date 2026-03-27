@@ -3,6 +3,7 @@ import { StructuringOperation, StructuringOperationSeries, Area, areaOptions } f
 import Modal from './Modal';
 import { Label, Input, Select, FormRow } from './UI';
 import AnalystSelect from './AnalystSelect';
+import RichTextEditor from './RichTextEditor';
 
 interface StructuringOperationFormProps {
   onClose: () => void;
@@ -36,6 +37,8 @@ const StructuringOperationForm: React.FC<StructuringOperationFormProps> = ({ onC
   const [initialIndexer, setInitialIndexer] = useState<string>(INDEXERS[0]);
   const [description, setDescription] = useState(initialData?.description || '');
   const [contactName, setContactName] = useState('');
+  const [contactEmail, setContactEmail] = useState('');
+  const [contactPhone, setContactPhone] = useState('');
 
   const [series, setSeries] = useState<StructuringOperationSeries[]>(
     initialData?.series && initialData.series.length > 0
@@ -112,6 +115,8 @@ const StructuringOperationForm: React.FC<StructuringOperationFormProps> = ({ onC
         series: payloadSeries,
         description,
         contactName,
+        contactEmail,
+        contactPhone,
         ...(masterGroups && !initialData && masterGroupId && { masterGroupId }),
         economicGroupId: economicGroupId === 'new' ? 'new' : (economicGroupId !== '' ? Number(economicGroupId) : undefined),
         newEGName: economicGroupId === 'new' ? newEGName : undefined,
@@ -256,18 +261,36 @@ const StructuringOperationForm: React.FC<StructuringOperationFormProps> = ({ onC
           )}
         </FormRow>
 
-        <FormRow>
-          <div className="flex-[2]">
-            <Label htmlFor="description">Observação</Label>
-            <Input id="description" type="text" value={description} onChange={e => setDescription(e.target.value)} placeholder="Ex: Informações adicionais sobre o negócio" />
+        {!initialData && (
+          <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+            <h3 className="text-md font-medium text-gray-900 dark:text-gray-100 mb-3 text-sm">Dados do Contato</h3>
+            <FormRow>
+                <div className="flex-1">
+                  <Label htmlFor="contactName">Nome</Label>
+                  <Input id="contactName" type="text" value={contactName} onChange={e => setContactName(e.target.value)} placeholder="Ex: Roberto Silva" />
+                </div>
+                <div className="flex-1">
+                  <Label htmlFor="contactEmail">E-mail</Label>
+                  <Input id="contactEmail" type="email" value={contactEmail} onChange={e => setContactEmail(e.target.value)} placeholder="roberto@empresa.com" />
+                </div>
+                <div className="flex-1">
+                  <Label htmlFor="contactPhone">Telefone</Label>
+                  <Input id="contactPhone" type="tel" value={contactPhone} onChange={e => setContactPhone(e.target.value)} placeholder="(11) 99999-9999" />
+                </div>
+            </FormRow>
           </div>
-          {!initialData && (
-            <div className="flex-[1]">
-              <Label htmlFor="contactName">Contato Principal</Label>
-              <Input id="contactName" type="text" value={contactName} onChange={e => setContactName(e.target.value)} placeholder="Com quem você falou?" />
+        )}
+
+        <div className="mt-4">
+            <Label htmlFor="description">Notas / Observações</Label>
+            <div className="bg-white dark:bg-gray-800 rounded-md border border-gray-300 dark:border-gray-700 overflow-hidden mt-1">
+                <RichTextEditor 
+                    value={description} 
+                    onChange={setDescription} 
+                    className="h-32 mb-12 md:mb-10"
+                />
             </div>
-          )}
-        </FormRow>
+        </div>
 
         {initialData && (
           <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">

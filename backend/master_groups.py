@@ -289,10 +289,12 @@ def add_structuring_operation():
             
             # Save the initial contact if provided
             contact_name = data.get('contactName')
-            if contact_name:
+            contact_email = data.get('contactEmail')
+            contact_phone = data.get('contactPhone')
+            if contact_name or contact_email or contact_phone:
                 contact_id = get_next_unique_id(cursor, 'operation_contacts')
-                cursor.execute("INSERT INTO cri_cra_dev.crm.operation_contacts (id, operation_id, name, role) VALUES (?, ?, ?, 'Contato Inicial')",
-                               (contact_id, new_id, contact_name))
+                cursor.execute("INSERT INTO cri_cra_dev.crm.operation_contacts (id, operation_id, name, email, phone, role) VALUES (?, ?, ?, ?, ?, 'Contato Inicial')",
+                               (contact_id, new_id, contact_name or 'N/D', contact_email, contact_phone))
             
             default_stages = ['Conversa Inicial', 'Term Sheet', 'Due Diligence', 'Aprovação', 'Liquidação']
             for idx, sn in enumerate(default_stages):
