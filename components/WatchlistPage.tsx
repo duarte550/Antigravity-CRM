@@ -464,11 +464,11 @@ const OperationCard: React.FC<OperationCardProps> = ({ operation, isExpanded, on
                 {event && (
                     <div className="border-t border-gray-200 dark:border-gray-700 pt-3 text-sm text-gray-800 dark:text-gray-200 space-y-2">
                         <p><strong className="font-semibold text-gray-600 dark:text-gray-400">Evento:</strong> {event.title}</p>
-                        <div className="prose prose-sm dark:prose-invert max-w-none" dangerouslySetInnerHTML={{ __html: event.description }} />
+                        <div className="prose prose-sm dark:prose-invert max-w-none break-words overflow-hidden" dangerouslySetInnerHTML={{ __html: event.description }} />
                         {event.nextSteps && (
                             <div>
                                 <strong className="font-semibold text-gray-600 dark:text-gray-400 block mb-1">Próximos Passos:</strong>
-                                <div className="prose prose-sm dark:prose-invert max-w-none" dangerouslySetInnerHTML={{ __html: event.nextSteps }} />
+                                <div className="prose prose-sm dark:prose-invert max-w-none break-words overflow-hidden" dangerouslySetInnerHTML={{ __html: event.nextSteps }} />
                             </div>
                         )}
                     </div>

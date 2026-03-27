@@ -235,7 +235,7 @@ const WatchlistReportModal: React.FC<WatchlistReportModalProps> = ({ operations,
                                     </tbody>
                                 </table>
                                 {event ? (
-                                    <div style={{ fontSize: '14px', color: '#374151', marginTop: '8px' }} dangerouslySetInnerHTML={{ __html: event.description }} />
+                                    <div style={{ fontSize: '14px', color: '#374151', marginTop: '8px', wordBreak: 'break-word', overflow: 'hidden' }} dangerouslySetInnerHTML={{ __html: event.description }} />
                                 ) : (
                                     <p style={{ fontSize: '14px', color: '#6b7280', fontStyle: 'italic', marginTop: '8px' }}>Sem descrição detalhada.</p>
                                 )}

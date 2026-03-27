@@ -389,7 +389,7 @@ const TasksPage: React.FC<TasksPageProps> = ({ operations, allTasks, onUpdateOpe
                       <h4 className="font-bold text-gray-800 dark:text-gray-200 leading-tight">{task.ruleName}</h4>
                       {task.notes && (
                           <div 
-                            className="text-[10px] text-gray-500 dark:text-gray-400 mt-1 line-clamp-2 prose prose-xs dark:prose-invert max-w-none" 
+                            className="text-[10px] text-gray-500 dark:text-gray-400 mt-1 line-clamp-2 prose prose-xs dark:prose-invert max-w-none break-words overflow-hidden" 
                             dangerouslySetInnerHTML={{ __html: task.notes }} 
                           />
                       )}

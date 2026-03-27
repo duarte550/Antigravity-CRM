@@ -708,7 +708,7 @@ ${event.nextSteps ? stripHtml(event.nextSteps) : 'Nenhum'}
                         </div>
                         <div>
                             <h4 className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase mb-2">Descrição</h4>
-                            <div className="prose prose-sm max-w-none break-words overflow-x-auto text-gray-700 dark:text-gray-300 bg-gray-50 dark:bg-gray-800/50 p-4 rounded-lg border border-gray-100 dark:border-gray-700" dangerouslySetInnerHTML={{ __html: selectedEventForDetails.description }} />
+                            <div className="prose prose-sm dark:prose-invert max-w-none break-words overflow-x-auto text-gray-700 dark:text-gray-300 bg-gray-50 dark:bg-gray-800/50 p-4 rounded-lg border border-gray-100 dark:border-gray-700" dangerouslySetInnerHTML={{ __html: selectedEventForDetails.description }} />
                         </div>
 
                         {(selectedEventForDetails.ourAttendees || selectedEventForDetails.operationAttendees) && (
@@ -730,13 +730,13 @@ ${event.nextSteps ? stripHtml(event.nextSteps) : 'Nenhum'}
                         {selectedEventForDetails.nextSteps && (
                             <div className="mt-4 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-100 dark:border-blue-800/50">
                                 <h4 className="text-xs font-bold text-blue-800 dark:text-blue-400 uppercase mb-2">Próximos Passos</h4>
-                                <div className="text-sm text-blue-900 dark:text-blue-200 prose prose-sm max-w-none break-words overflow-x-auto" dangerouslySetInnerHTML={{ __html: selectedEventForDetails.nextSteps }} />
+                                <div className="text-sm text-blue-900 dark:text-blue-200 prose prose-sm dark:prose-invert max-w-none break-words overflow-x-auto" dangerouslySetInnerHTML={{ __html: selectedEventForDetails.nextSteps }} />
                             </div>
                         )}
                         {selectedEventForDetails.attentionPoints && (
                             <div className="mt-4 p-4 bg-amber-50 dark:bg-amber-900/20 rounded-lg border border-amber-100 dark:border-amber-800/50">
                                 <h4 className="text-xs font-bold text-amber-800 dark:text-amber-400 uppercase mb-2">Pontos de Atenção</h4>
-                                <div className="text-sm text-amber-900 dark:text-amber-200 prose prose-sm max-w-none break-words overflow-x-auto" dangerouslySetInnerHTML={{ __html: selectedEventForDetails.attentionPoints }} />
+                                <div className="text-sm text-amber-900 dark:text-amber-200 prose prose-sm dark:prose-invert max-w-none break-words overflow-x-auto" dangerouslySetInnerHTML={{ __html: selectedEventForDetails.attentionPoints }} />
                             </div>
                         )}
                         <div className="pt-2 text-xs text-gray-400 dark:text-gray-500">
@@ -861,7 +861,7 @@ ${event.nextSteps ? stripHtml(event.nextSteps) : 'Nenhum'}
                             placeholder="Descreva os detalhes principais da operação..."
                         />
                     ) : (
-                        <div className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap leading-relaxed">
+                        <div className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap leading-relaxed break-words overflow-hidden">
                             {operation.description || 'Nenhuma descrição fornecida.'}
                         </div>
                     )}
@@ -925,7 +925,7 @@ ${event.nextSteps ? stripHtml(event.nextSteps) : 'Nenhum'}
                 ) : (
                     operation.notes ? (
                         <div 
-                            className="prose prose-sm dark:prose-invert max-w-none text-gray-600 dark:text-gray-300"
+                            className="prose prose-sm dark:prose-invert max-w-none text-gray-600 dark:text-gray-300 break-words overflow-hidden"
                             dangerouslySetInnerHTML={{ __html: operation.notes }}
                         />
                     ) : (
@@ -968,7 +968,7 @@ ${event.nextSteps ? stripHtml(event.nextSteps) : 'Nenhum'}
                             </span>
                         </div>
                         <div 
-                            className="text-sm text-amber-900 dark:text-amber-200 prose prose-sm max-w-none"
+                            className="text-sm text-amber-900 dark:text-amber-200 prose prose-sm dark:prose-invert max-w-none"
                             dangerouslySetInnerHTML={{ __html: lastReviewWithAttentionPoints.attentionPoints || '' }}
                         />
                         <p className="mt-3 text-[10px] text-amber-600/70 dark:text-amber-500/50 italic border-t border-amber-200/50 dark:border-amber-800/50 pt-2">
@@ -1222,7 +1222,7 @@ ${event.nextSteps ? stripHtml(event.nextSteps) : 'Nenhum'}
                                             </span>
                                         )}
                                     </div>
-                                    <div className="text-sm text-gray-600 dark:text-gray-400 prose prose-sm dark:prose-invert max-w-none" dangerouslySetInnerHTML={{ __html: rule.description }} />
+                                    <div className="text-sm text-gray-600 dark:text-gray-400 prose prose-sm dark:prose-invert max-w-none break-words overflow-hidden" dangerouslySetInnerHTML={{ __html: rule.description }} />
                                     <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
                                         {rule.frequency === 'Pontual' ? (
                                             <span className="font-medium text-blue-600 dark:text-blue-400">Pontual: {rule.startDate ? new Date(rule.startDate).toLocaleDateString('pt-BR') : 'N/A'}</span>

@@ -41,6 +41,14 @@
       .custom-scrollbar::-webkit-scrollbar-thumb:hover {
         background-color: #94a3b8;
       }
+      /* Fix dark mode rich-text forced colors */
+      .dark .prose [style*="color: rgb(0, 0, 0)"],
+      .dark .prose [style*="color: #000000"],
+      .dark .prose [style*="color: black"],
+      .dark .prose [style*="color: rgb(34, 34, 34)"],
+      .dark .prose [style*="color: #222222"] {
+        color: #d1d5db !important;
+      }
     </style>
   <script type="importmap">
 {

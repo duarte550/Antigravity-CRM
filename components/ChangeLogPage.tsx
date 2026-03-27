@@ -180,7 +180,7 @@ const ChangeLogPage: React.FC<ChangeLogPageProps> = ({ apiUrl, showToast, setIsS
                                                 </span>
                                             </div>
                                             <div 
-                                                className={`text-sm text-gray-600 prose prose-sm max-w-none ${req.status === 'completed' ? 'text-gray-400' : ''}`}
+                                                className={`text-sm text-gray-600 prose prose-sm max-w-none break-words overflow-hidden ${req.status === 'completed' ? 'text-gray-400' : ''}`}
                                                 dangerouslySetInnerHTML={{ __html: req.description }}
                                             />
                                             <div className="mt-2 flex items-center gap-4 text-[10px] text-gray-400 font-medium uppercase tracking-wider">
@@ -224,7 +224,7 @@ const ChangeLogPage: React.FC<ChangeLogPageProps> = ({ apiUrl, showToast, setIsS
                                         <h4 className="text-lg font-bold text-gray-800">{note.title}</h4>
                                     </div>
                                     <div 
-                                        className="text-sm text-gray-600 mb-4 prose prose-sm max-w-none"
+                                        className="text-sm text-gray-600 mb-4 prose prose-sm max-w-none break-words overflow-hidden"
                                         dangerouslySetInnerHTML={{ __html: note.description }}
                                     />
                                     {note.changes && note.changes.length > 0 && (
@@ -303,7 +303,7 @@ const ChangeLogPage: React.FC<ChangeLogPageProps> = ({ apiUrl, showToast, setIsS
                             )}
                         </div>
                         <div 
-                            className="p-4 bg-gray-50 border border-gray-100 rounded-lg prose prose-sm max-w-none text-gray-700"
+                            className="p-4 bg-gray-50 border border-gray-100 rounded-lg prose prose-sm max-w-none text-gray-700 break-words overflow-hidden"
                             dangerouslySetInnerHTML={{ __html: selectedRequest.description }}
                         />
                         <div className="flex justify-end pt-4 border-t border-gray-100">

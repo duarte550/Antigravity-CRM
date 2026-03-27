@@ -1168,11 +1168,11 @@ const AnalystHub: React.FC<AnalystHubProps> = ({
               <span className="font-medium text-blue-600 dark:text-blue-400">{selectedEventForDetails.operationName}</span>
               <span>{new Date(selectedEventForDetails.date).toLocaleDateString('pt-BR')}</span>
             </div>
-            <div className="prose prose-sm dark:prose-invert max-w-none text-gray-700 dark:text-gray-300" dangerouslySetInnerHTML={{ __html: selectedEventForDetails.description }} />
+            <div className="prose prose-sm dark:prose-invert max-w-none text-gray-700 dark:text-gray-300 break-words overflow-hidden" dangerouslySetInnerHTML={{ __html: selectedEventForDetails.description }} />
             {selectedEventForDetails.nextSteps && (
               <div className="mt-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-100 dark:border-blue-900/30">
                 <h4 className="text-xs font-bold text-blue-800 dark:text-blue-300 uppercase mb-1">Próximos Passos</h4>
-                <div className="text-sm text-blue-900 dark:text-blue-200 prose prose-sm dark:prose-invert max-w-none" dangerouslySetInnerHTML={{ __html: selectedEventForDetails.nextSteps }} />
+                <div className="text-sm text-blue-900 dark:text-blue-200 prose prose-sm dark:prose-invert max-w-none break-words overflow-hidden" dangerouslySetInnerHTML={{ __html: selectedEventForDetails.nextSteps }} />
               </div>
             )}
             <div className="flex justify-between items-center pt-4 border-t border-gray-100 dark:border-gray-700 mt-6">

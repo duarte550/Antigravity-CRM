@@ -155,7 +155,7 @@ const LitigationCommentsSection: React.FC<Props> = ({
                                     </div>
                                 </div>
                                 <div 
-                                    className="prose prose-sm dark:prose-invert max-w-none text-gray-700 dark:text-gray-300"
+                                    className="prose prose-sm dark:prose-invert max-w-none text-gray-700 dark:text-gray-300 break-words overflow-hidden"
                                     dangerouslySetInnerHTML={{ __html: comment.description }}
                                 />
                             </div>
