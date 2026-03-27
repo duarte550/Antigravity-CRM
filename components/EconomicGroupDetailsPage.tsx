@@ -287,21 +287,32 @@ const EconomicGroupDetailsPage: React.FC<EconomicGroupDetailsPageProps> = ({ eco
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
             <h2 className="text-xl font-semibold mb-4 text-gray-900 dark:text-white">Operações Ativas</h2>
             <div className="space-y-4">
-              {economicGroup.operations?.map(op => (
-                <div 
-                  key={op.id} 
-                  className="flex justify-between items-center p-4 rounded-lg border border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer"
-                  onClick={() => onNavigate(Page.DETAIL, op.id)}
-                >
-                  <div>
-                    <h3 className="font-medium text-gray-900 dark:text-white">{op.name}</h3>
-                    <p className="text-sm text-gray-500 dark:text-gray-400">{op.area}</p>
+              {[...(economicGroup.operations || [])]
+                .sort((a, b) => {
+                  if (a.status === 'Legado' && b.status !== 'Legado') return 1;
+                  if (b.status === 'Legado' && a.status !== 'Legado') return -1;
+                  return 0;
+                })
+                .map(op => {
+                  const isLegacy = op.status === 'Legado';
+                  return (
+                  <div 
+                    key={op.id} 
+                    className={`flex justify-between items-center p-4 rounded-lg border ${isLegacy ? 'border-dashed border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/40 opacity-70' : 'border-gray-100 dark:border-gray-700'} hover:bg-gray-100 dark:hover:bg-gray-700/60 cursor-pointer transition-colors`}
+                    onClick={() => onNavigate(Page.DETAIL, op.id)}
+                  >
+                    <div className={isLegacy ? 'grayscale' : ''}>
+                      <h3 className={`font-medium flex items-center gap-2 ${isLegacy ? 'text-gray-500 dark:text-gray-400' : 'text-gray-900 dark:text-white'}`}>
+                        {op.name}
+                        {isLegacy && <span className="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400">Legado</span>}
+                      </h3>
+                      <p className={`text-sm ${isLegacy ? 'text-gray-400 dark:text-gray-500' : 'text-gray-500 dark:text-gray-400'}`}>{op.area}</p>
+                    </div>
+                    <span className={`text-sm font-medium ${isLegacy ? 'text-gray-400 dark:text-gray-500' : 'text-gray-600 dark:text-gray-300'}`}>
+                      {op.status === 'Legado' ? 'Encerrada' : (op.status || 'Ativa')}
+                    </span>
                   </div>
-                  <span className="text-sm font-medium text-gray-600 dark:text-gray-300">
-                    {op.status || 'Ativa'}
-                  </span>
-                </div>
-              ))}
+                )})}
               {(!economicGroup.operations || economicGroup.operations.length === 0) && (
                 <p className="text-gray-500 dark:text-gray-400">Nenhuma operação ativa vinculada.</p>
               )}

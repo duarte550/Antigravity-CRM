@@ -24,11 +24,18 @@ const MasterGroupsPage: React.FC<MasterGroupsPageProps> = ({ onNavigate, apiUrl,
 
   const fetchMasterGroups = async () => {
     try {
-      setIsLoading(true);
+      const cached = localStorage.getItem('cachedMasterGroupsRaw');
+      if (cached) {
+        try { setMasterGroups(JSON.parse(cached)); setIsLoading(false); } catch(e) {}
+      } else {
+        setIsLoading(true);
+      }
+      
       const response = await fetchApi(`${apiUrl}/api/master-groups`);
       if (!response.ok) throw new Error('Failed to fetch master groups');
       const data = await response.json();
       setMasterGroups(data);
+      localStorage.setItem('cachedMasterGroupsRaw', JSON.stringify(data));
     } catch (error) {
       console.error(error);
       showToast('Erro ao carregar Master Grupos', 'error');

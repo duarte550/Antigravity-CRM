@@ -23,10 +23,15 @@ const EconomicGroupForm: React.FC<EconomicGroupFormProps> = ({ onClose, onSave, 
 
   const fetchMasterGroups = async () => {
     try {
+      const cached = localStorage.getItem('cachedMasterGroupsRaw');
+      if (cached) {
+        try { setMasterGroups(JSON.parse(cached)); setIsLoadingMGs(false); } catch(e) {}
+      }
       const response = await fetchApi(`${apiUrl}/api/master-groups`);
       if (!response.ok) throw new Error('Falha ao carregar Master Grupos');
       const data = await response.json();
       setMasterGroups(data);
+      localStorage.setItem('cachedMasterGroupsRaw', JSON.stringify(data));
     } catch (error) {
       console.error(error);
     } finally {

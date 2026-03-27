@@ -34,6 +34,8 @@ const StructuringOperationForm: React.FC<StructuringOperationFormProps> = ({ onC
   const [modality, setModality] = useState(initialData?.modality || '');
   const [initialVolume, setInitialVolume] = useState<number | ''>('');
   const [initialIndexer, setInitialIndexer] = useState<string>(INDEXERS[0]);
+  const [description, setDescription] = useState(initialData?.description || '');
+  const [contactName, setContactName] = useState('');
 
   const [series, setSeries] = useState<StructuringOperationSeries[]>(
     initialData?.series && initialData.series.length > 0
@@ -108,6 +110,8 @@ const StructuringOperationForm: React.FC<StructuringOperationFormProps> = ({ onC
         modality,
         liquidationDate: liquidationDate ? new Date(liquidationDate + 'T12:00:00').toISOString() : undefined,
         series: payloadSeries,
+        description,
+        contactName,
         ...(masterGroups && !initialData && masterGroupId && { masterGroupId }),
         economicGroupId: economicGroupId === 'new' ? 'new' : (economicGroupId !== '' ? Number(economicGroupId) : undefined),
         newEGName: economicGroupId === 'new' ? newEGName : undefined,
@@ -249,6 +253,19 @@ const StructuringOperationForm: React.FC<StructuringOperationFormProps> = ({ onC
                 <Input id="initialVolume" type="number" step="0.01" value={initialVolume} onChange={e => setInitialVolume(e.target.value ? Number(e.target.value) : '')} placeholder="Ex: 50" />
               </div>
             </React.Fragment>
+          )}
+        </FormRow>
+
+        <FormRow>
+          <div className="flex-[2]">
+            <Label htmlFor="description">Observação</Label>
+            <Input id="description" type="text" value={description} onChange={e => setDescription(e.target.value)} placeholder="Ex: Informações adicionais sobre o negócio" />
+          </div>
+          {!initialData && (
+            <div className="flex-[1]">
+              <Label htmlFor="contactName">Contato Principal</Label>
+              <Input id="contactName" type="text" value={contactName} onChange={e => setContactName(e.target.value)} placeholder="Com quem você falou?" />
+            </div>
           )}
         </FormRow>
 

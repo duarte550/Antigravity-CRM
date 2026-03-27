@@ -286,6 +286,7 @@ export interface StructuringOperation {
   taskExceptions?: string[];
   wasStructured?: boolean;
   description?: string | null;
+  contactName?: string | null;
 }
 
 export interface EconomicGroup {

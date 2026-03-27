@@ -284,8 +284,15 @@ def add_structuring_operation():
                 economic_group_id = None
                 
             new_id = get_next_unique_id(cursor, 'operations')
-            cursor.execute("INSERT INTO cri_cra_dev.crm.operations (id, master_group_id, economic_group_id, name, area, pipeline_stage, liquidation_date, risk, temperature, structuring_analyst, is_active, originator, modality, created_at, is_structuring, was_structured) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, TRUE, TRUE)",
-                           (new_id, master_group_id, economic_group_id, data.get('name'), data.get('area'), data.get('stage', 'Conversa Inicial'), parse_iso_date(data.get('liquidationDate')), data.get('risk'), data.get('temperature'), data.get('analyst'), True, data.get('originator'), data.get('modality'), datetime.now()))
+            cursor.execute("INSERT INTO cri_cra_dev.crm.operations (id, master_group_id, economic_group_id, name, area, pipeline_stage, liquidation_date, risk, temperature, structuring_analyst, is_active, originator, modality, created_at, description, is_structuring, was_structured) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, TRUE, TRUE)",
+                           (new_id, master_group_id, economic_group_id, data.get('name'), data.get('area'), data.get('stage', 'Conversa Inicial'), parse_iso_date(data.get('liquidationDate')), data.get('risk'), data.get('temperature'), data.get('analyst'), True, data.get('originator'), data.get('modality'), datetime.now(), data.get('description')))
+            
+            # Save the initial contact if provided
+            contact_name = data.get('contactName')
+            if contact_name:
+                contact_id = get_next_unique_id(cursor, 'operation_contacts')
+                cursor.execute("INSERT INTO cri_cra_dev.crm.operation_contacts (id, operation_id, name, role) VALUES (?, ?, ?, 'Contato Inicial')",
+                               (contact_id, new_id, contact_name))
             
             default_stages = ['Conversa Inicial', 'Term Sheet', 'Due Diligence', 'Aprovação', 'Liquidação']
             for idx, sn in enumerate(default_stages):

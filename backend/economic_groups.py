@@ -130,7 +130,12 @@ def manage_economic_groups():
                     LEFT JOIN cri_cra_dev.crm.master_groups m ON e.master_group_id = m.id 
                     ORDER BY e.name
                 """)
-                egs = [format_row(row, cursor) for row in cursor.fetchall()]
+                egs = []
+                for row in cursor.fetchall():
+                    eg = format_row(row, cursor)
+                    eg['masterGroupName'] = eg.get('master_group_name')
+                    eg['masterGroupId'] = eg.get('master_group_id')
+                    egs.append(eg)
                 return jsonify(egs)
         elif request.method == 'POST':
             data = request.json

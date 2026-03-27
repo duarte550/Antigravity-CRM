@@ -54,17 +54,23 @@ const OperationForm: React.FC<OperationFormProps> = ({ onClose, onSave, initialD
   useEffect(() => {
     const fetchMasterGroups = async () => {
       try {
+        const cached = localStorage.getItem('cachedMasterGroupsRaw');
+        if (cached) {
+          try { setMasterGroups(JSON.parse(cached)); } catch(e) {}
+        }
+        
         const response = await fetchApi(`${apiUrl}/api/master-groups`);
         if (response.ok) {
           const data = await response.json();
           setMasterGroups(data);
+          localStorage.setItem('cachedMasterGroupsRaw', JSON.stringify(data));
         }
       } catch (error) {
         console.error('Failed to fetch master groups', error);
       }
     };
     fetchMasterGroups();
-  }, []);
+  }, [apiUrl]);
 
   // Format date for input type="date" (YYYY-MM-DD)
   const formatDate = (isoDate?: string | null) => {

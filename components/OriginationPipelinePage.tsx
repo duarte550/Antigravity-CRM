@@ -199,10 +199,17 @@ const OriginationPipelinePage: React.FC<OriginationPipelinePageProps> = ({ onNav
 
   const fetchMasterGroups = async () => {
     try {
+      const cached = localStorage.getItem('cachedMasterGroupsMapped');
+      if (cached) {
+        try { setMasterGroups(JSON.parse(cached)); } catch(e) {}
+      }
+
       const response = await fetchApi(`${apiUrl}/api/master-groups`);
       if (response.ok) {
         const data = await response.json();
-        setMasterGroups(data.map((mg: any) => ({ id: mg.id, name: mg.name, economicGroups: mg.economicGroups })));
+        const mapped = data.map((mg: any) => ({ id: mg.id, name: mg.name, economicGroups: mg.economicGroups }));
+        setMasterGroups(mapped);
+        localStorage.setItem('cachedMasterGroupsMapped', JSON.stringify(mapped));
       }
     } catch(err) {
       console.error(err);
