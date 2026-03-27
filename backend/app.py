@@ -700,7 +700,7 @@ def _update_operation_db_internal(cursor, op_id, data):
     
     cursor.execute("SELECT COUNT(*) as count FROM cri_cra_dev.crm.operation_litigation_comments WHERE operation_id = ?", (op_id,))
     litigation_count_row = cursor.fetchone()
-    has_litigation_comments = litigation_count_row.count > 0 if litigation_count_row else False
+    has_litigation_comments = litigation_count_row[0] > 0 if litigation_count_row else False
 
     if new_watchlist in ['Rosa', 'Vermelho'] and old_watchlist not in ['Rosa', 'Vermelho'] and not has_litigation_comments:
         has_litigation_rule = any(r.get('name') == 'Revisão Advogados de Litígio' for r in data.get('taskRules', []))
