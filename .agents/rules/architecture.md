@@ -67,4 +67,4 @@ Ao atuar neste repositório, siga estas diretrizes:
 3. **Estilização:** Use exclusivamente Tailwind CSS. Evite criar arquivos `.css` customizados a menos que seja estritamente necessário.
 4. **Backend Python:** Ao adicionar novas rotas no backend, certifique-se de tratar conexões de banco de dados corretamente (abrir e fechar cursores/conexões no bloco `try/finally`) e retornar JSON padronizado. Realize os testes automatizados para garantir que está tudo funcionando quando ouverem novas implementações ou alterações de código e adicione novos testes sempre que houverem novas rotas ou funcionalidades sendo implementadas.
 5. **Consistência de UI:** Utilize os componentes base localizados em `/components/UI.tsx` (como `Label`, `Input`, `Select`, `FormRow`) para manter a consistência visual dos formulários.
-6. Sempre que novas definições de arquitetura da implementação forem surgindo sugira atualizações para esse arquivo @architecture.md
+6. Qualquer mudança nas tabelas do banco de dados ou adição de novas tabelas deve ser adicionada como alteração no @update_db.py
