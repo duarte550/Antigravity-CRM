@@ -44,7 +44,6 @@ Cada prompt abaixo instrui exaustivamente o Gemini 3.1 referenciando **todas** a
 > "Seguindo @[.agents/rules/architecture.md] (regra IA §6 — toda mudança de tabela via `@update_db.py`; regra §2 — atualizar `types.ts` ANTES dos componentes):
 >
 > **1. Alterações no `@update_db.py`:**
-> - Adicionar coluna/flag de `high_yield` (boolean) na tabela `operations` em `cri_cra_dev.crm`.
 > - Criar o schema inteiramente novo `cri_cra_dev.comite` com as seguintes tabelas:
 >   - `comite_rules`: id, tipo (investimento/monitoramento), area, dia_da_semana, horario, data_criacao, ativo.
 >   - `comites`: id, comite_rule_id, data, status (agendado/concluido), ata_gerada_em.

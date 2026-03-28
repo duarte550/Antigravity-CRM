@@ -31,7 +31,7 @@ import ComiteDetailPage from './components/ComiteDetailPage';
 import ComiteVideoPage from './components/ComiteVideoPage';
 import { fetchApi } from './utils/api';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://crmcri-flask.onrender.com';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://antigravity-crm-two.vercel.app/';
 
 const App: React.FC = () => {
   const [operations, setOperations] = useState<Operation[]>(() => {
@@ -48,17 +48,17 @@ const App: React.FC = () => {
   const [currentPage, setCurrentPage] = useState<Page>(Page.OVERVIEW);
   const [selectedOperationId, setSelectedOperationId] = useState<number | null>(null);
   const [selectedArea, setSelectedArea] = useState<Area | 'Mixed'>('Mixed');
-  const [newTaskModalState, setNewTaskModalState] = useState<{isOpen: boolean; operationId?: number; analystName?: string}>({ isOpen: false });
-  const [reviewModalState, setReviewModalState] = useState<{isOpen: boolean; task: Task | null}>({isOpen: false, task: null});
+  const [newTaskModalState, setNewTaskModalState] = useState<{ isOpen: boolean; operationId?: number; analystName?: string }>({ isOpen: false });
+  const [reviewModalState, setReviewModalState] = useState<{ isOpen: boolean; task: Task | null }>({ isOpen: false, task: null });
   const [isLoading, setIsLoading] = useState(() => {
     return localStorage.getItem('operations_cache') ? false : true;
   });
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncTrigger, setSyncTrigger] = useState(0);
-  const [failedOperations, setFailedOperations] = useState<{id: number, error: string}[]>([]);
+  const [failedOperations, setFailedOperations] = useState<{ id: number, error: string }[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [toast, setToast] = useState<{message: string; type: 'success' | 'error'} | null>(null);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [syncQueue, setSyncQueue] = useState<Operation[]>(() => {
     const saved = localStorage.getItem('sync_queue');
     return saved ? JSON.parse(saved) : [];
@@ -68,9 +68,9 @@ const App: React.FC = () => {
     syncQueueRef.current = syncQueue;
   }, [syncQueue]);
   const processingQueue = useRef<boolean>(false);
-  
+
   // Fila Genérica para as novas Abas
-  const [genericSyncQueue, setGenericSyncQueue] = useState<{id: string, url: string, method: string, payload: any, timestamp: number}[]>(() => {
+  const [genericSyncQueue, setGenericSyncQueue] = useState<{ id: string, url: string, method: string, payload: any, timestamp: number }[]>(() => {
     const saved = localStorage.getItem('generic_sync_queue');
     return saved ? JSON.parse(saved) : [];
   });
@@ -119,7 +119,7 @@ const App: React.FC = () => {
   const toggleDarkMode = () => setIsDarkMode(!isDarkMode);
 
   const showToast = (message: string, type: 'success' | 'error') => {
-      setToast({ message, type });
+    setToast({ message, type });
   };
 
   // Sync Queue Processing
@@ -129,14 +129,14 @@ const App: React.FC = () => {
         setIsSyncing(false);
         return;
       }
-      
+
       if (processingQueue.current) return;
-      
+
       processingQueue.current = true;
       setIsSyncing(true);
-      
+
       const operationsToSync = [...syncQueue];
-      
+
       try {
         const response = await fetchApi(`${API_BASE_URL}/api/operations/bulk-update`, {
           method: 'POST',
@@ -146,26 +146,26 @@ const App: React.FC = () => {
         });
 
         if (!response.ok) throw new Error('Falha na sincronização em lote');
-        
+
         const result = await response.json();
         const { success, failed } = result;
-        
+
         // Remove all items from the queue
         setSyncQueue([]);
         setFailedOperations(failed);
-        
+
         if (failed.length > 0) {
-            showToast(`Falha em ${failed.length} operações: ${failed.map(f => f.id).join(', ')}`, 'error');
+          showToast(`Falha em ${failed.length} operações: ${failed.map(f => f.id).join(', ')}`, 'error');
         } else {
-            showToast('Sincronização concluída com sucesso', 'success');
+          showToast('Sincronização concluída com sucesso', 'success');
         }
-        
+
       } catch (error) {
         console.error("Sync error", error);
         // On error, wait and retry later
         setTimeout(() => {
-            processingQueue.current = false;
-            setSyncTrigger(prev => prev + 1);
+          processingQueue.current = false;
+          setSyncTrigger(prev => prev + 1);
         }, 5000);
         return;
       } finally {
@@ -179,7 +179,7 @@ const App: React.FC = () => {
   // Generic Sync Queue Processor
   useEffect(() => {
     if (genericSyncQueue.length === 0) return;
-    
+
     const processGenericQueue = async () => {
       if (processingGenericQueue.current) return;
       processingGenericQueue.current = true;
@@ -209,7 +209,7 @@ const App: React.FC = () => {
     };
 
     const flushTimeout = setTimeout(() => {
-        processGenericQueue();
+      processGenericQueue();
     }, 2000);
 
     return () => clearTimeout(flushTimeout);
@@ -225,7 +225,7 @@ const App: React.FC = () => {
         // FIX: Usar Blob com type 'application/json' para que o Flask aceite o Content-Type.
         // sendBeacon com string pura envia como text/plain, causando erro 415.
         const blob = new Blob([JSON.stringify(queue)], { type: 'application/json' });
-        
+
         const sent = navigator.sendBeacon?.(url, blob);
         if (!sent) {
           // Fallback com fetch keepalive se sendBeacon falhar ou não existir
@@ -235,7 +235,7 @@ const App: React.FC = () => {
             body: JSON.stringify(queue),
             keepalive: true,
             credentials: 'include'
-          }).catch(() => {});
+          }).catch(() => { });
         }
       }
 
@@ -252,7 +252,7 @@ const App: React.FC = () => {
               body: JSON.stringify(item.payload),
               keepalive: true,
               credentials: 'include'
-            }).catch(() => {});
+            }).catch(() => { });
           }
         }
       }
@@ -282,17 +282,17 @@ const App: React.FC = () => {
       }
       return prev;
     });
-    setError(null); 
+    setError(null);
     try {
       const response = await fetchApi(`${API_BASE_URL}/api/operations?summary=true`, { credentials: 'include' });
       if (!response.ok) {
         throw new Error(`O servidor respondeu com o status: ${response.status}`);
       }
       const data: Operation[] = await response.json();
-      
+
       setOperations(prev => {
         if (prev.length === 0) return data;
-        
+
         return data.map(summaryOp => {
           const existingOp = prev.find(op => op.id === summaryOp.id);
           if (existingOp) {
@@ -323,18 +323,18 @@ const App: React.FC = () => {
   const fetchOperationDetails = async (operationId: number) => {
     setIsRefreshing(true);
     try {
-        const response = await fetchApi(`${API_BASE_URL}/api/operations/${operationId}`, { credentials: 'include' });
-        if (response.status === 404) return null; // Operation might be new/not yet in DB
-        if (!response.ok) throw new Error('Falha ao carregar detalhes da operação');
-        const fullOperation = await response.json();
-        
-        setOperations(prev => prev.map(op => op.id === operationId ? fullOperation : op));
-        return fullOperation;
+      const response = await fetchApi(`${API_BASE_URL}/api/operations/${operationId}`, { credentials: 'include' });
+      if (response.status === 404) return null; // Operation might be new/not yet in DB
+      if (!response.ok) throw new Error('Falha ao carregar detalhes da operação');
+      const fullOperation = await response.json();
+
+      setOperations(prev => prev.map(op => op.id === operationId ? fullOperation : op));
+      return fullOperation;
     } catch (error) {
-        console.error("Error fetching operation details:", error);
-        showToast('Erro ao carregar detalhes da operação.', 'error');
+      console.error("Error fetching operation details:", error);
+      showToast('Erro ao carregar detalhes da operação.', 'error');
     } finally {
-        setIsRefreshing(false);
+      setIsRefreshing(false);
     }
   };
 
@@ -362,8 +362,8 @@ const App: React.FC = () => {
   const filteredAllTasks = useMemo(() => {
     if (selectedArea === 'Mixed') return allTasks;
     return allTasks.filter(task => {
-        const op = activeOperations.find(o => o.id === task.operationId);
-        return op?.area === selectedArea;
+      const op = activeOperations.find(o => o.id === task.operationId);
+      return op?.area === selectedArea;
     });
   }, [allTasks, activeOperations, selectedArea]);
 
@@ -376,18 +376,18 @@ const App: React.FC = () => {
           method: 'POST',
           credentials: 'include'
         });
-        
+
         if (!response.ok) throw new Error('Falha ao sincronizar regras');
-        
+
         const result = await response.json();
         const count = result.fixed_count;
         totalFixed += count;
-        
+
         if (count === 0) break;
-        
+
         // Optional: Update UI with progress if needed, e.g., via a toast that updates
         showToast(`Sincronizando... ${totalFixed} operações processadas.`, 'success');
-        
+
         // Small delay to be nice to the server
         await new Promise(resolve => setTimeout(resolve, 500));
       }
@@ -409,32 +409,32 @@ const App: React.FC = () => {
   const handleNavigate = async (page: Page, operationId?: number) => {
     setCurrentPage(page);
     setSelectedOperationId(operationId ?? null);
-    
+
     if (page === Page.DETAIL && operationId) {
-         await fetchOperationDetails(operationId);
+      await fetchOperationDetails(operationId);
     }
   };
-  
+
   const handleAddOperation = async (newOperationData: any) => {
     setIsSyncing(true);
     try {
-        const response = await fetchApi(`${API_BASE_URL}/api/operations`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(newOperationData),
-            credentials: 'include'
-        });
-        if (!response.ok) throw new Error('Falha ao salvar a operação');
-        const savedOperation = await response.json();
-        setOperations(prev => [ ...prev, savedOperation ]);
-        showToast('Operação adicionada com sucesso!', 'success');
-        return savedOperation;
+      const response = await fetchApi(`${API_BASE_URL}/api/operations`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newOperationData),
+        credentials: 'include'
+      });
+      if (!response.ok) throw new Error('Falha ao salvar a operação');
+      const savedOperation = await response.json();
+      setOperations(prev => [...prev, savedOperation]);
+      showToast('Operação adicionada com sucesso!', 'success');
+      return savedOperation;
     } catch (error) {
-        console.error("Error adding operation:", error);
-        showToast('Erro ao adicionar operação.', 'error');
-        throw error;
+      console.error("Error adding operation:", error);
+      showToast('Erro ao adicionar operação.', 'error');
+      throw error;
     } finally {
-        setIsSyncing(false);
+      setIsSyncing(false);
     }
   };
 
@@ -443,7 +443,7 @@ const App: React.FC = () => {
     try {
       let op = operations.find(o => o.name === `Geral - ${analystName}` && o.operationType === 'Geral');
       let opId = op?.id;
-      
+
       if (!opId) {
         const newOpData = {
           name: `Geral - ${analystName}`,
@@ -467,27 +467,27 @@ const App: React.FC = () => {
           ratingHistory: []
         };
         const response = await fetchApi(`${API_BASE_URL}/api/operations`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(newOpData),
-            credentials: 'include'
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(newOpData),
+          credentials: 'include'
         });
         if (!response.ok) throw new Error('Falha ao criar operação geral');
         const savedOperation = await response.json();
-        setOperations(prev => [ ...prev, savedOperation ]);
+        setOperations(prev => [...prev, savedOperation]);
         opId = savedOperation.id;
         op = savedOperation;
       }
-      
+
       if (op) {
-          const updatedOp = {
-              ...op,
-              taskRules: [...(op.taskRules || []), { ...rule, id: Date.now() }]
-          };
-          await handleUpdateOperation(updatedOp);
-          showToast('Tarefa geral adicionada com sucesso!', 'success');
+        const updatedOp = {
+          ...op,
+          taskRules: [...(op.taskRules || []), { ...rule, id: Date.now() }]
+        };
+        await handleUpdateOperation(updatedOp);
+        showToast('Tarefa geral adicionada com sucesso!', 'success');
       }
-      
+
     } catch (error) {
       console.error("Error adding general task:", error);
       showToast('Erro ao adicionar tarefa geral.', 'error');
@@ -500,43 +500,43 @@ const App: React.FC = () => {
     // 1. Optimistic UI update
     const now = Date.now();
     const opWithTimestamp = { ...updatedOperation, lastUpdated: now };
-    
-    setOperations(prev => 
+
+    setOperations(prev =>
       prev.map(op => op.id === updatedOperation.id ? opWithTimestamp : op)
     );
-    
+
     if (!syncToBackend) return;
 
     // 2. Add to sync queue with merge logic
     setSyncQueue(prev => {
-        // Find if this operation is already in the queue
-        const existingIndex = prev.findIndex(op => op.id === updatedOperation.id);
-        
-        // If it's in the queue and NOT the one currently being processed (index > 0)
-        // OR if it's at index 0 but we are NOT currently processing anything
-        if (existingIndex !== -1 && (existingIndex > 0 || !processingQueue.current)) {
-            const newQueue = [...prev];
-            newQueue[existingIndex] = opWithTimestamp;
-            console.log(`[SyncQueue] Merged update for operation ${updatedOperation.id} at position ${existingIndex}`);
-            return newQueue;
-        }
-        
-        // If it's at index 0 and IS being processed, we check if there's already a SECOND entry for it
-        if (existingIndex === 0 && processingQueue.current) {
-            const secondEntryIndex = prev.findIndex((op, i) => i > 0 && op.id === updatedOperation.id);
-            if (secondEntryIndex !== -1) {
-                const newQueue = [...prev];
-                newQueue[secondEntryIndex] = opWithTimestamp;
-                console.log(`[SyncQueue] Merged update for operation ${updatedOperation.id} at pending position ${secondEntryIndex}`);
-                return newQueue;
-            }
-        }
+      // Find if this operation is already in the queue
+      const existingIndex = prev.findIndex(op => op.id === updatedOperation.id);
 
-        // Otherwise, append to the end
-        console.log(`[SyncQueue] Added new update for operation ${updatedOperation.id} to queue`);
-        return [...prev, opWithTimestamp];
+      // If it's in the queue and NOT the one currently being processed (index > 0)
+      // OR if it's at index 0 but we are NOT currently processing anything
+      if (existingIndex !== -1 && (existingIndex > 0 || !processingQueue.current)) {
+        const newQueue = [...prev];
+        newQueue[existingIndex] = opWithTimestamp;
+        console.log(`[SyncQueue] Merged update for operation ${updatedOperation.id} at position ${existingIndex}`);
+        return newQueue;
+      }
+
+      // If it's at index 0 and IS being processed, we check if there's already a SECOND entry for it
+      if (existingIndex === 0 && processingQueue.current) {
+        const secondEntryIndex = prev.findIndex((op, i) => i > 0 && op.id === updatedOperation.id);
+        if (secondEntryIndex !== -1) {
+          const newQueue = [...prev];
+          newQueue[secondEntryIndex] = opWithTimestamp;
+          console.log(`[SyncQueue] Merged update for operation ${updatedOperation.id} at pending position ${secondEntryIndex}`);
+          return newQueue;
+        }
+      }
+
+      // Otherwise, append to the end
+      console.log(`[SyncQueue] Added new update for operation ${updatedOperation.id} to queue`);
+      return [...prev, opWithTimestamp];
     });
-    
+
     showToast('Alteração salva localmente e enviando...', 'success');
   };
 
@@ -552,7 +552,7 @@ const App: React.FC = () => {
       if (!response.ok) {
         throw new Error('Falha ao deletar a operação');
       }
-      
+
       if (selectedOperationId === operationId) {
         handleNavigate(Page.OVERVIEW);
       }
@@ -562,7 +562,7 @@ const App: React.FC = () => {
       setOperations(originalOperations);
       showToast('Erro ao deletar a operação.', 'error');
     } finally {
-        setIsSyncing(false);
+      setIsSyncing(false);
     }
   };
 
@@ -571,10 +571,10 @@ const App: React.FC = () => {
     if (!op) return;
 
     const updatedOp: Operation = {
-        ...op,
-        taskExceptions: [...(op.taskExceptions || []), task.id]
+      ...op,
+      taskExceptions: [...(op.taskExceptions || []), task.id]
     };
-    
+
     await handleUpdateOperation(updatedOp);
     showToast('Tarefa deletada com sucesso!', 'success');
   };
@@ -585,18 +585,18 @@ const App: React.FC = () => {
 
     const isoDate = updates.dueDate ? (updates.dueDate.includes('T') ? updates.dueDate : new Date(updates.dueDate + 'T12:00:00').toISOString()) : null;
     const newAdHocRule: TaskRule = {
-        id: Date.now(),
-        name: updates.name,
-        frequency: updates.dueDate ? 'Pontual' : 'Sem Prazo',
-        startDate: isoDate,
-        endDate: isoDate,
-        description: updates.notes || `Tarefa editada a partir da tarefa original: ${task.ruleName} (ID: ${task.id})`,
+      id: Date.now(),
+      name: updates.name,
+      frequency: updates.dueDate ? 'Pontual' : 'Sem Prazo',
+      startDate: isoDate,
+      endDate: isoDate,
+      description: updates.notes || `Tarefa editada a partir da tarefa original: ${task.ruleName} (ID: ${task.id})`,
     };
 
     const updatedOp: Operation = {
-        ...op,
-        taskExceptions: [...(op.taskExceptions || []), task.id],
-        taskRules: [...op.taskRules, newAdHocRule]
+      ...op,
+      taskExceptions: [...(op.taskExceptions || []), task.id],
+      taskRules: [...op.taskRules, newAdHocRule]
     };
 
     await handleUpdateOperation(updatedOp);
@@ -615,268 +615,268 @@ const App: React.FC = () => {
   };
 
   const handleSaveReview = async (data: { event: Omit<Event, 'id'>, ratingOp: Rating, ratingGroup: Rating, sentiment: Sentiment }) => {
-      const clickedTask = reviewModalState.task;
-      if (!clickedTask) return;
-      
-      const operation = operations.find(op => op.id === clickedTask.operationId);
-      if (!operation) return;
+    const clickedTask = reviewModalState.task;
+    if (!clickedTask) return;
 
-      const actualCompletionDate = data.event.date; // Data da conclusão REAL
-      const originalTaskDate = new Date(clickedTask.dueDate); // Data original (referência)
-      
-      // Mês/Ano original para o título (ex: mar/25)
-      const monthNames = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
-      const formattedOriginalDate = clickedTask.dueDate 
-          ? `${monthNames[new Date(clickedTask.dueDate).getUTCMonth()]}/${new Date(clickedTask.dueDate).getUTCFullYear().toString().slice(-2)}`
-          : 'Sem Prazo';
+    const operation = operations.find(op => op.id === clickedTask.operationId);
+    if (!operation) return;
 
-      const baseEventData = {
-          date: actualCompletionDate,
-          type: 'Revisão Periódica',
-          description: data.event.description,
-          registeredBy: data.event.registeredBy,
-          nextSteps: data.event.nextSteps,
-          attentionPoints: data.event.attentionPoints,
-      };
+    const actualCompletionDate = data.event.date; // Data da conclusão REAL
+    const originalTaskDate = new Date(clickedTask.dueDate); // Data original (referência)
 
-      const reviewTaskNames = ['Revisão Gerencial', 'Revisão Política'];
-      
-      const calculateNextDate = (currentDate: string, frequency: string): string => {
-          const date = new Date(currentDate);
-          switch (frequency) {
-              case 'Diário': date.setDate(date.getDate() + 1); break;
-              case 'Semanal': date.setDate(date.getDate() + 7); break;
-              case 'Quinzenal': date.setDate(date.getDate() + 15); break;
-              case 'Mensal': date.setMonth(date.getMonth() + 1); break;
-              case 'Trimestral': date.setMonth(date.getMonth() + 3); break;
-              case 'Semestral': date.setMonth(date.getMonth() + 6); break;
-              case 'Anual': date.setFullYear(date.getFullYear() + 1); break;
-              default: break;
-          }
-          return date.toISOString();
-      };
+    // Mês/Ano original para o título (ex: mar/25)
+    const monthNames = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
+    const formattedOriginalDate = clickedTask.dueDate
+      ? `${monthNames[new Date(clickedTask.dueDate).getUTCMonth()]}/${new Date(clickedTask.dueDate).getUTCFullYear().toString().slice(-2)}`
+      : 'Sem Prazo';
 
-      let nextEstimatedDate = operation.estimatedDate;
-      const updatedRules = operation.taskRules.map(rule => {
-          if (reviewTaskNames.includes(rule.name)) {
-              if (rule.id === clickedTask.ruleId) {
-                  nextEstimatedDate = calculateNextDate(actualCompletionDate, rule.frequency);
-              }
-              return { ...rule, startDate: actualCompletionDate };
-          }
-          return rule;
-      });
+    const baseEventData = {
+      date: actualCompletionDate,
+      type: 'Revisão Periódica',
+      description: data.event.description,
+      registeredBy: data.event.registeredBy,
+      nextSteps: data.event.nextSteps,
+      attentionPoints: data.event.attentionPoints,
+    };
 
-      const eventToAdd: Event = {
-          ...baseEventData,
-          id: Date.now() + Math.random(),
-          // PONTO 1: Título seguindo o padrão solicitado
-          title: `Conclusão: Revisão de crédito - ${operation.name} - ${formattedOriginalDate}`,
-          completedTaskId: clickedTask.id,
-      };
+    const reviewTaskNames = ['Revisão Gerencial', 'Revisão Política'];
 
-      const newHistoryEntry = {
-          id: Date.now() + 1,
-          date: actualCompletionDate,
-          ratingOperation: data.ratingOp,
-          ratingGroup: data.ratingGroup,
-          watchlist: operation.watchlist,
-          sentiment: data.sentiment,
-          eventId: eventToAdd.id,
-      };
-
-      const updatedOperation = {
-          ...operation,
-          ratingOperation: data.ratingOp,
-          ratingGroup: data.ratingGroup,
-          events: [...operation.events, eventToAdd],
-          ratingHistory: [...operation.ratingHistory, newHistoryEntry],
-          taskRules: updatedRules,
-          tasks: operation.tasks.filter(t => !reviewTaskNames.includes(t.ruleName) || t.status === TaskStatus.COMPLETED),
-          estimatedDate: nextEstimatedDate
-      };
-      
-      // PONTO 2: O modal só fecha após o sucesso do handleUpdateOperation (que é await-ado no child)
-      try {
-        await handleUpdateOperation(updatedOperation);
-        setReviewModalState({ isOpen: false, task: null });
-      } catch (e) {
-        // Erro já tratado pelo toast do handleUpdateOperation
+    const calculateNextDate = (currentDate: string, frequency: string): string => {
+      const date = new Date(currentDate);
+      switch (frequency) {
+        case 'Diário': date.setDate(date.getDate() + 1); break;
+        case 'Semanal': date.setDate(date.getDate() + 7); break;
+        case 'Quinzenal': date.setDate(date.getDate() + 15); break;
+        case 'Mensal': date.setMonth(date.getMonth() + 1); break;
+        case 'Trimestral': date.setMonth(date.getMonth() + 3); break;
+        case 'Semestral': date.setMonth(date.getMonth() + 6); break;
+        case 'Anual': date.setFullYear(date.getFullYear() + 1); break;
+        default: break;
       }
+      return date.toISOString();
+    };
+
+    let nextEstimatedDate = operation.estimatedDate;
+    const updatedRules = operation.taskRules.map(rule => {
+      if (reviewTaskNames.includes(rule.name)) {
+        if (rule.id === clickedTask.ruleId) {
+          nextEstimatedDate = calculateNextDate(actualCompletionDate, rule.frequency);
+        }
+        return { ...rule, startDate: actualCompletionDate };
+      }
+      return rule;
+    });
+
+    const eventToAdd: Event = {
+      ...baseEventData,
+      id: Date.now() + Math.random(),
+      // PONTO 1: Título seguindo o padrão solicitado
+      title: `Conclusão: Revisão de crédito - ${operation.name} - ${formattedOriginalDate}`,
+      completedTaskId: clickedTask.id,
+    };
+
+    const newHistoryEntry = {
+      id: Date.now() + 1,
+      date: actualCompletionDate,
+      ratingOperation: data.ratingOp,
+      ratingGroup: data.ratingGroup,
+      watchlist: operation.watchlist,
+      sentiment: data.sentiment,
+      eventId: eventToAdd.id,
+    };
+
+    const updatedOperation = {
+      ...operation,
+      ratingOperation: data.ratingOp,
+      ratingGroup: data.ratingGroup,
+      events: [...operation.events, eventToAdd],
+      ratingHistory: [...operation.ratingHistory, newHistoryEntry],
+      taskRules: updatedRules,
+      tasks: operation.tasks.filter(t => !reviewTaskNames.includes(t.ruleName) || t.status === TaskStatus.COMPLETED),
+      estimatedDate: nextEstimatedDate
+    };
+
+    // PONTO 2: O modal só fecha após o sucesso do handleUpdateOperation (que é await-ado no child)
+    try {
+      await handleUpdateOperation(updatedOperation);
+      setReviewModalState({ isOpen: false, task: null });
+    } catch (e) {
+      // Erro já tratado pelo toast do handleUpdateOperation
+    }
   };
 
   const renderContent = () => {
     if (error) {
       return <BackendError errorMessage={error} onRetry={fetchOperations} />;
     }
-    
+
     if (isLoading) {
       return (
         <div className="flex justify-center items-center h-full">
-            <p className="text-xl text-gray-500 animate-pulse">Carregando dados do Databricks...</p>
+          <p className="text-xl text-gray-500 animate-pulse">Carregando dados do Databricks...</p>
         </div>
       );
     }
 
     switch (currentPage) {
-        case Page.OVERVIEW:
-            return (
-                <>
-                    <OverdueOperationsHighlight
-                        operations={filteredOperations}
-                        onNavigate={handleNavigate}
-                    />
-                    <OverviewDashboard
-                        operations={filteredOperations.filter(op => op.operationType !== 'Geral')}
-                        onSelectOperation={(id) => handleNavigate(Page.DETAIL, id)}
-                        onAddOperation={handleAddOperation}
-                        onOpenNewTaskModal={openNewTaskModal}
-                        onDeleteOperation={handleDeleteOperation}
-                        onUpdateOperation={handleUpdateOperation}
-                        apiUrl={API_BASE_URL}
-                    />
-                </>
-            );
-        case Page.DETAIL:
-            return selectedOperation ? (
-              <OperationDetail 
-                operation={selectedOperation}
-                onUpdateOperation={handleUpdateOperation}
-                onOpenNewTaskModal={openNewTaskModal}
-                onDeleteTask={handleDeleteTask}
-                onEditTask={handleEditTask}
-                onDeleteOperation={handleDeleteOperation}
-                apiUrl={API_BASE_URL}
-                setIsSyncing={setIsSyncing}
-                setIsRefreshing={setIsRefreshing}
-                showToast={showToast}
-              />
-            ) : (
-               <div>
-                <h2 className="text-xl font-semibold mb-4">Operação não encontrada</h2>
-                <p>Por favor, selecione uma operação válida na barra lateral.</p>
-              </div>
-            );
-        case Page.TASKS:
-            return <TasksPage
-                operations={filteredOperations}
-                allTasks={filteredAllTasks}
-                onUpdateOperation={handleUpdateOperation}
-                onOpenNewTaskModal={openNewTaskModal}
-                onDeleteTask={handleDeleteTask}
-                onEditTask={handleEditTask}
-            />;
-        case Page.CREDIT_REVIEWS:
-            return <CreditReviewsPage
-                operations={filteredOperations.filter(op => op.operationType !== 'Geral')}
-                onUpdateOperation={handleUpdateOperation}
-                onCompleteReview={(task) => setReviewModalState({ isOpen: true, task })}
-                onSelectOperation={(id) => handleNavigate(Page.DETAIL, id)}
-                apiUrl={API_BASE_URL}
-                showToast={showToast}
-                setIsSyncing={setIsSyncing}
-                setIsRefreshing={setIsRefreshing}
-            />;
-        case Page.AUDIT_LOG:
-            return <AuditLogPage apiUrl={API_BASE_URL} setIsRefreshing={setIsRefreshing} />;
-        case Page.WATCHLIST:
-            return <WatchlistPage 
-                operations={filteredOperations.filter(op => op.operationType !== 'Geral')}
-                onUpdateOperation={handleUpdateOperation}
-            />;
-        case Page.ANALYST_HUB:
-            return <AnalystHub
-                operations={filteredOperations}
-                allTasks={filteredAllTasks}
-                onUpdateOperation={handleUpdateOperation}
-                onNavigate={handleNavigate}
-                onOpenNewTaskModal={openNewTaskModal}
-                onDeleteTask={handleDeleteTask}
-                onEditTask={handleEditTask}
-                apiUrl={API_BASE_URL}
-                showToast={showToast}
-                setIsSyncing={setIsSyncing}
-                setIsRefreshing={setIsRefreshing}
-            />;
-        case Page.CHANGE_LOG:
-            return <ChangeLogPage 
-                apiUrl={API_BASE_URL} 
-                showToast={showToast} 
-                setIsSyncing={setIsSyncing}
-                setIsRefreshing={setIsRefreshing}
-            />;
-        case Page.LEGACY:
-            return <LegacyPage 
-                operations={legacyOperations}
-                onNavigate={handleNavigate}
-                onUpdateOperation={handleUpdateOperation}
-            />;
-        case Page.SYNC_QUEUE:
-            return <SyncQueuePage queue={syncQueue} genericQueue={genericSyncQueue} isSyncing={isSyncing} failedOperations={failedOperations} />;
-        case Page.MASTER_GROUPS:
-            return <MasterGroupsPage 
-                onNavigate={handleNavigate} 
-                apiUrl={API_BASE_URL} 
-                showToast={showToast} 
-            />;
-        case Page.MASTER_GROUP_DETAIL:
-            if (!selectedOperationId) return <div>Selecione um Master Grupo</div>;
-            return <MasterGroupDetailsPage 
-                masterGroupId={selectedOperationId} 
-                onNavigate={handleNavigate} 
-                apiUrl={API_BASE_URL} 
-                showToast={showToast} 
-                pushToGenericQueue={pushToGenericQueue}
-            />;
-        case Page.ECONOMIC_GROUPS:
-            return <EconomicGroupsPage 
-                onNavigate={handleNavigate} 
-                apiUrl={API_BASE_URL} 
-                showToast={showToast} 
-            />;
-        case Page.ECONOMIC_GROUP_DETAIL:
-            if (!selectedOperationId) return <div>Selecione um Grupo Econômico</div>;
-            return <EconomicGroupDetailsPage 
-                economicGroupId={selectedOperationId} 
-                onNavigate={handleNavigate} 
-                apiUrl={API_BASE_URL} 
-                showToast={showToast} 
-                pushToGenericQueue={pushToGenericQueue}
-            />;
-        case Page.ORIGINATION_PIPELINE:
-            return <OriginationPipelinePage 
-                onNavigate={handleNavigate} 
-                apiUrl={API_BASE_URL} 
-                showToast={showToast} 
-                pushToGenericQueue={pushToGenericQueue}
-            />;
-        case Page.STRUCTURING_OPERATION_DETAIL:
-            if (!selectedOperationId) return <div>Selecione uma Operação em Estruturação</div>;
-            return <StructuringOperationDetailsPage 
-                operationId={selectedOperationId} 
-                onNavigate={handleNavigate} 
-                apiUrl={API_BASE_URL} 
-                showToast={showToast}
-                pushToGenericQueue={pushToGenericQueue}
-            />;
-        case Page.CARTEIRA_COMPLETA:
-            return <CarteiraCompletaPage />;
-        case Page.COMITES:
-            return <ComitesPage />;
-        case Page.COMITE_DETAIL:
-            return <ComiteDetailPage comiteId={selectedOperationId || 0} />;
-        case Page.COMITE_VIDEO:
-            return <ComiteVideoPage itemPautaId={selectedOperationId || 0} />;
-        default:
-             return <OverviewDashboard
-                operations={filteredOperations.filter(op => op.operationType !== 'Geral')}
-                onSelectOperation={(id) => handleNavigate(Page.DETAIL, id)}
-                onAddOperation={handleAddOperation}
-                onOpenNewTaskModal={openNewTaskModal}
-                onDeleteOperation={handleDeleteOperation}
-                onUpdateOperation={handleUpdateOperation}
-                apiUrl={API_BASE_URL}
-            />;
+      case Page.OVERVIEW:
+        return (
+          <>
+            <OverdueOperationsHighlight
+              operations={filteredOperations}
+              onNavigate={handleNavigate}
+            />
+            <OverviewDashboard
+              operations={filteredOperations.filter(op => op.operationType !== 'Geral')}
+              onSelectOperation={(id) => handleNavigate(Page.DETAIL, id)}
+              onAddOperation={handleAddOperation}
+              onOpenNewTaskModal={openNewTaskModal}
+              onDeleteOperation={handleDeleteOperation}
+              onUpdateOperation={handleUpdateOperation}
+              apiUrl={API_BASE_URL}
+            />
+          </>
+        );
+      case Page.DETAIL:
+        return selectedOperation ? (
+          <OperationDetail
+            operation={selectedOperation}
+            onUpdateOperation={handleUpdateOperation}
+            onOpenNewTaskModal={openNewTaskModal}
+            onDeleteTask={handleDeleteTask}
+            onEditTask={handleEditTask}
+            onDeleteOperation={handleDeleteOperation}
+            apiUrl={API_BASE_URL}
+            setIsSyncing={setIsSyncing}
+            setIsRefreshing={setIsRefreshing}
+            showToast={showToast}
+          />
+        ) : (
+          <div>
+            <h2 className="text-xl font-semibold mb-4">Operação não encontrada</h2>
+            <p>Por favor, selecione uma operação válida na barra lateral.</p>
+          </div>
+        );
+      case Page.TASKS:
+        return <TasksPage
+          operations={filteredOperations}
+          allTasks={filteredAllTasks}
+          onUpdateOperation={handleUpdateOperation}
+          onOpenNewTaskModal={openNewTaskModal}
+          onDeleteTask={handleDeleteTask}
+          onEditTask={handleEditTask}
+        />;
+      case Page.CREDIT_REVIEWS:
+        return <CreditReviewsPage
+          operations={filteredOperations.filter(op => op.operationType !== 'Geral')}
+          onUpdateOperation={handleUpdateOperation}
+          onCompleteReview={(task) => setReviewModalState({ isOpen: true, task })}
+          onSelectOperation={(id) => handleNavigate(Page.DETAIL, id)}
+          apiUrl={API_BASE_URL}
+          showToast={showToast}
+          setIsSyncing={setIsSyncing}
+          setIsRefreshing={setIsRefreshing}
+        />;
+      case Page.AUDIT_LOG:
+        return <AuditLogPage apiUrl={API_BASE_URL} setIsRefreshing={setIsRefreshing} />;
+      case Page.WATCHLIST:
+        return <WatchlistPage
+          operations={filteredOperations.filter(op => op.operationType !== 'Geral')}
+          onUpdateOperation={handleUpdateOperation}
+        />;
+      case Page.ANALYST_HUB:
+        return <AnalystHub
+          operations={filteredOperations}
+          allTasks={filteredAllTasks}
+          onUpdateOperation={handleUpdateOperation}
+          onNavigate={handleNavigate}
+          onOpenNewTaskModal={openNewTaskModal}
+          onDeleteTask={handleDeleteTask}
+          onEditTask={handleEditTask}
+          apiUrl={API_BASE_URL}
+          showToast={showToast}
+          setIsSyncing={setIsSyncing}
+          setIsRefreshing={setIsRefreshing}
+        />;
+      case Page.CHANGE_LOG:
+        return <ChangeLogPage
+          apiUrl={API_BASE_URL}
+          showToast={showToast}
+          setIsSyncing={setIsSyncing}
+          setIsRefreshing={setIsRefreshing}
+        />;
+      case Page.LEGACY:
+        return <LegacyPage
+          operations={legacyOperations}
+          onNavigate={handleNavigate}
+          onUpdateOperation={handleUpdateOperation}
+        />;
+      case Page.SYNC_QUEUE:
+        return <SyncQueuePage queue={syncQueue} genericQueue={genericSyncQueue} isSyncing={isSyncing} failedOperations={failedOperations} />;
+      case Page.MASTER_GROUPS:
+        return <MasterGroupsPage
+          onNavigate={handleNavigate}
+          apiUrl={API_BASE_URL}
+          showToast={showToast}
+        />;
+      case Page.MASTER_GROUP_DETAIL:
+        if (!selectedOperationId) return <div>Selecione um Master Grupo</div>;
+        return <MasterGroupDetailsPage
+          masterGroupId={selectedOperationId}
+          onNavigate={handleNavigate}
+          apiUrl={API_BASE_URL}
+          showToast={showToast}
+          pushToGenericQueue={pushToGenericQueue}
+        />;
+      case Page.ECONOMIC_GROUPS:
+        return <EconomicGroupsPage
+          onNavigate={handleNavigate}
+          apiUrl={API_BASE_URL}
+          showToast={showToast}
+        />;
+      case Page.ECONOMIC_GROUP_DETAIL:
+        if (!selectedOperationId) return <div>Selecione um Grupo Econômico</div>;
+        return <EconomicGroupDetailsPage
+          economicGroupId={selectedOperationId}
+          onNavigate={handleNavigate}
+          apiUrl={API_BASE_URL}
+          showToast={showToast}
+          pushToGenericQueue={pushToGenericQueue}
+        />;
+      case Page.ORIGINATION_PIPELINE:
+        return <OriginationPipelinePage
+          onNavigate={handleNavigate}
+          apiUrl={API_BASE_URL}
+          showToast={showToast}
+          pushToGenericQueue={pushToGenericQueue}
+        />;
+      case Page.STRUCTURING_OPERATION_DETAIL:
+        if (!selectedOperationId) return <div>Selecione uma Operação em Estruturação</div>;
+        return <StructuringOperationDetailsPage
+          operationId={selectedOperationId}
+          onNavigate={handleNavigate}
+          apiUrl={API_BASE_URL}
+          showToast={showToast}
+          pushToGenericQueue={pushToGenericQueue}
+        />;
+      case Page.CARTEIRA_COMPLETA:
+        return <CarteiraCompletaPage />;
+      case Page.COMITES:
+        return <ComitesPage />;
+      case Page.COMITE_DETAIL:
+        return <ComiteDetailPage comiteId={selectedOperationId || 0} />;
+      case Page.COMITE_VIDEO:
+        return <ComiteVideoPage itemPautaId={selectedOperationId || 0} />;
+      default:
+        return <OverviewDashboard
+          operations={filteredOperations.filter(op => op.operationType !== 'Geral')}
+          onSelectOperation={(id) => handleNavigate(Page.DETAIL, id)}
+          onAddOperation={handleAddOperation}
+          onOpenNewTaskModal={openNewTaskModal}
+          onDeleteOperation={handleDeleteOperation}
+          onUpdateOperation={handleUpdateOperation}
+          apiUrl={API_BASE_URL}
+        />;
     }
   }
 
@@ -893,12 +893,12 @@ const App: React.FC = () => {
         preselectedAnalyst={newTaskModalState.analystName}
       />
       {reviewModalState.isOpen && reviewModalState.task && (
-          <ReviewCompletionForm
-              task={reviewModalState.task}
-              operation={operations.find(op => op.id === reviewModalState.task!.operationId)!}
-              onClose={() => setReviewModalState({ isOpen: false, task: null })}
-              onSave={handleSaveReview}
-          />
+        <ReviewCompletionForm
+          task={reviewModalState.task}
+          operation={operations.find(op => op.id === reviewModalState.task!.operationId)!}
+          onClose={() => setReviewModalState({ isOpen: false, task: null })}
+          onSave={handleSaveReview}
+        />
       )}
       <Sidebar
         operations={operations}
@@ -914,84 +914,80 @@ const App: React.FC = () => {
           <div className="container mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex items-center justify-between h-16">
               <div className="flex items-center gap-4">
-                  <h1 className="text-2xl font-bold text-gray-800 dark:text-white">
-                    CRM de Crédito Estruturado
-                  </h1>
-                  {(isSyncing || syncQueue.length > 0 || genericSyncQueue.length > 0) && (
-                      <span className="flex items-center gap-2 text-xs font-semibold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 px-2 py-1 rounded-full animate-pulse border border-blue-200 dark:border-blue-800 shadow-sm">
-                          <div className="w-2 h-2 bg-blue-600 dark:bg-blue-400 rounded-full"></div>
-                          Sincronizando Databricks... {(syncQueue.length + genericSyncQueue.length) > 0 ? `(${syncQueue.length + genericSyncQueue.length} pendentes)` : ''}
-                      </span>
-                  )}
-                  {isRefreshing && operations.length > 0 && (
-                      <span className="flex items-center gap-2 text-xs font-semibold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/30 px-2 py-1 rounded-full animate-pulse border border-amber-200 dark:border-amber-800 shadow-sm" title="Atualizando dados em tempo real... Alguns itens podem estar desatualizados.">
-                          <div className="w-2 h-2 bg-amber-600 dark:bg-amber-400 rounded-full animate-spin border border-t-transparent"></div>
-                          Atualizando...
-                      </span>
-                  )}
+                <h1 className="text-2xl font-bold text-gray-800 dark:text-white">
+                  CRM de Crédito Estruturado
+                </h1>
+                {(isSyncing || syncQueue.length > 0 || genericSyncQueue.length > 0) && (
+                  <span className="flex items-center gap-2 text-xs font-semibold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 px-2 py-1 rounded-full animate-pulse border border-blue-200 dark:border-blue-800 shadow-sm">
+                    <div className="w-2 h-2 bg-blue-600 dark:bg-blue-400 rounded-full"></div>
+                    Sincronizando Databricks... {(syncQueue.length + genericSyncQueue.length) > 0 ? `(${syncQueue.length + genericSyncQueue.length} pendentes)` : ''}
+                  </span>
+                )}
+                {isRefreshing && operations.length > 0 && (
+                  <span className="flex items-center gap-2 text-xs font-semibold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/30 px-2 py-1 rounded-full animate-pulse border border-amber-200 dark:border-amber-800 shadow-sm" title="Atualizando dados em tempo real... Alguns itens podem estar desatualizados.">
+                    <div className="w-2 h-2 bg-amber-600 dark:bg-amber-400 rounded-full animate-spin border border-t-transparent"></div>
+                    Atualizando...
+                  </span>
+                )}
               </div>
 
               <div className="flex items-center gap-4">
-                  <button
-                      onClick={toggleDarkMode}
-                      className="p-2 rounded-full text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-                      title={isDarkMode ? "Modo Claro" : "Modo Escuro"}
-                  >
-                      {isDarkMode ? (
-                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
-                          </svg>
-                      ) : (
-                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
-                          </svg>
-                      )}
-                  </button>
+                <button
+                  onClick={toggleDarkMode}
+                  className="p-2 rounded-full text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                  title={isDarkMode ? "Modo Claro" : "Modo Escuro"}
+                >
+                  {isDarkMode ? (
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
+                    </svg>
+                  ) : (
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+                    </svg>
+                  )}
+                </button>
 
-                  <div className="flex items-center bg-gray-100 dark:bg-gray-800 p-1 rounded-lg border border-gray-200 dark:border-gray-700">
-                      <button
-                          onClick={() => setSelectedArea('CRI')}
-                          className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all duration-200 ${
-                              selectedArea === 'CRI' 
-                              ? 'bg-white dark:bg-gray-700 text-blue-600 dark:text-blue-400 shadow-sm' 
-                              : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
-                          }`}
-                      >
-                          CRI
-                      </button>
-                      <button
-                          onClick={() => setSelectedArea('Capital Solutions')}
-                          className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all duration-200 ${
-                              selectedArea === 'Capital Solutions' 
-                              ? 'bg-white dark:bg-gray-700 text-blue-600 dark:text-blue-400 shadow-sm' 
-                              : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
-                          }`}
-                      >
-                          Capital Solutions
-                      </button>
-                      <button
-                          onClick={() => setSelectedArea('Mixed')}
-                          className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all duration-200 ${
-                              selectedArea === 'Mixed' 
-                              ? 'bg-white dark:bg-gray-700 text-blue-600 dark:text-blue-400 shadow-sm' 
-                              : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
-                          }`}
-                      >
-                          Mixed
-                      </button>
-                  </div>
-                  
+                <div className="flex items-center bg-gray-100 dark:bg-gray-800 p-1 rounded-lg border border-gray-200 dark:border-gray-700">
                   <button
-                    onClick={() => handleNavigate(Page.ORIGINATION_PIPELINE)}
-                    className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 border ${
-                        currentPage === Page.ORIGINATION_PIPELINE
-                        ? 'bg-blue-600 text-white border-blue-600 shadow-sm' 
-                        : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 shadow-sm'
-                    }`}
+                    onClick={() => setSelectedArea('CRI')}
+                    className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all duration-200 ${selectedArea === 'CRI'
+                        ? 'bg-white dark:bg-gray-700 text-blue-600 dark:text-blue-400 shadow-sm'
+                        : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
+                      }`}
                   >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg>
-                    Originação
+                    CRI
                   </button>
+                  <button
+                    onClick={() => setSelectedArea('Capital Solutions')}
+                    className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all duration-200 ${selectedArea === 'Capital Solutions'
+                        ? 'bg-white dark:bg-gray-700 text-blue-600 dark:text-blue-400 shadow-sm'
+                        : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
+                      }`}
+                  >
+                    Capital Solutions
+                  </button>
+                  <button
+                    onClick={() => setSelectedArea('Mixed')}
+                    className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all duration-200 ${selectedArea === 'Mixed'
+                        ? 'bg-white dark:bg-gray-700 text-blue-600 dark:text-blue-400 shadow-sm'
+                        : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
+                      }`}
+                  >
+                    Mixed
+                  </button>
+                </div>
+
+                <button
+                  onClick={() => handleNavigate(Page.ORIGINATION_PIPELINE)}
+                  className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 border ${currentPage === Page.ORIGINATION_PIPELINE
+                      ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
+                      : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 shadow-sm'
+                    }`}
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg>
+                  Originação
+                </button>
               </div>
             </div>
           </div>

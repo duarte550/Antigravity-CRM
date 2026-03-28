@@ -8,8 +8,10 @@
     "build": "vite build",
     "preview": "vite preview",
     "lint": "tsc --noEmit",
-    "test:api": "cd backend && (py -m unittest tests/test_api.py || python -m unittest tests/test_api.py || python3 -m unittest tests/test_api.py)",
-    "test:mock": "cd backend && (py -m unittest tests/test_api_mock.py || python -m unittest tests/test_api_mock.py || python3 -m unittest tests/test_api_mock.py)"
+    "test:api": "cd ../backend && (py -m unittest tests/test_api.py || python -m unittest tests/test_api.py || python3 -m unittest tests/test_api.py)",
+    "test:mock": "cd ../backend && (py -m unittest tests/test_api_mock.py || python -m unittest tests/test_api_mock.py || python3 -m unittest tests/test_api_mock.py)",
+    "test:backend": "cd ../backend && (py -m pytest tests/test_all_endpoints.py -v --tb=short -x || python -m pytest tests/test_all_endpoints.py -v --tb=short -x || python3 -m pytest tests/test_all_endpoints.py -v --tb=short -x)",
+    "test": "npm run test:backend && npm run lint"
   },
   "dependencies": {
     "@tailwindcss/typography": "^0.5.19",
