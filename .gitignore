@@ -25,3 +25,9 @@ frontend/dist-ssr
 .env
 ./backend/.env
 ./backend/venv
+./backend/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+**/__pycache__/
+./backend/__pycache__/app.cpython-314.pyc
