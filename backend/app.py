@@ -27,7 +27,7 @@ logging.basicConfig(level=logging.INFO)
 # update_db.update_schema() has been removed from here to prevent worker timeouts.
 
 # Configuração de CORS dinâmica baseada em variável de ambiente.
-allowed_origins_env = os.environ.get('ALLOWED_ORIGINS', 'http://localhost:3000,http://localhost:5173,https://front-crm-cri.azurewebsites.net')
+allowed_origins_env = os.environ.get('ALLOWED_ORIGINS', 'http://localhost:3000,http://localhost:3001,https://front-crm-cri.azurewebsites.net')
 allowed_origins_list = [origin.strip() for origin in allowed_origins_env.split(',') if origin.strip()]
 
 CORS(app, supports_credentials=True, origins=allowed_origins_list)
