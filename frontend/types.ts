@@ -211,6 +211,130 @@ export interface PatchNote {
   changes: string[]; // List of changes in this version
 }
 
+// ──────────────────────────────────────────────────────────────
+// Comitê — Tipos de domínio
+// ──────────────────────────────────────────────────────────────
+export type Role = 'administrador' | 'risco' | 'gestor' | 'diretor_presidente' | 'analista' | 'comum';
+export type TipoVoto = 'aprovado' | 'reprovado' | 'discussao';
+export type CargoVoto = 'gestao' | 'risco' | 'diretoria';
+export type PrioridadeComite = 'normal' | 'alta' | 'urgente';
+export type TipoCaso = 'aprovacao' | 'revisao' | 'geral';
+export type StatusComite = 'agendado' | 'concluido';
+export type TipoComiteRule = 'investimento' | 'monitoramento';
+export type TipoItemPauta = 'video' | 'presencial';
+export type StatusProximoPasso = 'pendente' | 'concluido';
+
+export interface ComiteRule {
+  id: number;
+  tipo: TipoComiteRule;
+  area?: string;
+  diaDaSemana?: string;
+  horario?: string;
+  dataCriacao?: string; // ISO string
+  ativo?: boolean;
+}
+
+export interface Comite {
+  id: number;
+  comiteRuleId: number;
+  data: string; // ISO string
+  status: StatusComite;
+  ataGeradaEm?: string; // ISO string
+}
+
+export interface ComiteSecao {
+  id: number;
+  comiteId: number;
+  nome: string;
+  ordem: number;
+  isDefault?: boolean;
+}
+
+export interface ItemPauta {
+  id: number;
+  comiteId: number;
+  secaoId?: number;
+  titulo: string;
+  descricao?: string;
+  criadorUserId?: number;
+  criadorNome?: string;
+  tipo?: TipoItemPauta;
+  videoUrl?: string;
+  videoDuracao?: string;
+  prioridade?: PrioridadeComite;
+  operationId?: number;
+  tipoCaso?: TipoCaso;
+  createdAt?: string; // ISO string
+}
+
+export interface ComentarioComite {
+  id: number;
+  itemPautaId: number;
+  userId?: number;
+  userNome?: string;
+  texto: string;
+  parentCommentId?: number;
+  createdAt?: string; // ISO string
+  likes?: number;     // contagem agregada (frontend)
+  replies?: ComentarioComite[]; // threading (frontend)
+}
+
+export interface LikeComite {
+  id: number;
+  comentarioId: number;
+  userId: number;
+  createdAt?: string; // ISO string
+}
+
+export interface VotoComite {
+  id: number;
+  itemPautaId: number;
+  userId: number;
+  userNome?: string;
+  tipoVoto: TipoVoto;
+  cargoVoto?: CargoVoto;
+  comentario?: string;
+  createdAt?: string;  // ISO string
+  updatedAt?: string;  // ISO string
+}
+
+export interface VideoAssistido {
+  id: number;
+  itemPautaId: number;
+  userId: number;
+  userNome?: string;
+  assistido: boolean;
+  createdAt?: string; // ISO string
+}
+
+export interface ProximoPasso {
+  id: number;
+  itemPautaId?: number;
+  comiteId?: number;
+  descricao: string;
+  responsavelUserId?: number;
+  responsavelNome?: string;
+  status?: StatusProximoPasso;
+  createdAt?: string; // ISO string
+}
+
+export interface ComiteConfigEmail {
+  id: number;
+  comiteRuleId: number;
+  horarioEnvio?: string;
+  habilitado?: boolean;
+}
+
+export interface User {
+  id: number;
+  nome: string;
+  email: string;
+  roles?: Role[];
+}
+
+// ──────────────────────────────────────────────────────────────
+// Navegação (Pages)
+// ──────────────────────────────────────────────────────────────
 export enum Page {
   OVERVIEW = 'overview',
   DETAIL = 'detail',
@@ -233,6 +357,9 @@ export enum Page {
   COMITES = 'comites',
   COMITE_DETAIL = 'comite-detail',
   COMITE_VIDEO = 'comite-video',
+  // Fase 2 — Sub-páginas de comitê
+  COMITE_ITEM_PAUTA = 'comite-item-pauta',
+  COMITE_PROXIMOS_PASSOS = 'comite-proximos-passos',
 }
 
 export interface Contact {

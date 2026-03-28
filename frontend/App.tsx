@@ -31,7 +31,7 @@ import ComiteDetailPage from './components/ComiteDetailPage';
 import ComiteVideoPage from './components/ComiteVideoPage';
 import { fetchApi } from './utils/api';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://antigravity-crm-two.vercel.app/';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://antigravity-crm-two.vercel.app';
 
 const App: React.FC = () => {
   const [operations, setOperations] = useState<Operation[]>(() => {
@@ -952,8 +952,8 @@ const App: React.FC = () => {
                   <button
                     onClick={() => setSelectedArea('CRI')}
                     className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all duration-200 ${selectedArea === 'CRI'
-                        ? 'bg-white dark:bg-gray-700 text-blue-600 dark:text-blue-400 shadow-sm'
-                        : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
+                      ? 'bg-white dark:bg-gray-700 text-blue-600 dark:text-blue-400 shadow-sm'
+                      : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
                       }`}
                   >
                     CRI
@@ -961,8 +961,8 @@ const App: React.FC = () => {
                   <button
                     onClick={() => setSelectedArea('Capital Solutions')}
                     className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all duration-200 ${selectedArea === 'Capital Solutions'
-                        ? 'bg-white dark:bg-gray-700 text-blue-600 dark:text-blue-400 shadow-sm'
-                        : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
+                      ? 'bg-white dark:bg-gray-700 text-blue-600 dark:text-blue-400 shadow-sm'
+                      : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
                       }`}
                   >
                     Capital Solutions
@@ -970,8 +970,8 @@ const App: React.FC = () => {
                   <button
                     onClick={() => setSelectedArea('Mixed')}
                     className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all duration-200 ${selectedArea === 'Mixed'
-                        ? 'bg-white dark:bg-gray-700 text-blue-600 dark:text-blue-400 shadow-sm'
-                        : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
+                      ? 'bg-white dark:bg-gray-700 text-blue-600 dark:text-blue-400 shadow-sm'
+                      : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
                       }`}
                   >
                     Mixed
@@ -981,8 +981,8 @@ const App: React.FC = () => {
                 <button
                   onClick={() => handleNavigate(Page.ORIGINATION_PIPELINE)}
                   className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 border ${currentPage === Page.ORIGINATION_PIPELINE
-                      ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
-                      : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 shadow-sm'
+                    ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
+                    : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 shadow-sm'
                     }`}
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg>
