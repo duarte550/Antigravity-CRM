@@ -1,5 +1,5 @@
 ---
-trigger: always_on
+trigger: manual
 ---
 
 # CRM Antigravity - Documentação de Arquitetura e Decisões de Projeto

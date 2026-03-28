@@ -1,0 +1,25 @@
+{
+  "version": 2,
+  "builds": [
+    {
+      "src": "app.py",
+      "use": "@vercel/python"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/api/(.*)",
+      "dest": "app.py"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "app.py"
+    }
+  ],
+  "env": {
+    "DATABRICKS_SERVER_HOSTNAME": "@databricks-server-hostname",
+    "DATABRICKS_HTTP_PATH": "@databricks-http-path",
+    "DATABRICKS_TOKEN": "@databricks-token",
+    "ALLOWED_ORIGINS": "@allowed-origins"
+  }
+}

@@ -28,8 +28,9 @@ logging.basicConfig(level=logging.INFO)
 
 # Configuração de CORS dinâmica baseada em variável de ambiente.
 allowed_origins_env = os.environ.get('ALLOWED_ORIGINS', 'http://localhost:3000,http://localhost:5173,https://front-crm-cri.azurewebsites.net')
+allowed_origins_list = [origin.strip() for origin in allowed_origins_env.split(',') if origin.strip()]
 
-CORS(app, supports_credentials=True, origins = ['https://front-crm-cri.azurewebsites.net'])
+CORS(app, supports_credentials=True, origins=allowed_origins_list)
 
 
 # Regras de negócio centralizadas
@@ -521,9 +522,28 @@ def manage_operations_collection():
 
 @app.route('/api/operations/sync-all', methods=['POST'])
 def sync_all_operations():
+    """
+    Endpoint de emergência chamado pelo Graceful Shutdown (visibilitychange/beforeunload).
+    O frontend envia via sendBeacon com Blob application/json, mas como fallback
+    defensivo, forçamos o parse do body mesmo que o Content-Type esteja incorreto.
+    """
     conn = get_db_connection()
     try:
-        data = request.json # Expecting a list of operations
+        # Tentativa primária: parse normal com tolerância a Content-Type errado
+        data = request.get_json(force=True, silent=True)
+        
+        # Fallback: se get_json retornou None, tenta manualmente via request.data
+        if data is None:
+            raw = request.data
+            if raw:
+                try:
+                    data = json.loads(raw)
+                except (json.JSONDecodeError, TypeError):
+                    app.logger.warning("sync-all: impossível decodificar body como JSON.")
+                    return jsonify({"error": "Invalid JSON payload"}), 400
+            else:
+                return jsonify({"error": "Empty request body"}), 400
+
         if not isinstance(data, list):
             return jsonify({"error": "Expected a list of operations"}), 400
         
@@ -1218,4 +1238,4 @@ if __name__ == '__main__':
     port = int(os.environ.get('PORT', 3000))
     print(f"Running app on port {port}")
     app.run(host='0.0.0.0', port=port)
-    app.run(host='0.0.0.0', port=port)
+

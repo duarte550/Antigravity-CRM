@@ -228,6 +228,11 @@ export enum Page {
   ECONOMIC_GROUP_DETAIL = 'economic-group-detail',
   ORIGINATION_PIPELINE = 'origination-pipeline',
   STRUCTURING_OPERATION_DETAIL = 'structuring-operation-detail',
+  // Novas páginas — Fase 1 separação de rotas
+  CARTEIRA_COMPLETA = 'carteira-completa',
+  COMITES = 'comites',
+  COMITE_DETAIL = 'comite-detail',
+  COMITE_VIDEO = 'comite-video',
 }
 
 export interface Contact {

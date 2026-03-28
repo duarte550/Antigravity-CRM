@@ -25,6 +25,10 @@ import EconomicGroupsPage from './components/EconomicGroupsPage';
 import EconomicGroupDetailsPage from './components/EconomicGroupDetailsPage';
 import OriginationPipelinePage from './components/OriginationPipelinePage';
 import StructuringOperationDetailsPage from './components/StructuringOperationDetailsPage';
+import CarteiraCompletaPage from './components/CarteiraCompletaPage';
+import ComitesPage from './components/ComitesPage';
+import ComiteDetailPage from './components/ComiteDetailPage';
+import ComiteVideoPage from './components/ComiteVideoPage';
 import { fetchApi } from './utils/api';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://crmcri-flask.onrender.com';
@@ -211,36 +215,46 @@ const App: React.FC = () => {
     return () => clearTimeout(flushTimeout);
   }, [genericSyncQueue]);
 
-  // Graceful shutdown
+  // Graceful shutdown — envia filas pendentes quando a aba fecha ou perde foco
   useEffect(() => {
     const handleShutdown = () => {
+      // --- Fila principal de operações ---
       const queue = syncQueueRef.current;
-      if (queue.length === 0) return;
-      
-      const url = `${API_BASE_URL}/api/operations/sync-all`;
-      const data = JSON.stringify(queue);
-      
-      if (navigator.sendBeacon) {
-        navigator.sendBeacon(url, data);
-      } else {
-        fetchApi(url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: data,
-          keepalive: true
-        });
+      if (queue.length > 0) {
+        const url = `${API_BASE_URL}/api/operations/sync-all`;
+        // FIX: Usar Blob com type 'application/json' para que o Flask aceite o Content-Type.
+        // sendBeacon com string pura envia como text/plain, causando erro 415.
+        const blob = new Blob([JSON.stringify(queue)], { type: 'application/json' });
+        
+        const sent = navigator.sendBeacon?.(url, blob);
+        if (!sent) {
+          // Fallback com fetch keepalive se sendBeacon falhar ou não existir
+          fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(queue),
+            keepalive: true,
+            credentials: 'include'
+          }).catch(() => {});
+        }
       }
 
+      // --- Fila genérica (master groups, structuring ops, etc.) ---
       const gQueue = genericSyncQueueRef.current;
       if (gQueue.length > 0) {
-        gQueue.forEach(item => {
-           fetchApi(item.url, {
+        for (const item of gQueue) {
+          const gBlob = new Blob([JSON.stringify(item.payload)], { type: 'application/json' });
+          const gSent = navigator.sendBeacon?.(item.url, gBlob);
+          if (!gSent) {
+            fetch(item.url, {
               method: item.method,
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify(item.payload),
-              keepalive: true
-           });
-        });
+              keepalive: true,
+              credentials: 'include'
+            }).catch(() => {});
+          }
+        }
       }
     };
 
@@ -845,6 +859,14 @@ const App: React.FC = () => {
                 showToast={showToast}
                 pushToGenericQueue={pushToGenericQueue}
             />;
+        case Page.CARTEIRA_COMPLETA:
+            return <CarteiraCompletaPage />;
+        case Page.COMITES:
+            return <ComitesPage />;
+        case Page.COMITE_DETAIL:
+            return <ComiteDetailPage comiteId={selectedOperationId || 0} />;
+        case Page.COMITE_VIDEO:
+            return <ComiteVideoPage itemPautaId={selectedOperationId || 0} />;
         default:
              return <OverviewDashboard
                 operations={filteredOperations.filter(op => op.operationType !== 'Geral')}
