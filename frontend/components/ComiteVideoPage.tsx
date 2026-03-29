@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Page } from '../types';
 import type { CargoVoto } from '../types';
-import { useAuth } from '../contexts/MockAuthContext';
+import { useAuth } from '../contexts/AuthContext';
 import {
   ArrowLeft, Video, Eye, EyeOff, ThumbsUp, Send, MessageSquare,
   AlertTriangle, Shield, TrendingUp, Clock, CheckCircle, XCircle,
@@ -472,12 +472,13 @@ const ComiteVideoPage: React.FC<ComiteVideoPageProps> = ({
     });
   };
 
-  const handleAddComment = (parentId?: number) => {
+  const handleAddComment = async (parentId?: number) => {
     const texto = parentId ? replyText.trim() : commentText.trim();
     if (!texto || isConcluido) return;
 
+    const tempId = Date.now();
     const newComment: Comentario = {
-      id: Date.now(),
+      id: tempId,
       item_pauta_id: itemPautaId,
       user_id: mockUserId,
       user_nome: mockUserName,
@@ -488,6 +489,7 @@ const ComiteVideoPage: React.FC<ComiteVideoPageProps> = ({
       liked_by_me: false,
     };
 
+    // Optimistic UI update
     setData(prev => {
       if (!prev) return prev;
       return { ...prev, comentarios: [...prev.comentarios, newComment] };
@@ -500,12 +502,35 @@ const ComiteVideoPage: React.FC<ComiteVideoPageProps> = ({
       setCommentText('');
     }
 
-    pushToGenericQueue(`${apiUrl}/api/comite/itens/${itemPautaId}/comentarios`, 'POST', {
-      user_id: mockUserId,
-      user_nome: mockUserName,
-      texto,
-      parent_comment_id: parentId || null,
-    });
+    // Use direct fetch (not queue) so we get the real DB id back.
+    // This prevents parent_comment_id mismatches for replies after page reload.
+    try {
+      const res = await fetch(`${apiUrl}/api/comite/itens/${itemPautaId}/comentarios`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_id: mockUserId,
+          user_nome: mockUserName,
+          texto,
+          parent_comment_id: parentId || null,
+        }),
+      });
+      if (res.ok) {
+        const saved = await res.json();
+        // Replace the optimistic temp id with the real DB id
+        setData(prev => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            comentarios: prev.comentarios.map(c =>
+              c.id === tempId ? { ...c, id: saved.id } : c
+            ),
+          };
+        });
+      }
+    } catch (e) {
+      console.error('Error saving comment:', e);
+    }
   };
 
   const handleToggleLike = (commentId: number) => {

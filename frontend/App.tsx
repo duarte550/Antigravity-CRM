@@ -29,6 +29,9 @@ import CarteiraCompletaPage from './components/CarteiraCompletaPage';
 import ComitesPage from './components/ComitesPage';
 import ComiteDetailPage from './components/ComiteDetailPage';
 import ComiteVideoPage from './components/ComiteVideoPage';
+import LoginPage from './components/LoginPage';
+import AdminPanel from './components/AdminPanel';
+import { useAuth } from './contexts/AuthContext';
 import { fetchApi } from './utils/api';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://antigravity-crm-two.vercel.app';
@@ -81,6 +84,8 @@ const parseUrl = (pathname: string): { page: Page; id?: number } => {
 };
 
 const App: React.FC = () => {
+  const { isEntraIdEnabled, isMsalAuthenticated, isAuthenticating, isAdmin } = useAuth();
+  const [isAdminPanelOpen, setIsAdminPanelOpen] = useState(false);
   const [operations, setOperations] = useState<Operation[]>(() => {
     const cached = localStorage.getItem('operations_cache');
     if (cached) {
@@ -808,6 +813,7 @@ const App: React.FC = () => {
               onUpdateOperation={handleUpdateOperation}
               apiUrl={API_BASE_URL}
               onNavigate={handleNavigate}
+              selectedArea={selectedArea}
             />
           </>
         );
@@ -977,13 +983,30 @@ const App: React.FC = () => {
           onUpdateOperation={handleUpdateOperation}
           apiUrl={API_BASE_URL}
           onNavigate={handleNavigate}
+          selectedArea={selectedArea}
         />;
     }
+  }
+
+  // ── Auth Gate: Show login page when Entra ID is enabled but user is not authenticated ──
+  if (isEntraIdEnabled && !isMsalAuthenticated) {
+    if (isAuthenticating) {
+      return (
+        <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900">
+          <div className="text-center">
+            <div className="w-12 h-12 mx-auto mb-4 border-4 border-blue-400/30 border-t-blue-400 rounded-full animate-spin" />
+            <p className="text-blue-200/60 text-sm">Autenticando...</p>
+          </div>
+        </div>
+      );
+    }
+    return <LoginPage />;
   }
 
   return (
     <div className="flex h-screen bg-[#F0F4F8] dark:bg-[#080b12] font-sans transition-colors duration-200 relative z-0">
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+      <AdminPanel isOpen={isAdminPanelOpen} onClose={() => setIsAdminPanelOpen(false)} />
       <NewTaskModal
         isOpen={newTaskModalState.isOpen}
         onClose={closeNewTaskModal}
@@ -1115,6 +1138,20 @@ const App: React.FC = () => {
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
                   Comitês
                 </button>
+
+                {isAdmin && (
+                  <button
+                    id="admin-panel-btn"
+                    onClick={() => setIsAdminPanelOpen(true)}
+                    className="p-2 rounded-full text-white/80 hover:text-white hover:bg-white/20 transition-all backdrop-blur-sm shadow-sm"
+                    title="Painel Administrador"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                  </button>
+                )}
               </div>
             </div>
           </div>

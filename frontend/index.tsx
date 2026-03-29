@@ -1,9 +1,31 @@
 
 import React from 'react';
 import ReactDOM from 'react-dom/client';
+import { PublicClientApplication, EventType } from '@azure/msal-browser';
+import { MsalProvider } from '@azure/msal-react';
 import App from './App';
-import { MockAuthProvider } from './contexts/MockAuthContext';
-import DevToggleBar from './components/DevToggleBar';
+import { AuthProvider } from './contexts/AuthContext';
+import { msalConfig } from './authConfig';
+
+// ── Initialize MSAL instance ──
+const msalInstance = new PublicClientApplication(msalConfig);
+
+// Set active account on login success
+msalInstance.addEventCallback((event) => {
+  if (event.eventType === EventType.LOGIN_SUCCESS && event.payload) {
+    const payload = event.payload as { account?: any };
+    if (payload.account) {
+      msalInstance.setActiveAccount(payload.account);
+    }
+  }
+});
+
+// Handle redirect promise (important for redirect flow)
+msalInstance.initialize().then(() => {
+  msalInstance.handleRedirectPromise().catch(err => {
+    console.error('[MSAL] Redirect error:', err);
+  });
+});
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {
@@ -13,9 +35,10 @@ if (!rootElement) {
 const root = ReactDOM.createRoot(rootElement);
 root.render(
   <React.StrictMode>
-    <MockAuthProvider>
-      <App />
-      <DevToggleBar />
-    </MockAuthProvider>
+    <MsalProvider instance={msalInstance}>
+      <AuthProvider>
+        <App />
+      </AuthProvider>
+    </MsalProvider>
   </React.StrictMode>
 );

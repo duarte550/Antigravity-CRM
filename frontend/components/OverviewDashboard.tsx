@@ -29,6 +29,7 @@ interface OverviewDashboardProps {
   onUpdateOperation: (updatedOperation: Operation, syncToBackend?: boolean) => Promise<void>;
   apiUrl: string;
   onNavigate?: (page: Page, id?: number) => void;
+  selectedArea?: Area | 'Mixed';
 }
 
 const WatchlistBadge: React.FC<{ status: WatchlistStatus }> = ({ status }) => {
@@ -70,7 +71,7 @@ const getWatchlistColorDot = (status: WatchlistStatus) => {
   }
 };
 
-const OverviewDashboard: React.FC<OverviewDashboardProps> = ({ operations, onSelectOperation, onAddOperation, onOpenNewTaskModal, onDeleteOperation, onUpdateOperation, apiUrl, onNavigate }) => {
+const OverviewDashboard: React.FC<OverviewDashboardProps> = ({ operations, onSelectOperation, onAddOperation, onOpenNewTaskModal, onDeleteOperation, onUpdateOperation, apiUrl, onNavigate, selectedArea }) => {
   const [isFormOpen, setIsFormOpen] = React.useState(false);
   const [operationToDelete, setOperationToDelete] = useState<Operation | null>(null);
   const [comites, setComites] = useState<ComiteListItemDash[]>([]);
@@ -143,20 +144,22 @@ const OverviewDashboard: React.FC<OverviewDashboardProps> = ({ operations, onSel
     return changes.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, 8);
   }, [operations]);
 
-  // ── Comitê: Próximos agendados & último concluído ──
+  // ── Comitê: Próximos agendados & último concluído (filtered by area) ──
   const upcomingComites = useMemo(() => {
     const now = new Date();
     return comites
       .filter(c => c.status === 'agendado' && new Date(c.data) >= now)
+      .filter(c => !selectedArea || selectedArea === 'Mixed' || c.area === selectedArea)
       .sort((a, b) => new Date(a.data).getTime() - new Date(b.data).getTime())
       .slice(0, 4);
-  }, [comites]);
+  }, [comites, selectedArea]);
 
   const lastCompletedComite = useMemo(() => {
     return comites
       .filter(c => c.status === 'concluido')
+      .filter(c => !selectedArea || selectedArea === 'Mixed' || c.area === selectedArea)
       .sort((a, b) => new Date(b.data).getTime() - new Date(a.data).getTime())[0] || null;
-  }, [comites]);
+  }, [comites, selectedArea]);
 
   // ── Tasks: important/urgent this week ──
   const urgentTasksThisWeek = useMemo(() => {

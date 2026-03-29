@@ -2,7 +2,7 @@
 import React, { useMemo, useState } from 'react';
 import type { Operation, Area } from '../types';
 import { Page } from '../types';
-import { useAuth } from '../contexts/MockAuthContext';
+import { useAuth } from '../contexts/AuthContext';
 import { HomeIcon, BriefcaseIcon, ClipboardCheckIcon, HistoryIcon, BellIcon, DocumentSearchIcon, SyncIcon, ArchiveIcon } from './icons/Icons';
 
 interface SidebarProps {

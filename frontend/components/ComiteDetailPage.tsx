@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { Page } from '../types';
 import type { CargoVoto } from '../types';
-import { useAuth } from '../contexts/MockAuthContext';
+import { useAuth } from '../contexts/AuthContext';
 import {
   ChevronDown, ChevronRight, CheckCircle, Clock, Video, Users, Plus,
   MessageSquare, ThumbsUp, AlertCircle, ArrowLeft, FileText, Send,
   Eye, EyeOff, Loader2, Lock, Download, CalendarDays, Flag, X, ListTodo,
-  CircleDot, CheckCircle2, Circle, Search, ExternalLink
+  CircleDot, CheckCircle2, Circle, Search, ExternalLink, CornerDownRight, Pencil
 } from 'lucide-react';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://antigravity-crm-two.vercel.app';
@@ -138,6 +138,9 @@ const ComiteDetailPage: React.FC<ComiteDetailPageProps> = ({ comiteId, apiUrl, s
   const [expandedSecoes, setExpandedSecoes] = useState<Set<number>>(new Set());
   const [expandedItems, setExpandedItems] = useState<Set<number>>(new Set());
   const [commentTexts, setCommentTexts] = useState<Record<number, string>>({});
+  const [replyingTo, setReplyingTo] = useState<Record<number, number | null>>({}); // itemId -> parentCommentId
+  const [replyTexts, setReplyTexts] = useState<Record<string, string>>({}); // "itemId-parentId" -> text
+  const [collapsedReplies, setCollapsedReplies] = useState<Set<number>>(new Set());
   const [newPPTexts, setNewPPTexts] = useState<Record<number, string>>({});
   const [showAddSecaoInput, setShowAddSecaoInput] = useState(false);
   const [newSecaoNome, setNewSecaoNome] = useState('');
@@ -170,6 +173,22 @@ const ComiteDetailPage: React.FC<ComiteDetailPageProps> = ({ comiteId, apiUrl, s
     operation_id: null as number | null,
   });
 
+  // ─── Edit Item Modal state ───
+  const [showEditItemModal, setShowEditItemModal] = useState(false);
+  const [isSavingEditItem, setIsSavingEditItem] = useState(false);
+  const [editItem, setEditItem] = useState<{
+    id: number;
+    secao_id: number;
+    titulo: string;
+    descricao: string;
+    tipo: string;
+    prioridade: string;
+    tipo_caso: string;
+    video_url: string;
+    video_duracao: string;
+    operation_id: number | null;
+  } | null>(null);
+
   // ─── Operations for Pauta (Revisão / Aprovação) ───
   const [pautaOpsAtivas, setPautaOpsAtivas] = useState<PautaOperation[]>([]);
   const [pautaOpsEstruturacao, setPautaOpsEstruturacao] = useState<PautaOperation[]>([]);
@@ -181,7 +200,7 @@ const ComiteDetailPage: React.FC<ComiteDetailPageProps> = ({ comiteId, apiUrl, s
   const [isDetectingDuration, setIsDetectingDuration] = useState(false);
   const durationDetectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const { user: authUser, canVote, hasRole } = useAuth();
+  const { user: authUser, canVote, hasRole, isAdmin } = useAuth();
   const mockUserId = authUser.id;
   const mockUserName = authUser.nome;
 
@@ -270,8 +289,119 @@ const ComiteDetailPage: React.FC<ComiteDetailPageProps> = ({ comiteId, apiUrl, s
   };
 
   const isConcluido = comite?.status === 'concluido';
+  const comiteArea = comite?.rule?.area;
 
-  // ─── Open Add Item Modal ───
+  // ─── Section ↔ tipo_caso mapping helpers ───
+  const SECAO_TO_TIPO_CASO: Record<string, string> = {
+    'Casos para Aprovação': 'aprovacao',
+    'Casos de Revisão': 'revisao',
+  };
+  const TIPO_CASO_TO_SECAO_NAME: Record<string, string> = {
+    'aprovacao': 'Casos para Aprovação',
+    'revisao': 'Casos de Revisão',
+  };
+
+  const getSecaoTipoCaso = (secaoId: number): string | null => {
+    if (!comite) return null;
+    const secao = comite.secoes.find(s => s.id === secaoId);
+    if (!secao) return null;
+    return SECAO_TO_TIPO_CASO[secao.nome] || null;
+  };
+
+  const findSecaoByName = (name: string): number | null => {
+    if (!comite) return null;
+    const s = comite.secoes.find(sec => sec.nome === name);
+    return s ? s.id : null;
+  };
+
+  // ─── Filter operations by committee area ───
+  const filteredPautaOpsAtivas = useMemo(() => {
+    if (!comiteArea) return pautaOpsAtivas;
+    return pautaOpsAtivas.filter(op => !op.area || op.area === comiteArea);
+  }, [pautaOpsAtivas, comiteArea]);
+
+  const filteredPautaOpsEstruturacao = useMemo(() => {
+    if (!comiteArea) return pautaOpsEstruturacao;
+    return pautaOpsEstruturacao.filter(op => !op.area || op.area === comiteArea);
+  }, [pautaOpsEstruturacao, comiteArea]);
+
+  // ─── Permission check: can current user edit this item? ───
+  const canEditItem = (item: Item): boolean => {
+    if (isConcluido) return false;
+    if (isAdmin) return true;
+    return item.criador_user_id === mockUserId;
+  };
+
+  // ─── Open Edit Item Modal ───
+  const openEditItemModal = (item: Item) => {
+    setEditItem({
+      id: item.id,
+      secao_id: item.secao_id || 0,
+      titulo: item.titulo,
+      descricao: item.descricao || '',
+      tipo: item.tipo,
+      prioridade: item.prioridade,
+      tipo_caso: item.tipo_caso || 'geral',
+      video_url: item.video_url || '',
+      video_duracao: item.video_duracao || '',
+      operation_id: item.operation_id || null,
+    });
+    setOpsSearchQuery('');
+    setShowEditItemModal(true);
+    fetchPautaOperations();
+  };
+
+  // ─── Save Item Edits ───
+  const handleEditItemSave = async () => {
+    if (!editItem || !editItem.titulo || !editItem.secao_id || isSavingEditItem) return;
+    if (editItem.tipo_caso !== 'geral' && !editItem.operation_id) {
+      showToast('Selecione uma operação para itens de revisão ou aprovação', 'error');
+      return;
+    }
+    setIsSavingEditItem(true);
+
+    // Optimistic UI update
+    setComite(prev => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        itens: prev.itens.map(i => {
+          if (i.id !== editItem.id) return i;
+          return {
+            ...i,
+            secao_id: editItem.secao_id,
+            titulo: editItem.titulo,
+            descricao: editItem.descricao,
+            tipo: editItem.tipo,
+            prioridade: editItem.prioridade,
+            tipo_caso: editItem.tipo_caso,
+            video_url: editItem.video_url,
+            video_duracao: editItem.video_duracao,
+            operation_id: editItem.operation_id,
+          };
+        }),
+      };
+    });
+    setShowEditItemModal(false);
+    showToast('Item atualizado!', 'success');
+
+    // Persist to backend
+    try {
+      const res = await fetch(`${apiUrl}/api/comite/itens/${editItem.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(editItem),
+      });
+      if (!res.ok) {
+        showToast('Erro ao salvar edição no servidor', 'error');
+      }
+    } catch (e) {
+      showToast('Erro ao salvar edição no servidor', 'error');
+    } finally {
+      setIsSavingEditItem(false);
+    }
+  };
+
   // ─── Fetch available operations for pauta ───
   const fetchPautaOperations = async () => {
     if (pautaOpsAtivas.length > 0 || isLoadingOps) return; // cache
@@ -292,13 +422,21 @@ const ComiteDetailPage: React.FC<ComiteDetailPageProps> = ({ comiteId, apiUrl, s
 
   const openAddItemModal = (preselectedSecaoId?: number) => {
     setAddItemPreselectedSecaoId(preselectedSecaoId ?? null);
+    // Detect if preselected section implies a tipo_caso
+    let initialTipoCaso = 'geral';
+    if (preselectedSecaoId && comite) {
+      const secao = comite.secoes.find(s => s.id === preselectedSecaoId);
+      if (secao && SECAO_TO_TIPO_CASO[secao.nome]) {
+        initialTipoCaso = SECAO_TO_TIPO_CASO[secao.nome];
+      }
+    }
     setNewItem({
       secao_id: preselectedSecaoId || 0,
       titulo: '',
       descricao: '',
       tipo: 'presencial',
       prioridade: 'normal',
-      tipo_caso: 'geral',
+      tipo_caso: initialTipoCaso,
       video_url: '',
       video_duracao: '',
       operation_id: null,
@@ -419,13 +557,15 @@ const ComiteDetailPage: React.FC<ComiteDetailPageProps> = ({ comiteId, apiUrl, s
   };
 
   // ─── Actions ───
-  const handleAddComment = async (itemId: number) => {
-    const texto = commentTexts[itemId]?.trim();
+  const handleAddComment = async (itemId: number, parentId?: number) => {
+    const replyKey = `${itemId}-${parentId}`;
+    const texto = parentId ? replyTexts[replyKey]?.trim() : commentTexts[itemId]?.trim();
     if (!texto || isConcluido) return;
 
+    const tempId = Date.now();
     const newComment: Comentario = {
-      id: Date.now(), item_pauta_id: itemId, user_id: mockUserId, user_nome: mockUserName,
-      texto, created_at: new Date().toISOString(), likes: 0,
+      id: tempId, item_pauta_id: itemId, user_id: mockUserId, user_nome: mockUserName,
+      texto, parent_comment_id: parentId, created_at: new Date().toISOString(), likes: 0,
     };
 
     // Optimistic update
@@ -438,11 +578,45 @@ const ComiteDetailPage: React.FC<ComiteDetailPageProps> = ({ comiteId, apiUrl, s
         ),
       };
     });
-    setCommentTexts(prev => ({ ...prev, [itemId]: '' }));
 
-    pushToGenericQueue(`${apiUrl}/api/comite/itens/${itemId}/comentarios`, 'POST', {
-      user_id: mockUserId, user_nome: mockUserName, texto,
-    });
+    if (parentId) {
+      setReplyTexts(prev => ({ ...prev, [replyKey]: '' }));
+      setReplyingTo(prev => ({ ...prev, [itemId]: null }));
+    } else {
+      setCommentTexts(prev => ({ ...prev, [itemId]: '' }));
+    }
+
+    // Use direct fetch (not queue) so we get the real DB id back.
+    // This prevents parent_comment_id mismatches for replies after page reload.
+    try {
+      const res = await fetch(`${apiUrl}/api/comite/itens/${itemId}/comentarios`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_id: mockUserId, user_nome: mockUserName, texto, parent_comment_id: parentId || null,
+        }),
+      });
+      if (res.ok) {
+        const saved = await res.json();
+        // Replace the optimistic temp id with the real DB id
+        setComite(prev => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            itens: prev.itens.map(i =>
+              i.id === itemId ? {
+                ...i,
+                comentarios: i.comentarios.map(c =>
+                  c.id === tempId ? { ...c, id: saved.id } : c
+                ),
+              } : i
+            ),
+          };
+        });
+      }
+    } catch (e) {
+      console.error('Error saving comment:', e);
+    }
   };
 
   const handleToggleLike = async (comentarioId: number, itemId: number) => {
@@ -864,53 +1038,66 @@ const ComiteDetailPage: React.FC<ComiteDetailPageProps> = ({ comiteId, apiUrl, s
                     return (
                       <div key={item.id} className="border-b border-gray-100 dark:border-gray-700 last:border-b-0">
                         {/* Item collapsed header */}
-                        <button
-                          onClick={() => toggleItem(item.id)}
-                          className={`w-full flex items-center gap-3 px-5 py-3 transition-colors text-left ${
-                            isItemExpanded
-                              ? 'bg-gray-100/70 dark:bg-gray-700/50'
-                              : 'hover:bg-gray-100/60 dark:hover:bg-gray-700/40'
-                          }`}
-                        >
-                          <div className={`w-2 h-2 rounded-full ${PRIO_DOT[item.prioridade] || PRIO_DOT.normal}`} />
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2">
-                              <span className="text-sm font-medium text-gray-900 dark:text-white truncate">{item.titulo}</span>
-                              {item.prioridade !== 'normal' && (
-                                <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold uppercase border ${PRIO_COLORS[item.prioridade]}`}>
-                                  {item.prioridade}
-                                </span>
-                              )}
-                              {item.tipo === 'video' && (
-                                <span className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-rose-100 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400">
-                                  <Video className="w-3 h-3" /> {item.video_duracao || 'Vídeo'}
-                                </span>
-                              )}
-                            </div>
-                            <div className="flex items-center gap-3 mt-0.5">
-                              <span className="text-[11px] text-gray-400">{item.criador_nome}</span>
-                              {item.operation_id && (() => {
-                                const op = [...pautaOpsAtivas, ...pautaOpsEstruturacao].find(o => o.id === item.operation_id);
-                                return (
-                                  <span className="flex items-center gap-1 text-[11px] text-blue-500 dark:text-blue-400 font-medium">
-                                    <CircleDot className="w-3 h-3" /> {op?.name || `Op #${item.operation_id}`}
+                        {/* Item collapsed header */}
+                        <div className={`w-full flex items-center gap-3 px-5 py-3 transition-colors text-left ${
+                          isItemExpanded
+                            ? 'bg-gray-100/70 dark:bg-gray-700/50'
+                            : 'hover:bg-gray-100/60 dark:hover:bg-gray-700/40'
+                        }`}>
+                          <button
+                            onClick={() => toggleItem(item.id)}
+                            className="flex items-center gap-3 flex-1 min-w-0 text-left"
+                          >
+                            <div className={`w-2 h-2 rounded-full flex-shrink-0 ${PRIO_DOT[item.prioridade] || PRIO_DOT.normal}`} />
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2">
+                                <span className="text-sm font-medium text-gray-900 dark:text-white truncate">{item.titulo}</span>
+                                {item.prioridade !== 'normal' && (
+                                  <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold uppercase border ${PRIO_COLORS[item.prioridade]}`}>
+                                    {item.prioridade}
                                   </span>
-                                );
-                              })()}
-                              {item.comentarios.length > 0 && (
-                                <span className="flex items-center gap-1 text-[11px] text-gray-400">
-                                  <MessageSquare className="w-3 h-3" /> {item.comentarios.length}
-                                </span>
-                              )}
-                              {item.tipo === 'video' && watchedCount > 0 && (
-                                <span className="flex items-center gap-1 text-[11px] text-gray-400">
-                                  <Eye className="w-3 h-3" /> {watchedCount}
-                                </span>
-                              )}
+                                )}
+                                {item.tipo === 'video' && (
+                                  <span className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-rose-100 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400">
+                                    <Video className="w-3 h-3" /> {item.video_duracao || 'Vídeo'}
+                                  </span>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-3 mt-0.5">
+                                <span className="text-[11px] text-gray-400">{item.criador_nome}</span>
+                                {item.operation_id && (() => {
+                                  const op = [...pautaOpsAtivas, ...pautaOpsEstruturacao].find(o => o.id === item.operation_id);
+                                  return (
+                                    <span className="flex items-center gap-1 text-[11px] text-blue-500 dark:text-blue-400 font-medium">
+                                      <CircleDot className="w-3 h-3" /> {op?.name || `Op #${item.operation_id}`}
+                                    </span>
+                                  );
+                                })()}
+                                {item.comentarios.length > 0 && (
+                                  <span className="flex items-center gap-1 text-[11px] text-gray-400">
+                                    <MessageSquare className="w-3 h-3" /> {item.comentarios.length}
+                                  </span>
+                                )}
+                                {item.tipo === 'video' && watchedCount > 0 && (
+                                  <span className="flex items-center gap-1 text-[11px] text-gray-400">
+                                    <Eye className="w-3 h-3" /> {watchedCount}
+                                  </span>
+                                )}
+                              </div>
                             </div>
-                          </div>
-                          {isItemExpanded ? <ChevronDown className="w-4 h-4 text-gray-400" /> : <ChevronRight className="w-4 h-4 text-gray-400" />}
-                        </button>
+                            {isItemExpanded ? <ChevronDown className="w-4 h-4 text-gray-400" /> : <ChevronRight className="w-4 h-4 text-gray-400" />}
+                          </button>
+                          {/* Edit button — only if user has permission */}
+                          {canEditItem(item) && (
+                            <button
+                              onClick={(e) => { e.stopPropagation(); openEditItemModal(item); }}
+                              className="flex-shrink-0 p-1.5 rounded-lg text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors"
+                              title="Editar item"
+                            >
+                              <Pencil className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
 
                         {/* Item expanded content */}
                         {isItemExpanded && (
@@ -1053,7 +1240,7 @@ const ComiteDetailPage: React.FC<ComiteDetailPageProps> = ({ comiteId, apiUrl, s
                               </div>
                             )}
 
-                            {/* Comments feed */}
+                            {/* Comments feed (threaded) */}
                             <div>
                               <p className="text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase mb-2">
                                 Comentários ({item.comentarios.length})
@@ -1061,28 +1248,177 @@ const ComiteDetailPage: React.FC<ComiteDetailPageProps> = ({ comiteId, apiUrl, s
                               {item.comentarios.length === 0 ? (
                                 <p className="text-xs text-gray-400 dark:text-gray-500 italic">Nenhum comentário ainda.</p>
                               ) : (
-                                <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
-                                  {item.comentarios.map(c => (
-                                    <div key={c.id} className="flex items-start gap-2 p-2 bg-white dark:bg-gray-800 rounded-lg border border-gray-100 dark:border-gray-700">
-                                      <div className="w-7 h-7 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center flex-shrink-0">
-                                        <span className="text-[10px] font-semibold text-blue-700 dark:text-blue-400">{c.user_nome?.[0]?.toUpperCase() || '?'}</span>
-                                      </div>
-                                      <div className="flex-1 min-w-0">
-                                        <div className="flex items-center gap-2">
-                                          <span className="text-xs font-semibold text-gray-900 dark:text-white">{c.user_nome}</span>
-                                          <span className="text-[10px] text-gray-400">{timeAgo(c.created_at)}</span>
+                                <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
+                                  {/* Render root comments (no parent_comment_id) */}
+                                  {item.comentarios.filter(c => !c.parent_comment_id).map(c => {
+                                    const replies = item.comentarios.filter(r => r.parent_comment_id === c.id);
+                                    const isRepliesCollapsed = collapsedReplies.has(c.id);
+                                    const currentReplyKey = `${item.id}-${c.id}`;
+
+                                    return (
+                                      <div key={c.id} className="group">
+                                        {/* Root comment */}
+                                        <div className="flex items-start gap-2 p-2 bg-white dark:bg-gray-800 rounded-lg border border-gray-100 dark:border-gray-700 hover:border-gray-200 dark:hover:border-gray-600 transition-colors">
+                                          <div className="w-7 h-7 rounded-full bg-gradient-to-br from-blue-400 to-indigo-500 flex items-center justify-center flex-shrink-0">
+                                            <span className="text-[10px] font-bold text-white">{c.user_nome?.[0]?.toUpperCase() || '?'}</span>
+                                          </div>
+                                          <div className="flex-1 min-w-0">
+                                            <div className="flex items-center gap-2">
+                                              <span className="text-xs font-semibold text-gray-900 dark:text-white">{c.user_nome}</span>
+                                              <span className="text-[10px] text-gray-400">{timeAgo(c.created_at)}</span>
+                                            </div>
+                                            <p className="text-xs text-gray-700 dark:text-gray-300 mt-0.5 leading-relaxed">{c.texto}</p>
+                                            <div className="flex items-center gap-3 mt-1.5">
+                                              <button
+                                                onClick={(e) => { e.stopPropagation(); handleToggleLike(c.id, item.id); }}
+                                                className="flex items-center gap-1 text-[10px] text-gray-400 hover:text-blue-500 transition-colors"
+                                              >
+                                                <ThumbsUp className="w-3 h-3" />
+                                                {c.likes > 0 && c.likes}
+                                              </button>
+                                              {!isConcluido && (
+                                                <button
+                                                  onClick={(e) => { e.stopPropagation(); setReplyingTo(prev => ({ ...prev, [item.id]: replyingTo[item.id] === c.id ? null : c.id })); }}
+                                                  className="flex items-center gap-1 text-[10px] text-gray-400 hover:text-blue-500 transition-colors"
+                                                >
+                                                  <CornerDownRight className="w-3 h-3" />
+                                                  Responder
+                                                </button>
+                                              )}
+                                            </div>
+                                          </div>
                                         </div>
-                                        <p className="text-xs text-gray-700 dark:text-gray-300 mt-0.5">{c.texto}</p>
+
+                                        {/* Reply input */}
+                                        {replyingTo[item.id] === c.id && !isConcluido && (
+                                          <div className="ml-8 mt-1.5 flex items-center gap-2">
+                                            <input
+                                              value={replyTexts[currentReplyKey] || ''}
+                                              onChange={e => setReplyTexts(prev => ({ ...prev, [currentReplyKey]: e.target.value }))}
+                                              onKeyDown={e => e.key === 'Enter' && handleAddComment(item.id, c.id)}
+                                              className="flex-1 px-3 py-1.5 text-xs rounded-lg border border-blue-300 dark:border-blue-600 bg-blue-50/50 dark:bg-blue-900/10 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-blue-500"
+                                              placeholder={`Respondendo a ${c.user_nome}...`}
+                                              autoFocus
+                                            />
+                                            <button
+                                              onClick={() => handleAddComment(item.id, c.id)}
+                                              disabled={!replyTexts[currentReplyKey]?.trim()}
+                                              className="p-1.5 rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                                            >
+                                              <Send className="w-3.5 h-3.5" />
+                                            </button>
+                                          </div>
+                                        )}
+
+                                        {/* Nested replies */}
+                                        {replies.length > 0 && (
+                                          <div className="ml-6 mt-1 space-y-1 border-l-2 border-gray-100 dark:border-gray-700 pl-2.5">
+                                            <button
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                setCollapsedReplies(prev => {
+                                                  const next = new Set(prev);
+                                                  next.has(c.id) ? next.delete(c.id) : next.add(c.id);
+                                                  return next;
+                                                });
+                                              }}
+                                              className="flex items-center gap-1 text-[10px] text-blue-600 dark:text-blue-400 hover:underline py-0.5"
+                                            >
+                                              {isRepliesCollapsed ? <ChevronRight className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                                              {replies.length} {replies.length === 1 ? 'resposta' : 'respostas'}
+                                            </button>
+                                            {!isRepliesCollapsed && replies.map(reply => {
+                                              const replyReplyKey = `${item.id}-${reply.id}`;
+                                              const nestedReplies = item.comentarios.filter(r => r.parent_comment_id === reply.id);
+
+                                              return (
+                                                <div key={reply.id}>
+                                                  <div className="flex items-start gap-2 p-2 bg-white dark:bg-gray-800 rounded-lg border border-gray-100 dark:border-gray-700 hover:border-gray-200 dark:hover:border-gray-600 transition-colors">
+                                                    <div className="w-6 h-6 rounded-full bg-gradient-to-br from-blue-300 to-indigo-400 flex items-center justify-center flex-shrink-0">
+                                                      <span className="text-[9px] font-bold text-white">{reply.user_nome?.[0]?.toUpperCase() || '?'}</span>
+                                                    </div>
+                                                    <div className="flex-1 min-w-0">
+                                                      <div className="flex items-center gap-2">
+                                                        <span className="text-[11px] font-semibold text-gray-900 dark:text-white">{reply.user_nome}</span>
+                                                        <span className="text-[10px] text-gray-400">{timeAgo(reply.created_at)}</span>
+                                                      </div>
+                                                      <p className="text-xs text-gray-700 dark:text-gray-300 mt-0.5 leading-relaxed">{reply.texto}</p>
+                                                      <div className="flex items-center gap-3 mt-1">
+                                                        <button
+                                                          onClick={(e) => { e.stopPropagation(); handleToggleLike(reply.id, item.id); }}
+                                                          className="flex items-center gap-1 text-[10px] text-gray-400 hover:text-blue-500 transition-colors"
+                                                        >
+                                                          <ThumbsUp className="w-3 h-3" />
+                                                          {reply.likes > 0 && reply.likes}
+                                                        </button>
+                                                        {!isConcluido && (
+                                                          <button
+                                                            onClick={(e) => { e.stopPropagation(); setReplyingTo(prev => ({ ...prev, [item.id]: replyingTo[item.id] === reply.id ? null : reply.id })); }}
+                                                            className="flex items-center gap-1 text-[10px] text-gray-400 hover:text-blue-500 transition-colors"
+                                                          >
+                                                            <CornerDownRight className="w-2.5 h-2.5" />
+                                                            Responder
+                                                          </button>
+                                                        )}
+                                                      </div>
+                                                    </div>
+                                                  </div>
+
+                                                  {/* Reply to reply input */}
+                                                  {replyingTo[item.id] === reply.id && !isConcluido && (
+                                                    <div className="ml-7 mt-1 flex items-center gap-2">
+                                                      <input
+                                                        value={replyTexts[replyReplyKey] || ''}
+                                                        onChange={e => setReplyTexts(prev => ({ ...prev, [replyReplyKey]: e.target.value }))}
+                                                        onKeyDown={e => e.key === 'Enter' && handleAddComment(item.id, reply.id)}
+                                                        className="flex-1 px-3 py-1.5 text-xs rounded-lg border border-blue-300 dark:border-blue-600 bg-blue-50/50 dark:bg-blue-900/10 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-blue-500"
+                                                        placeholder={`Respondendo a ${reply.user_nome}...`}
+                                                        autoFocus
+                                                      />
+                                                      <button
+                                                        onClick={() => handleAddComment(item.id, reply.id)}
+                                                        disabled={!replyTexts[replyReplyKey]?.trim()}
+                                                        className="p-1.5 rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                                                      >
+                                                        <Send className="w-3.5 h-3.5" />
+                                                      </button>
+                                                    </div>
+                                                  )}
+
+                                                  {/* Deeply nested replies (level 3+) */}
+                                                  {nestedReplies.length > 0 && (
+                                                    <div className="ml-5 mt-1 space-y-1 border-l-2 border-gray-100 dark:border-gray-700 pl-2">
+                                                      {nestedReplies.map(nr => (
+                                                        <div key={nr.id} className="flex items-start gap-2 p-1.5 bg-white dark:bg-gray-800 rounded-lg border border-gray-100 dark:border-gray-700">
+                                                          <div className="w-5 h-5 rounded-full bg-gradient-to-br from-blue-200 to-indigo-300 flex items-center justify-center flex-shrink-0">
+                                                            <span className="text-[8px] font-bold text-white">{nr.user_nome?.[0]?.toUpperCase() || '?'}</span>
+                                                          </div>
+                                                          <div className="flex-1 min-w-0">
+                                                            <div className="flex items-center gap-1.5">
+                                                              <span className="text-[10px] font-semibold text-gray-900 dark:text-white">{nr.user_nome}</span>
+                                                              <span className="text-[9px] text-gray-400">{timeAgo(nr.created_at)}</span>
+                                                            </div>
+                                                            <p className="text-[11px] text-gray-700 dark:text-gray-300 mt-0.5">{nr.texto}</p>
+                                                            <button
+                                                              onClick={(e) => { e.stopPropagation(); handleToggleLike(nr.id, item.id); }}
+                                                              className="flex items-center gap-1 text-[10px] text-gray-400 hover:text-blue-500 transition-colors mt-0.5"
+                                                            >
+                                                              <ThumbsUp className="w-2.5 h-2.5" />
+                                                              {nr.likes > 0 && nr.likes}
+                                                            </button>
+                                                          </div>
+                                                        </div>
+                                                      ))}
+                                                    </div>
+                                                  )}
+                                                </div>
+                                              );
+                                            })}
+                                          </div>
+                                        )}
                                       </div>
-                                      <button
-                                        onClick={(e) => { e.stopPropagation(); handleToggleLike(c.id, item.id); }}
-                                        className="flex items-center gap-1 text-[10px] text-gray-400 hover:text-blue-500 transition-colors p-1"
-                                      >
-                                        <ThumbsUp className="w-3 h-3" />
-                                        {c.likes > 0 && c.likes}
-                                      </button>
-                                    </div>
-                                  ))}
+                                    );
+                                  })}
                                 </div>
                               )}
 
@@ -1273,7 +1609,18 @@ const ComiteDetailPage: React.FC<ComiteDetailPageProps> = ({ comiteId, apiUrl, s
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Seção</label>
               <select
                 value={newItem.secao_id}
-                onChange={e => setNewItem({ ...newItem, secao_id: Number(e.target.value) })}
+                onChange={e => {
+                  const secaoId = Number(e.target.value);
+                  const impliedTipoCaso = getSecaoTipoCaso(secaoId);
+                  setNewItem(prev => ({
+                    ...prev,
+                    secao_id: secaoId,
+                    // Auto-set tipo_caso when selecting a specific section
+                    ...(impliedTipoCaso ? { tipo_caso: impliedTipoCaso, operation_id: prev.operation_id } : {}),
+                    // Clear operation if going back to geral
+                    ...(!impliedTipoCaso && prev.tipo_caso !== 'geral' ? { tipo_caso: 'geral', operation_id: null } : {}),
+                  }));
+                }}
                 className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm"
               >
                 <option value={0}>Selecionar seção...</option>
@@ -1330,23 +1677,45 @@ const ComiteDetailPage: React.FC<ComiteDetailPageProps> = ({ comiteId, apiUrl, s
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Caso</label>
-                <select
-                  value={newItem.tipo_caso}
-                  onChange={e => setNewItem({ ...newItem, tipo_caso: e.target.value, operation_id: e.target.value === 'geral' ? null : newItem.operation_id })}
-                  disabled={comite.rule?.tipo === 'monitoramento'}
-                  className={`w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm ${comite.rule?.tipo === 'monitoramento' ? 'opacity-60 cursor-not-allowed' : ''}`}
-                >
-                  <option value="geral">Geral</option>
-                  {comite.rule?.tipo !== 'monitoramento' && (
+                {(() => {
+                  const sectionLocked = getSecaoTipoCaso(newItem.secao_id);
+                  return (
                     <>
-                      <option value="aprovacao">Aprovação</option>
-                      <option value="revisao">Revisão</option>
+                      <select
+                        value={newItem.tipo_caso}
+                        onChange={e => {
+                          const val = e.target.value;
+                          // Auto-select matching section when changing tipo_caso
+                          const matchingSecao = TIPO_CASO_TO_SECAO_NAME[val];
+                          const secaoId = matchingSecao ? findSecaoByName(matchingSecao) : null;
+                          setNewItem(prev => ({
+                            ...prev,
+                            tipo_caso: val,
+                            operation_id: val === 'geral' ? null : prev.operation_id,
+                            // Auto-set section if a matching one exists
+                            ...(secaoId ? { secao_id: secaoId } : {}),
+                          }));
+                        }}
+                        disabled={comite.rule?.tipo === 'monitoramento' || !!sectionLocked}
+                        className={`w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm ${(comite.rule?.tipo === 'monitoramento' || !!sectionLocked) ? 'opacity-60 cursor-not-allowed' : ''}`}
+                      >
+                        <option value="geral">Geral</option>
+                        {comite.rule?.tipo !== 'monitoramento' && (
+                          <>
+                            <option value="aprovacao">Aprovação</option>
+                            <option value="revisao">Revisão</option>
+                          </>
+                        )}
+                      </select>
+                      {sectionLocked && (
+                        <p className="text-[11px] text-blue-500 dark:text-blue-400 mt-1">Tipo definido automaticamente pela seção selecionada.</p>
+                      )}
+                      {comite.rule?.tipo === 'monitoramento' && (
+                        <p className="text-[11px] text-amber-600 dark:text-amber-400 mt-1">Comitês de monitoramento aceitam apenas itens gerais.</p>
+                      )}
                     </>
-                  )}
-                </select>
-                {comite.rule?.tipo === 'monitoramento' && (
-                  <p className="text-[11px] text-amber-600 dark:text-amber-400 mt-1">Comitês de monitoramento aceitam apenas itens gerais.</p>
-                )}
+                  );
+                })()}
               </div>
             </div>
 
@@ -1362,7 +1731,7 @@ const ComiteDetailPage: React.FC<ComiteDetailPageProps> = ({ comiteId, apiUrl, s
 
                 {/* Selected operation badge */}
                 {newItem.operation_id && (() => {
-                  const selectedOp = [...pautaOpsAtivas, ...pautaOpsEstruturacao].find(op => op.id === newItem.operation_id);
+                  const selectedOp = [...filteredPautaOpsAtivas, ...filteredPautaOpsEstruturacao].find(op => op.id === newItem.operation_id);
                   return selectedOp ? (
                     <div className="flex items-center gap-2 mb-2 px-3 py-2 rounded-lg border-2 border-blue-300 dark:border-blue-600 bg-blue-50 dark:bg-blue-900/20">
                       <div className={`w-2 h-2 rounded-full ${selectedOp.is_structuring ? 'bg-amber-500' : 'bg-emerald-500'}`} />
@@ -1405,12 +1774,12 @@ const ComiteDetailPage: React.FC<ComiteDetailPageProps> = ({ comiteId, apiUrl, s
                       <div className="max-h-48 overflow-y-auto rounded-lg border border-gray-200 dark:border-gray-600 divide-y divide-gray-100 dark:divide-gray-700">
                         {/* Active Operations */}
                         {(() => {
-                          const filteredAtivas = pautaOpsAtivas.filter(op =>
+                          const filteredAtivas = filteredPautaOpsAtivas.filter(op =>
                             op.name.toLowerCase().includes(opsSearchQuery.toLowerCase()) ||
                             (op.master_group_name || '').toLowerCase().includes(opsSearchQuery.toLowerCase())
                           );
                           const filteredEstruturas = newItem.tipo_caso === 'aprovacao'
-                            ? pautaOpsEstruturacao.filter(op =>
+                            ? filteredPautaOpsEstruturacao.filter(op =>
                                 op.name.toLowerCase().includes(opsSearchQuery.toLowerCase()) ||
                                 (op.master_group_name || '').toLowerCase().includes(opsSearchQuery.toLowerCase())
                               )
@@ -1480,7 +1849,7 @@ const ComiteDetailPage: React.FC<ComiteDetailPageProps> = ({ comiteId, apiUrl, s
                       <div className="mt-2">
                         {!showNewStructuringForm ? (
                           <button
-                            onClick={() => setShowNewStructuringForm(true)}
+                            onClick={() => { setShowNewStructuringForm(true); if (comiteArea) setNewStructuringOp(prev => ({ ...prev, area: comiteArea })); }}
                             className="flex items-center gap-1.5 text-xs font-medium text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 transition-colors"
                           >
                             <Plus className="w-3.5 h-3.5" />
@@ -1500,7 +1869,8 @@ const ComiteDetailPage: React.FC<ComiteDetailPageProps> = ({ comiteId, apiUrl, s
                               <select
                                 value={newStructuringOp.area}
                                 onChange={e => setNewStructuringOp(prev => ({ ...prev, area: e.target.value }))}
-                                className="flex-1 px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm"
+                                className={`flex-1 px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm ${comiteArea ? 'opacity-60 cursor-not-allowed' : ''}`}
+                                disabled={!!comiteArea}
                               >
                                 <option value="CRI">CRI</option>
                                 <option value="Capital Solutions">Capital Solutions</option>
@@ -1657,6 +2027,273 @@ const ComiteDetailPage: React.FC<ComiteDetailPageProps> = ({ comiteId, apiUrl, s
               >
                 <Plus className="w-4 h-4" />
                 Criar Tarefa
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── Modal: Editar Item da Pauta ─── */}
+      {showEditItemModal && editItem && comite && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={() => setShowEditItemModal(false)}>
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-lg mx-4 p-6 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                <Pencil className="w-5 h-5 text-blue-500" />
+                Editar Item da Pauta
+              </h2>
+              <button onClick={() => setShowEditItemModal(false)} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
+                <X className="w-4 h-4 text-gray-400" />
+              </button>
+            </div>
+
+            {/* Seção selector */}
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Seção</label>
+              <select
+                value={editItem.secao_id}
+                onChange={e => {
+                  const secaoId = Number(e.target.value);
+                  const impliedTipoCaso = getSecaoTipoCaso(secaoId);
+                  setEditItem(prev => prev ? ({
+                    ...prev,
+                    secao_id: secaoId,
+                    ...(impliedTipoCaso ? { tipo_caso: impliedTipoCaso } : {}),
+                    ...(!impliedTipoCaso && prev.tipo_caso !== 'geral' ? { tipo_caso: 'geral', operation_id: null } : {}),
+                  }) : prev);
+                }}
+                className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm"
+              >
+                <option value={0}>Selecionar seção...</option>
+                {comite.secoes.map(s => (
+                  <option key={s.id} value={s.id}>{s.nome}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Título</label>
+              <input
+                value={editItem.titulo}
+                onChange={e => setEditItem({ ...editItem, titulo: e.target.value })}
+                className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm"
+                placeholder="Título do item"
+              />
+            </div>
+
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Descrição</label>
+              <textarea
+                value={editItem.descricao}
+                onChange={e => setEditItem({ ...editItem, descricao: e.target.value })}
+                className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm"
+                rows={3}
+                placeholder="Descrição detalhada..."
+              />
+            </div>
+
+            <div className="grid grid-cols-3 gap-3 mb-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Tipo</label>
+                <select
+                  value={editItem.tipo}
+                  onChange={e => setEditItem({ ...editItem, tipo: e.target.value })}
+                  className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm"
+                >
+                  <option value="presencial">Presencial</option>
+                  <option value="video">Vídeo</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Prioridade</label>
+                <select
+                  value={editItem.prioridade}
+                  onChange={e => setEditItem({ ...editItem, prioridade: e.target.value })}
+                  className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm"
+                >
+                  <option value="normal">Normal</option>
+                  <option value="alta">Alta</option>
+                  <option value="urgente">Urgente</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Caso</label>
+                {(() => {
+                  const sectionLocked = getSecaoTipoCaso(editItem.secao_id);
+                  return (
+                    <>
+                      <select
+                        value={editItem.tipo_caso}
+                        onChange={e => {
+                          const val = e.target.value;
+                          const matchingSecao = TIPO_CASO_TO_SECAO_NAME[val];
+                          const secaoId = matchingSecao ? findSecaoByName(matchingSecao) : null;
+                          setEditItem(prev => prev ? ({
+                            ...prev,
+                            tipo_caso: val,
+                            operation_id: val === 'geral' ? null : prev.operation_id,
+                            ...(secaoId ? { secao_id: secaoId } : {}),
+                          }) : prev);
+                        }}
+                        disabled={comite.rule?.tipo === 'monitoramento' || !!sectionLocked}
+                        className={`w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm ${(comite.rule?.tipo === 'monitoramento' || !!sectionLocked) ? 'opacity-60 cursor-not-allowed' : ''}`}
+                      >
+                        <option value="geral">Geral</option>
+                        {comite.rule?.tipo !== 'monitoramento' && (
+                          <>
+                            <option value="aprovacao">Aprovação</option>
+                            <option value="revisao">Revisão</option>
+                          </>
+                        )}
+                      </select>
+                      {sectionLocked && (
+                        <p className="text-[11px] text-blue-500 dark:text-blue-400 mt-1">Tipo definido automaticamente pela seção selecionada.</p>
+                      )}
+                    </>
+                  );
+                })()}
+              </div>
+            </div>
+
+            {/* ─── Operation Selector (for revisão / aprovação) ─── */}
+            {(editItem.tipo_caso === 'revisao' || editItem.tipo_caso === 'aprovacao') && (
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Operação Vinculada <span className="text-red-500">*</span>
+                </label>
+
+                {editItem.operation_id && (() => {
+                  const selectedOp = [...filteredPautaOpsAtivas, ...filteredPautaOpsEstruturacao].find(op => op.id === editItem.operation_id);
+                  return selectedOp ? (
+                    <div className="flex items-center gap-2 mb-2 px-3 py-2 rounded-lg border-2 border-blue-300 dark:border-blue-600 bg-blue-50 dark:bg-blue-900/20">
+                      <div className={`w-2 h-2 rounded-full ${selectedOp.is_structuring ? 'bg-amber-500' : 'bg-emerald-500'}`} />
+                      <span className="text-sm font-medium text-gray-900 dark:text-white flex-1">{selectedOp.name}</span>
+                      <button
+                        onClick={() => setEditItem({ ...editItem, operation_id: null })}
+                        className="p-0.5 rounded hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+                      >
+                        <X className="w-3.5 h-3.5 text-gray-400" />
+                      </button>
+                    </div>
+                  ) : null;
+                })()}
+
+                {!editItem.operation_id && (
+                  <>
+                    <div className="relative mb-2">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                      <input
+                        value={opsSearchQuery}
+                        onChange={e => setOpsSearchQuery(e.target.value)}
+                        className="w-full pl-9 pr-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm placeholder-gray-400"
+                        placeholder="Buscar operação por nome..."
+                      />
+                    </div>
+
+                    {isLoadingOps ? (
+                      <div className="flex items-center justify-center py-4">
+                        <Loader2 className="w-5 h-5 animate-spin text-blue-500" />
+                        <span className="ml-2 text-sm text-gray-400">Carregando operações...</span>
+                      </div>
+                    ) : (
+                      <div className="max-h-48 overflow-y-auto rounded-lg border border-gray-200 dark:border-gray-600 divide-y divide-gray-100 dark:divide-gray-700">
+                        {(() => {
+                          const filteredAtivas = filteredPautaOpsAtivas.filter(op =>
+                            op.name.toLowerCase().includes(opsSearchQuery.toLowerCase()) ||
+                            (op.master_group_name || '').toLowerCase().includes(opsSearchQuery.toLowerCase())
+                          );
+                          const filteredEstruturas = editItem.tipo_caso === 'aprovacao'
+                            ? filteredPautaOpsEstruturacao.filter(op =>
+                                op.name.toLowerCase().includes(opsSearchQuery.toLowerCase()) ||
+                                (op.master_group_name || '').toLowerCase().includes(opsSearchQuery.toLowerCase())
+                              )
+                            : [];
+
+                          if (filteredAtivas.length === 0 && filteredEstruturas.length === 0) {
+                            return (
+                              <div className="px-3 py-4 text-center">
+                                <p className="text-sm text-gray-400 dark:text-gray-500">Nenhuma operação encontrada</p>
+                              </div>
+                            );
+                          }
+
+                          return (
+                            <>
+                              {filteredAtivas.length > 0 && (
+                                <>
+                                  <div className="px-3 py-1.5 bg-emerald-50 dark:bg-emerald-900/10 sticky top-0 z-10">
+                                    <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">
+                                      Operações Ativas ({filteredAtivas.length})
+                                    </span>
+                                  </div>
+                                  {filteredAtivas.map(op => (
+                                    <button
+                                      key={`edit-ativa-${op.id}`}
+                                      onClick={() => { setEditItem({ ...editItem, operation_id: op.id }); setOpsSearchQuery(''); }}
+                                      className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors"
+                                    >
+                                      <div className="w-2 h-2 rounded-full bg-emerald-500 flex-shrink-0" />
+                                      <span className="text-sm text-gray-900 dark:text-white flex-1 truncate">{op.name}</span>
+                                      {op.area && <span className="text-[10px] text-gray-400 flex-shrink-0">{op.area}</span>}
+                                    </button>
+                                  ))}
+                                </>
+                              )}
+                              {filteredEstruturas.length > 0 && (
+                                <>
+                                  <div className="px-3 py-1.5 bg-amber-50 dark:bg-amber-900/10 sticky top-0 z-10">
+                                    <span className="text-[10px] font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider">
+                                      Em Estruturação ({filteredEstruturas.length})
+                                    </span>
+                                  </div>
+                                  {filteredEstruturas.map(op => (
+                                    <button
+                                      key={`edit-struct-${op.id}`}
+                                      onClick={() => { setEditItem({ ...editItem, operation_id: op.id }); setOpsSearchQuery(''); }}
+                                      className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors"
+                                    >
+                                      <div className="w-2 h-2 rounded-full bg-amber-500 flex-shrink-0" />
+                                      <span className="text-sm text-gray-900 dark:text-white flex-1 truncate">{op.name}</span>
+                                      {op.pipeline_stage && (
+                                        <span className="text-[10px] px-1.5 py-0.5 bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 rounded flex-shrink-0">{op.pipeline_stage}</span>
+                                      )}
+                                    </button>
+                                  ))}
+                                </>
+                              )}
+                            </>
+                          );
+                        })()}
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
+
+            {editItem.tipo === 'video' && (
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">URL do Vídeo</label>
+                <input
+                  value={editItem.video_url}
+                  onChange={e => setEditItem({ ...editItem, video_url: e.target.value })}
+                  className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm"
+                  placeholder="https://exemplo.com/video.mp4"
+                />
+              </div>
+            )}
+
+            <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-gray-200 dark:border-gray-700">
+              <button onClick={() => setShowEditItemModal(false)} className="px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors">
+                Cancelar
+              </button>
+              <button
+                onClick={handleEditItemSave}
+                disabled={!editItem.titulo || !editItem.secao_id || isSavingEditItem || (editItem.tipo_caso !== 'geral' && !editItem.operation_id)}
+                className="px-4 py-2 text-sm font-semibold bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+              >
+                {isSavingEditItem && <Loader2 className="w-4 h-4 animate-spin" />}
+                Salvar Alterações
               </button>
             </div>
           </div>
