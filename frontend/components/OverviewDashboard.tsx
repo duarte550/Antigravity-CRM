@@ -1,5 +1,5 @@
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import type { Operation, Area, Task, Event, Rating, Sentiment, RatingHistoryEntry } from '../types';
 import { WatchlistStatus, TaskStatus, Page } from '../types';
 import OperationForm from './OperationForm';
@@ -9,6 +9,17 @@ import ReviewCompletionForm from './ReviewCompletionForm';
 import { PlusCircleIcon, EyeIcon, TrashIcon } from './icons/Icons';
 import Modal from './Modal';
 
+interface ComiteListItemDash {
+  id: number;
+  data: string;
+  status: string;
+  tipo?: string;
+  area?: string;
+  horario?: string;
+  itens_count: number;
+  itens_titulos?: string[];
+}
+
 interface OverviewDashboardProps {
   operations: Operation[];
   onSelectOperation: (id: number) => void;
@@ -17,6 +28,7 @@ interface OverviewDashboardProps {
   onDeleteOperation: (id: number) => void;
   onUpdateOperation: (updatedOperation: Operation, syncToBackend?: boolean) => Promise<void>;
   apiUrl: string;
+  onNavigate?: (page: Page, id?: number) => void;
 }
 
 const WatchlistBadge: React.FC<{ status: WatchlistStatus }> = ({ status }) => {
@@ -58,9 +70,10 @@ const getWatchlistColorDot = (status: WatchlistStatus) => {
   }
 };
 
-const OverviewDashboard: React.FC<OverviewDashboardProps> = ({ operations, onSelectOperation, onAddOperation, onOpenNewTaskModal, onDeleteOperation, onUpdateOperation, apiUrl }) => {
+const OverviewDashboard: React.FC<OverviewDashboardProps> = ({ operations, onSelectOperation, onAddOperation, onOpenNewTaskModal, onDeleteOperation, onUpdateOperation, apiUrl, onNavigate }) => {
   const [isFormOpen, setIsFormOpen] = React.useState(false);
   const [operationToDelete, setOperationToDelete] = useState<Operation | null>(null);
+  const [comites, setComites] = useState<ComiteListItemDash[]>([]);
   
   // Task Completion State
   const [taskToComplete, setTaskToComplete] = useState<Task | null>(null);
@@ -88,20 +101,62 @@ const OverviewDashboard: React.FC<OverviewDashboardProps> = ({ operations, onSel
   // State for event detail modal
   const [selectedEventForDetails, setSelectedEventForDetails] = useState<(Event & { operationName: string, operationId: number }) | null>(null);
 
-  // ── Bubble Chart: Operations with recent watchlist changes ──
-  const recentlyChangedOps = useMemo(() => {
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-    
-    return operations.filter(op => {
-      if (!op.ratingHistory || op.ratingHistory.length < 2) return false;
-      const sorted = [...op.ratingHistory].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-      const latest = sorted[0];
-      if (new Date(latest.date) < thirtyDaysAgo) return false;
-      const prev = sorted[1];
-      return latest.watchlist !== prev.watchlist || latest.ratingOperation !== prev.ratingOperation;
+  // ── Fetch comitê data ──
+  useEffect(() => {
+    const fetchComites = async () => {
+      try {
+        const res = await fetch(`${apiUrl}/api/comite/comites`);
+        if (res.ok) setComites(await res.json());
+      } catch (e) {
+        console.error('Error fetching comites for dashboard:', e);
+      }
+    };
+    fetchComites();
+  }, [apiUrl]);
+
+  // ── Watchlist: Recent changes (flattened from rating history) ──
+  const watchlistChanges = useMemo(() => {
+    const ninetyDaysAgo = new Date();
+    ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
+    const changes: { opId: number; opName: string; date: string; prevWatchlist: WatchlistStatus; newWatchlist: WatchlistStatus; prevRating: Rating; newRating: Rating }[] = [];
+
+    operations.forEach(op => {
+      if (!op.ratingHistory || op.ratingHistory.length < 2) return;
+      const sorted = [...op.ratingHistory].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+      for (let i = 1; i < sorted.length; i++) {
+        const prev = sorted[i - 1];
+        const curr = sorted[i];
+        if (new Date(curr.date) < ninetyDaysAgo) continue;
+        if (curr.watchlist !== prev.watchlist || curr.ratingOperation !== prev.ratingOperation) {
+          changes.push({
+            opId: op.id,
+            opName: op.name,
+            date: curr.date,
+            prevWatchlist: prev.watchlist,
+            newWatchlist: curr.watchlist,
+            prevRating: prev.ratingOperation,
+            newRating: curr.ratingOperation,
+          });
+        }
+      }
     });
+    return changes.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, 8);
   }, [operations]);
+
+  // ── Comitê: Próximos agendados & último concluído ──
+  const upcomingComites = useMemo(() => {
+    const now = new Date();
+    return comites
+      .filter(c => c.status === 'agendado' && new Date(c.data) >= now)
+      .sort((a, b) => new Date(a.data).getTime() - new Date(b.data).getTime())
+      .slice(0, 4);
+  }, [comites]);
+
+  const lastCompletedComite = useMemo(() => {
+    return comites
+      .filter(c => c.status === 'concluido')
+      .sort((a, b) => new Date(b.data).getTime() - new Date(a.data).getTime())[0] || null;
+  }, [comites]);
 
   // ── Tasks: important/urgent this week ──
   const urgentTasksThisWeek = useMemo(() => {
@@ -214,46 +269,11 @@ const OverviewDashboard: React.FC<OverviewDashboardProps> = ({ operations, onSel
     return 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400';
   };
 
-  // Bubble Chart SVG
-  const BubbleChart = () => {
-    if (recentlyChangedOps.length === 0) {
-      return (
-        <div className="flex items-center justify-center h-48 text-gray-400 dark:text-gray-500 text-sm">
-          <div className="text-center">
-            <svg className="w-10 h-10 mx-auto mb-2 opacity-30" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
-            Sem alterações recentes de watchlist
-          </div>
-        </div>
-      );
-    }
-
-    const maxOverdue = Math.max(...recentlyChangedOps.map(op => op.overdueCount || 0), 1);
-    const svgWidth = 600;
-    const svgHeight = 200;
-
-    return (
-      <svg viewBox={`0 0 ${svgWidth} ${svgHeight}`} className="w-full h-48">
-        {recentlyChangedOps.map((op, i) => {
-          const xSpacing = svgWidth / (recentlyChangedOps.length + 1);
-          const cx = xSpacing * (i + 1);
-          const cy = svgHeight / 2 + (Math.random() - 0.5) * 60;
-          const radius = Math.max(12, Math.min(35, 12 + (op.overdueCount / maxOverdue) * 23));
-          const color = getWatchlistColorDot(op.watchlist);
-
-          return (
-            <g key={op.id} className="cursor-pointer" onClick={() => onSelectOperation(op.id)}>
-              <circle cx={cx} cy={cy} r={radius} fill={color} fillOpacity={0.25} stroke={color} strokeWidth={2} className="transition-all hover:fill-opacity-50" />
-              <text x={cx} y={cy - radius - 6} textAnchor="middle" className="fill-gray-600 dark:fill-gray-300" style={{ fontSize: '9px', fontWeight: 600 }}>
-                {op.name.length > 18 ? op.name.slice(0, 17) + '…' : op.name}
-              </text>
-              <text x={cx} y={cy + 4} textAnchor="middle" className="fill-gray-800 dark:fill-gray-100" style={{ fontSize: '10px', fontWeight: 700 }}>
-                {op.ratingOperation}
-              </text>
-            </g>
-          );
-        })}
-      </svg>
-    );
+  const formatDateShort = (dateStr: string) => {
+    try {
+      const d = new Date(dateStr);
+      return d.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' });
+    } catch { return ''; }
   };
 
   return (
@@ -312,23 +332,96 @@ const OverviewDashboard: React.FC<OverviewDashboardProps> = ({ operations, onSel
 
       {/* Row 1: Comitês (placeholder) + Atividades Recentes */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Comitês — placeholder reservado */}
+        {/* Comitês — Próximos agendados + último concluído */}
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
           <div className="p-4 border-b border-gray-100 dark:border-gray-700 bg-gradient-to-r from-violet-50/50 to-indigo-50/50 dark:from-violet-900/10 dark:to-indigo-900/10">
             <h3 className="font-semibold text-gray-800 dark:text-gray-200 flex items-center gap-2 text-sm">
               <svg className="w-4 h-4 text-violet-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" /></svg>
               Comitês
-              <span className="ml-auto text-[10px] font-bold text-violet-400 dark:text-violet-500 uppercase">Em breve</span>
+              {onNavigate && (
+                <button onClick={() => onNavigate(Page.COMITES)} className="ml-auto text-[10px] font-bold text-violet-500 dark:text-violet-400 uppercase hover:text-violet-700 dark:hover:text-violet-300 transition-colors">Ver Todos →</button>
+              )}
             </h3>
           </div>
-          <div className="flex items-center justify-center p-8 min-h-[240px]">
-            <div className="text-center">
-              <div className="w-16 h-16 mx-auto mb-4 bg-gradient-to-br from-violet-100 to-indigo-100 dark:from-violet-900/30 dark:to-indigo-900/30 rounded-2xl flex items-center justify-center">
-                <svg className="w-8 h-8 text-violet-400 dark:text-violet-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" /></svg>
+          <div className="p-4 max-h-80 overflow-y-auto">
+            {upcomingComites.length === 0 && !lastCompletedComite ? (
+              <div className="flex items-center justify-center py-8">
+                <div className="text-center">
+                  <div className="w-12 h-12 mx-auto mb-3 bg-gradient-to-br from-violet-100 to-indigo-100 dark:from-violet-900/30 dark:to-indigo-900/30 rounded-2xl flex items-center justify-center">
+                    <svg className="w-6 h-6 text-violet-400 dark:text-violet-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                  </div>
+                  <p className="text-xs text-gray-400 dark:text-gray-500">Nenhum comitê agendado</p>
+                </div>
               </div>
-              <h4 className="text-sm font-bold text-gray-700 dark:text-gray-300 mb-1">Painel de Comitês</h4>
-              <p className="text-xs text-gray-400 dark:text-gray-500 max-w-[220px] mx-auto leading-relaxed">Acompanhe próximos comitês, pautas pendentes e deliberações recentes.</p>
-            </div>
+            ) : (
+              <div className="space-y-3">
+                {/* Próximos comitês */}
+                {upcomingComites.length > 0 && (
+                  <div>
+                    <p className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-2">Próximos Agendados</p>
+                    <div className="space-y-2">
+                      {upcomingComites.map(c => {
+                        const daysUntil = Math.ceil((new Date(c.data).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+                        return (
+                          <div
+                            key={c.id}
+                            className="flex items-center gap-3 p-2.5 rounded-lg bg-blue-50/70 dark:bg-blue-900/15 border border-blue-100 dark:border-blue-900/30 hover:bg-blue-100/70 dark:hover:bg-blue-900/25 transition-all cursor-pointer group"
+                            onClick={() => onNavigate?.(Page.COMITE_DETAIL, c.id)}
+                          >
+                            <div className="w-9 h-9 rounded-lg bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center flex-shrink-0">
+                              <svg className="w-4 h-4 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs font-semibold text-gray-800 dark:text-gray-200 capitalize truncate group-hover:text-blue-700 dark:group-hover:text-blue-300 transition-colors">
+                                {c.tipo} — {c.area}
+                              </p>
+                              <p className="text-[10px] text-gray-500 dark:text-gray-400">
+                                {new Date(c.data).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })}
+                                {c.horario ? ` às ${c.horario}` : ''}
+                                {' · '}{c.itens_count} {c.itens_count === 1 ? 'item' : 'itens'}
+                              </p>
+                            </div>
+                            <div className="flex-shrink-0">
+                              <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${
+                                daysUntil <= 1 ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 animate-pulse'
+                                  : daysUntil <= 3 ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400'
+                                  : 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400'
+                              }`}>
+                                {daysUntil <= 0 ? 'HOJE' : daysUntil === 1 ? 'AMANHÃ' : `${daysUntil}d`}
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+                {/* Último concluído */}
+                {lastCompletedComite && (
+                  <div>
+                    <p className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-2 mt-3">Último Concluído</p>
+                    <div
+                      className="flex items-center gap-3 p-2.5 rounded-lg bg-emerald-50/70 dark:bg-emerald-900/15 border border-emerald-100 dark:border-emerald-900/30 hover:bg-emerald-100/70 dark:hover:bg-emerald-900/25 transition-all cursor-pointer group"
+                      onClick={() => onNavigate?.(Page.COMITE_DETAIL, lastCompletedComite.id)}
+                    >
+                      <div className="w-9 h-9 rounded-lg bg-emerald-100 dark:bg-emerald-900/40 flex items-center justify-center flex-shrink-0">
+                        <svg className="w-4 h-4 text-emerald-600 dark:text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-semibold text-gray-800 dark:text-gray-200 capitalize truncate group-hover:text-emerald-700 dark:group-hover:text-emerald-300 transition-colors">
+                          {lastCompletedComite.tipo} — {lastCompletedComite.area}
+                        </p>
+                        <p className="text-[10px] text-gray-500 dark:text-gray-400">
+                          {new Date(lastCompletedComite.data).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })}
+                          {' · '}{lastCompletedComite.itens_count} {lastCompletedComite.itens_count === 1 ? 'item' : 'itens'}
+                        </p>
+                      </div>
+                      <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400">CONCLUÍDO</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
 
@@ -383,22 +476,60 @@ const OverviewDashboard: React.FC<OverviewDashboardProps> = ({ operations, onSel
             <h3 className="font-semibold text-gray-800 dark:text-gray-200 flex items-center gap-2 text-sm">
               <svg className="w-4 h-4 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
               Watchlist
-              <span className="ml-auto text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase">30 dias</span>
+              <span className="ml-auto text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase">90 dias</span>
             </h3>
           </div>
-          <div className="p-3">
-            <BubbleChart />
-            {recentlyChangedOps.length > 0 && (
-              <div className="flex items-center gap-3 mt-2 pt-2 border-t border-gray-100 dark:border-gray-700 justify-center flex-wrap">
-                {[WatchlistStatus.VERDE, WatchlistStatus.AMARELO, WatchlistStatus.ROSA, WatchlistStatus.VERMELHO].map(s => (
-                  <div key={s} className="flex items-center gap-1">
-                    <div className="w-2 h-2 rounded-full" style={{ backgroundColor: getWatchlistColorDot(s) }} />
-                    <span className="text-[9px] font-medium text-gray-500 dark:text-gray-400 uppercase">{s}</span>
-                  </div>
-                ))}
+          <div className="divide-y divide-gray-50 dark:divide-gray-700/50 max-h-72 overflow-y-auto">
+            {watchlistChanges.length === 0 ? (
+              <div className="p-6 text-center text-gray-400 dark:text-gray-500 text-sm">
+                <svg className="w-10 h-10 mx-auto mb-2 opacity-30" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
+                Sem alterações recentes de watchlist
               </div>
+            ) : (
+              watchlistChanges.map((change, idx) => (
+                <div
+                  key={`${change.opId}-${idx}`}
+                  className="px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors cursor-pointer"
+                  onClick={() => onSelectOperation(change.opId)}
+                >
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs font-semibold text-gray-800 dark:text-gray-200 truncate flex-1">{change.opName}</span>
+                    <span className="text-[10px] text-gray-400 dark:text-gray-500 whitespace-nowrap ml-2">{formatDateShort(change.date)}</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-[10px]">
+                    {/* Watchlist change */}
+                    {change.prevWatchlist !== change.newWatchlist && (
+                      <div className="flex items-center gap-1">
+                        <div className="w-2 h-2 rounded-full" style={{ backgroundColor: getWatchlistColorDot(change.prevWatchlist) }} />
+                        <span className="text-gray-400">→</span>
+                        <div className="w-2 h-2 rounded-full" style={{ backgroundColor: getWatchlistColorDot(change.newWatchlist) }} />
+                        <span className="font-medium text-gray-600 dark:text-gray-400">{change.newWatchlist}</span>
+                      </div>
+                    )}
+                    {/* Rating change */}
+                    {change.prevRating !== change.newRating && (
+                      <div className="flex items-center gap-1">
+                        <span className="text-gray-400 dark:text-gray-500">Rating:</span>
+                        <span className="font-medium text-gray-500 dark:text-gray-400 line-through">{change.prevRating}</span>
+                        <span className="text-gray-400">→</span>
+                        <span className="font-bold text-gray-700 dark:text-gray-300">{change.newRating}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))
             )}
           </div>
+          {watchlistChanges.length > 0 && (
+            <div className="flex items-center gap-3 p-3 pt-2 border-t border-gray-100 dark:border-gray-700 justify-center flex-wrap">
+              {[WatchlistStatus.VERDE, WatchlistStatus.AMARELO, WatchlistStatus.ROSA, WatchlistStatus.VERMELHO].map(s => (
+                <div key={s} className="flex items-center gap-1">
+                  <div className="w-2 h-2 rounded-full" style={{ backgroundColor: getWatchlistColorDot(s) }} />
+                  <span className="text-[9px] font-medium text-gray-500 dark:text-gray-400 uppercase">{s}</span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Novos Riscos */}

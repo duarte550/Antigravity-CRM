@@ -807,6 +807,7 @@ const App: React.FC = () => {
               onDeleteOperation={handleDeleteOperation}
               onUpdateOperation={handleUpdateOperation}
               apiUrl={API_BASE_URL}
+              onNavigate={handleNavigate}
             />
           </>
         );
@@ -975,6 +976,7 @@ const App: React.FC = () => {
           onDeleteOperation={handleDeleteOperation}
           onUpdateOperation={handleUpdateOperation}
           apiUrl={API_BASE_URL}
+          onNavigate={handleNavigate}
         />;
     }
   }
