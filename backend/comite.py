@@ -172,6 +172,8 @@ def _fetch_comite_detail(cursor, comite_id):
                 'responsavel_user_id': pp.get('responsavel_user_id'),
                 'responsavel_nome': pp.get('responsavel_nome'),
                 'status': pp.get('status', 'pendente'),
+                'prazo': safe_isoformat(pp.get('prazo')),
+                'prioridade': pp.get('prioridade', 'media'),
                 'created_at': safe_isoformat(pp.get('created_at')),
             })
 
@@ -211,6 +213,8 @@ def _fetch_comite_detail(cursor, comite_id):
             'responsavel_user_id': pp.get('responsavel_user_id'),
             'responsavel_nome': pp.get('responsavel_nome'),
             'status': pp.get('status', 'pendente'),
+            'prazo': safe_isoformat(pp.get('prazo')),
+            'prioridade': pp.get('prioridade', 'media'),
             'created_at': safe_isoformat(pp.get('created_at')),
         })
 
@@ -387,12 +391,13 @@ def get_comites():
             comites = []
             for r in rows:
                 d = format_row(r, cursor)
-                # Count itens
+                # Count itens and fetch titles
                 cursor.execute(
-                    f"SELECT COUNT(*) as cnt FROM {COMITE_SCHEMA_PREFIX}.comite_itens_pauta WHERE comite_id = ?",
+                    f"SELECT id, titulo FROM {COMITE_SCHEMA_PREFIX}.comite_itens_pauta WHERE comite_id = ? ORDER BY prioridade DESC, created_at",
                     (d['id'],)
                 )
-                itens_count = cursor.fetchone()
+                itens_rows = cursor.fetchall()
+                itens_titulos = [format_row(ir, cursor).get('titulo', '') for ir in itens_rows]
 
                 # Get proximos passos summary
                 cursor.execute(
@@ -424,7 +429,8 @@ def get_comites():
                     'area': d.get('area'),
                     'dia_da_semana': d.get('dia_da_semana'),
                     'horario': d.get('horario'),
-                    'itens_count': int(itens_count.cnt) if itens_count else 0,
+                    'itens_count': len(itens_titulos),
+                    'itens_titulos': itens_titulos,
                     'proximos_passos': proximos_passos,
                 })
             return jsonify(comites)
@@ -541,7 +547,26 @@ def add_item_pauta(comite_id):
     conn = get_db_connection()
     try:
         data = request.get_json(force=True)
+
+        # ── Server-side validation: revisão/aprovação require an operation ──
+        tipo_caso = data.get('tipo_caso', 'geral')
+        operation_id = data.get('operation_id')
+        if tipo_caso in ('revisao', 'aprovacao') and not operation_id:
+            return jsonify({"error": "Itens de revisão ou aprovação devem estar vinculados a uma operação."}), 400
+
         with conn.cursor() as cursor:
+            # If revisão, validate the operation is active (not structuring)
+            if tipo_caso == 'revisao' and operation_id:
+                cursor.execute(
+                    "SELECT is_structuring FROM cri_cra_dev.crm.operations WHERE id = ?",
+                    (operation_id,)
+                )
+                op_row = cursor.fetchone()
+                if not op_row:
+                    return jsonify({"error": "Operação não encontrada."}), 404
+                if op_row.is_structuring:
+                    return jsonify({"error": "Itens de revisão devem estar vinculados a operações ativas, não em estruturação."}), 400
+
             new_id = _get_next_id(cursor, 'comite_itens_pauta')
             now = datetime.now()
             cursor.execute(
@@ -812,13 +837,16 @@ def add_proximo_passo_item(item_id):
 
             new_id = _get_next_id(cursor, 'comite_proximos_passos')
             now = datetime.now()
+            prazo_raw = data.get('prazo')
+            prazo = parse_iso_date(prazo_raw) if prazo_raw else None
+            prioridade = data.get('prioridade', 'media')
             cursor.execute(
                 f"""INSERT INTO {COMITE_SCHEMA_PREFIX}.comite_proximos_passos 
-                (id, item_pauta_id, comite_id, descricao, responsavel_user_id, responsavel_nome, status, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                (id, item_pauta_id, comite_id, descricao, responsavel_user_id, responsavel_nome, status, prazo, prioridade, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (new_id, item_id, comite_id, data.get('descricao'),
                  data.get('responsavel_user_id'), data.get('responsavel_nome'),
-                 'pendente', now)
+                 'pendente', prazo, prioridade, now)
             )
         conn.commit()
         return jsonify({
@@ -829,6 +857,8 @@ def add_proximo_passo_item(item_id):
             'responsavel_user_id': data.get('responsavel_user_id'),
             'responsavel_nome': data.get('responsavel_nome'),
             'status': 'pendente',
+            'prazo': safe_isoformat(prazo),
+            'prioridade': prioridade,
             'created_at': safe_isoformat(now),
         }), 201
     except Exception as e:
@@ -845,9 +875,15 @@ def update_proximo_passo(pp_id):
     try:
         data = request.get_json(force=True)
         with conn.cursor() as cursor:
+            prazo_raw = data.get('prazo')
+            prazo = parse_iso_date(prazo_raw) if prazo_raw else None
             cursor.execute(
-                f"UPDATE {COMITE_SCHEMA_PREFIX}.comite_proximos_passos SET status = ?, descricao = ? WHERE id = ?",
-                (data.get('status', 'pendente'), data.get('descricao'), pp_id)
+                f"""UPDATE {COMITE_SCHEMA_PREFIX}.comite_proximos_passos 
+                SET status = ?, descricao = ?, responsavel_nome = ?, prioridade = ?, prazo = ?
+                WHERE id = ?""",
+                (data.get('status', 'pendente'), data.get('descricao'),
+                 data.get('responsavel_nome'), data.get('prioridade', 'media'),
+                 prazo, pp_id)
             )
         conn.commit()
         return jsonify({"status": "ok"})
@@ -916,6 +952,64 @@ def get_relatorio(comite_id):
         return jsonify({"html": html, "comite": detail})
     except Exception as e:
         current_app.logger.error(f"Error generating report: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            conn.close()
+
+
+@comite_bp.route('/api/comite/operations-for-pauta', methods=['GET'])
+def get_operations_for_pauta():
+    """Retorna operações leves para o modal de item de pauta.
+    - ativas: operações ativas (não-estruturação, não-legado)
+    - estruturacao: operações em estruturação
+    """
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cursor:
+            # Active operations
+            cursor.execute("""
+                SELECT o.id, o.name, o.area, mg.name AS master_group_name
+                FROM cri_cra_dev.crm.operations o
+                LEFT JOIN cri_cra_dev.crm.master_groups mg ON o.master_group_id = mg.id
+                WHERE (o.is_structuring IS NULL OR o.is_structuring = FALSE)
+                AND (o.status IS NULL OR o.status != 'Legado')
+                ORDER BY o.name
+            """)
+            ativas = []
+            for r in cursor.fetchall():
+                d = {desc[0]: val for desc, val in zip(cursor.description, r)}
+                ativas.append({
+                    'id': d['id'],
+                    'name': d['name'],
+                    'area': d.get('area'),
+                    'master_group_name': d.get('master_group_name'),
+                    'is_structuring': False,
+                })
+
+            # Structuring operations
+            cursor.execute("""
+                SELECT o.id, o.name, o.area, o.pipeline_stage, mg.name AS master_group_name
+                FROM cri_cra_dev.crm.operations o
+                LEFT JOIN cri_cra_dev.crm.master_groups mg ON o.master_group_id = mg.id
+                WHERE o.is_structuring = TRUE
+                ORDER BY o.name
+            """)
+            estruturacao = []
+            for r in cursor.fetchall():
+                d = {desc[0]: val for desc, val in zip(cursor.description, r)}
+                estruturacao.append({
+                    'id': d['id'],
+                    'name': d['name'],
+                    'area': d.get('area'),
+                    'master_group_name': d.get('master_group_name'),
+                    'pipeline_stage': d.get('pipeline_stage'),
+                    'is_structuring': True,
+                })
+
+            return jsonify({'ativas': ativas, 'estruturacao': estruturacao})
+    except Exception as e:
+        current_app.logger.error(f"Error GET /api/comite/operations-for-pauta: {e}", exc_info=True)
         return jsonify({"error": str(e)}), 500
     finally:
         if conn:

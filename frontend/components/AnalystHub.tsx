@@ -837,7 +837,7 @@ const AnalystHub: React.FC<AnalystHubProps> = ({
   };
 
   return (
-    <div className="bg-gray-50 dark:bg-gray-900 min-h-screen transition-colors duration-300">
+    <div className="min-h-screen transition-colors duration-300 bg-transparent">
       {/* Header */}
       <div className="flex justify-between items-center mb-8">
         <div>

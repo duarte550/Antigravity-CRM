@@ -66,7 +66,7 @@ const Sidebar: React.FC<SidebarProps> = ({ operations, currentPage, selectedOper
   );
 
   return (
-    <div className="w-64 bg-white/95 dark:bg-[#0a0f1c]/95 backdrop-blur-xl text-gray-800 dark:text-white flex flex-col h-screen border-r border-gray-200 dark:border-gray-800 shadow-xl transition-colors duration-200">
+    <div className="w-64 bg-[#F0F4F8]/95 dark:bg-[#0a0f1c]/95 backdrop-blur-xl text-gray-800 dark:text-white flex flex-col h-screen border-r border-gray-200 dark:border-gray-800 shadow-xl transition-colors duration-200">
       <div className="p-6 border-b border-gray-200 dark:border-gray-800 flex items-center justify-center">
         <img
           src="/kinea-logo.svg"

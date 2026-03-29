@@ -339,6 +339,9 @@ CREATE TABLE IF NOT EXISTS cri_cra_dev.comite.comite_proximos_passos (
     responsavel_user_id BIGINT,
     responsavel_nome STRING,
     status STRING,
+    prazo TIMESTAMP,
+    prioridade STRING,
+    task_rule_id BIGINT,
     created_at TIMESTAMP
 );
 

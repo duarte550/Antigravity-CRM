@@ -339,6 +339,9 @@ COMITE_SCHEMA = {
         "responsavel_user_id BIGINT",
         "responsavel_nome STRING",
         "status STRING",                   # pendente | concluido
+        "prazo TIMESTAMP",                 # data limite da tarefa
+        "prioridade STRING",               # baixa | media | alta | urgente
+        "task_rule_id BIGINT",             # FK → crm.task_rules.id
         "created_at TIMESTAMP"
     ],
     "cri_cra_dev.comite.comite_config_email": [

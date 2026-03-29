@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Page, StructuringOperation, Event, MasterGroup } from '../types';
+import { Page, StructuringOperation, Event, MasterGroup, PIPELINE_STAGES } from '../types';
 import StructuringOperationForm from './StructuringOperationForm';
 import EventForm from './EventForm';
 import MasterGroupForm from './MasterGroupForm';
@@ -16,7 +16,7 @@ interface OriginationPipelinePageProps {
   pushToGenericQueue?: (url: string, method: string, payload: any) => void;
 }
 
-const STAGES = ['Conversa Inicial', 'Term Sheet', 'Due Diligence', 'Aprovação', 'Liquidação'];
+const STAGES: string[] = [...PIPELINE_STAGES];
 
 const formatVolume = (val: number) => {
   if (val >= 1e9) return `R$ ${(val / 1e9).toFixed(1)}B`;
@@ -380,18 +380,13 @@ const OriginationPipelinePage: React.FC<OriginationPipelinePageProps> = ({ onNav
         return STAGES[0]; 
     }
     
-    const firstIncompleteIndex = op.stages.findIndex(s => !s.isCompleted);
-    if (firstIncompleteIndex === -1) return 'Concluído'; 
+    const sorted = [...op.stages].sort((a, b) => (a.order_index || 0) - (b.order_index || 0));
+    const firstIncomplete = sorted.find(s => !s.isCompleted);
+    if (!firstIncomplete) return 'Concluído'; 
     
-    const stage = op.stages[firstIncompleteIndex];
-    if (STAGES.includes(stage.name)) return stage.name;
+    if (STAGES.includes(firstIncomplete.name)) return firstIncomplete.name;
     
-    for (let i = firstIncompleteIndex + 1; i < op.stages.length; i++) {
-        if (STAGES.includes(op.stages[i].name)) {
-             return op.stages[i].name;
-        }
-    }
-    return 'Concluído';
+    return STAGES[0];
   };
 
   const groupedOperations = STAGES.reduce((acc, stage) => {

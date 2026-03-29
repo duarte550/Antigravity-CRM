@@ -405,6 +405,10 @@ export interface StructuringOperationStage {
   isCompleted: boolean;
 }
 
+/** Canonical pipeline stages — single source of truth used by Kanban, Resumo, Forms and Backend */
+export const PIPELINE_STAGES = ['Conversa Inicial', 'Term Sheet', 'Due Diligence', 'Aprovação', 'Liquidação'] as const;
+export type PipelineStage = typeof PIPELINE_STAGES[number];
+
 export interface StructuringOperation {
   id: number;
   masterGroupId: number;

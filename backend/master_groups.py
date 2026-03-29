@@ -306,7 +306,7 @@ def add_structuring_operation():
                                (new_id, s.get('name', 'Série Única'), s.get('rate'), s.get('indexer'), s.get('volume'), s.get('fund')))
                 
             conn.commit()
-            return jsonify({"status": "success"}), 201
+            return jsonify({"status": "success", "id": new_id, "name": data.get('name'), "area": data.get('area')}), 201
     except Exception as e:
         return jsonify({"error": str(e)}), 500
     finally:
@@ -429,7 +429,7 @@ def manage_structuring_operation(so_id):
                 if not stages_rows:
                     # Missing stages! The user probably inserted this operation manually via SQL.
                     # Let's generate the 5 default stages on-the-fly to prevent frontend crashes
-                    default_stages = ['Conversa Inicial', 'Term Sheet', 'Due Diligence', 'Aprovação Comitê', 'Liquidação / Fechamento']
+                    default_stages = ['Conversa Inicial', 'Term Sheet', 'Due Diligence', 'Aprovação', 'Liquidação']
                     for idx, stage_name in enumerate(default_stages):
                         cursor.execute("""
                             INSERT INTO cri_cra_dev.crm.operation_stages (operation_id, name, order_index, is_completed)

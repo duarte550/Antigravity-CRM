@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { StructuringOperation, StructuringOperationSeries, Area, areaOptions } from '../types';
+import { StructuringOperation, StructuringOperationSeries, Area, areaOptions, PIPELINE_STAGES } from '../types';
 import Modal from './Modal';
 import { Label, Input, Select, FormRow } from './UI';
 import AnalystSelect from './AnalystSelect';
@@ -14,7 +14,7 @@ interface StructuringOperationFormProps {
   apiUrl?: string;
 }
 
-const STAGES = ['Conversa Inicial', 'Term Sheet', 'Due Diligence', 'Aprovação', 'Liquidação'];
+const STAGES: string[] = [...PIPELINE_STAGES];
 const INDEXERS = ['CDI', 'IPCA', 'IGPM', 'Pré', 'Outro'];
 
 const StructuringOperationForm: React.FC<StructuringOperationFormProps> = ({ onClose, onSave, initialData, masterGroups, onOpenNewMasterGroup, apiUrl }) => {

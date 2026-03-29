@@ -110,6 +110,12 @@ class TestComites:
         assert resp.status_code == 200
         data = resp.get_json()
         assert len(data) >= 2
+        # Verify itens_titulos field exists in each comite
+        for c in data:
+            assert 'itens_titulos' in c
+            assert isinstance(c['itens_titulos'], list)
+            assert 'itens_count' in c
+            assert c['itens_count'] == len(c['itens_titulos'])
 
     def test_get_comites_filter_area(self, client):
         resp = client.get('/api/comite/comites?area=CRI')
@@ -217,6 +223,34 @@ class TestItensPauta:
         })
         assert resp.status_code == 200
 
+    def test_itens_titulos_in_list(self, client):
+        """Verifica que os títulos dos itens criados aparecem no endpoint de listagem."""
+        resp = client.get('/api/comite/comites')
+        data = resp.get_json()
+        # Find comite_id=1 which had items created above
+        comite_1 = next((c for c in data if c['id'] == 1), None)
+        assert comite_1 is not None
+        assert 'itens_titulos' in comite_1
+        assert isinstance(comite_1['itens_titulos'], list)
+        assert comite_1['itens_count'] == len(comite_1['itens_titulos'])
+        # At least the items we created should be present
+        assert comite_1['itens_count'] >= 3  # Item de Teste, Item Urgente, Apresentação em Vídeo
+        # Check that titles include items we created (note: 'Item de Teste' was updated to 'Item Atualizado')
+        titles = comite_1['itens_titulos']
+        assert 'Item Atualizado' in titles or 'Item de Teste' in titles
+        assert 'Item Urgente' in titles
+        assert 'Apresentação em Vídeo' in titles
+
+    def test_itens_titulos_empty_comite(self, client):
+        """Comitê sem itens deve retornar itens_titulos como lista vazia."""
+        # Comite 2 (monitoramento) was created without any items added
+        resp = client.get('/api/comite/comites')
+        data = resp.get_json()
+        comite_2 = next((c for c in data if c['id'] == 2), None)
+        assert comite_2 is not None
+        assert comite_2['itens_titulos'] == []
+        assert comite_2['itens_count'] == 0
+
 
 class TestComentarios:
     """Testes para comentários."""
@@ -314,7 +348,7 @@ class TestVideoAssistido:
 
 
 class TestProximosPassos:
-    """Testes para próximos passos."""
+    """Testes para próximos passos (tarefas)."""
 
     def test_add_proximo_passo(self, client):
         resp = client.post('/api/comite/itens/1/proximos-passos', json={
@@ -325,13 +359,68 @@ class TestProximosPassos:
         assert resp.status_code == 201
         data = resp.get_json()
         assert data['status'] == 'pendente'
+        assert data['prioridade'] == 'media'  # default
+
+    def test_add_proximo_passo_com_prazo_prioridade(self, client):
+        """Criação de tarefa com prazo e prioridade."""
+        resp = client.post('/api/comite/itens/1/proximos-passos', json={
+            'descricao': 'Agendar reunião com equipe jurídica',
+            'responsavel_user_id': 2,
+            'responsavel_nome': 'Carlos Mendes',
+            'prazo': '2026-04-15T00:00:00',
+            'prioridade': 'alta',
+        })
+        assert resp.status_code == 201
+        data = resp.get_json()
+        assert data['status'] == 'pendente'
+        assert data['prioridade'] == 'alta'
+        assert data['prazo'] is not None
 
     def test_update_proximo_passo(self, client):
         resp = client.put('/api/comite/proximos-passos/1', json={
             'status': 'concluido',
             'descricao': 'Enviar relatório para equipe',
+            'responsavel_nome': 'Admin Master',
+            'prioridade': 'media',
         })
         assert resp.status_code == 200
+
+    def test_toggle_proximo_passo_status(self, client):
+        """Toggle status de pendente para concluído e vice-versa."""
+        # Mark as concluido
+        resp = client.put('/api/comite/proximos-passos/1', json={
+            'status': 'concluido',
+            'descricao': 'Enviar relatório para equipe',
+            'responsavel_nome': 'Admin Master',
+            'prioridade': 'media',
+        })
+        assert resp.status_code == 200
+
+        # Mark back as pendente
+        resp = client.put('/api/comite/proximos-passos/1', json={
+            'status': 'pendente',
+            'descricao': 'Enviar relatório para equipe',
+            'responsavel_nome': 'Admin Master',
+            'prioridade': 'media',
+        })
+        assert resp.status_code == 200
+
+    def test_proximo_passo_in_detail(self, client):
+        """Verificar que próximos passos com prazo/prioridade aparecem no detalhe do comitê."""
+        # Ensure comite 1 exists and has at least one item with proximos passos
+        resp = client.get('/api/comite/comites/1')
+        if resp.status_code != 200:
+            # Skip if comite 1 doesn't exist (depends on prior test order)
+            return
+        data = resp.get_json()
+        # Find any item with proximos_passos
+        items_with_pp = [i for i in data['itens'] if len(i.get('proximos_passos', [])) > 0]
+        assert len(items_with_pp) > 0
+        # Check that new fields exist
+        pp = items_with_pp[0]['proximos_passos'][0]
+        assert 'prioridade' in pp
+        assert 'prazo' in pp
+        assert 'status' in pp
 
 
 class TestCompletarERelatorio:

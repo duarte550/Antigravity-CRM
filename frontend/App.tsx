@@ -29,7 +29,6 @@ import CarteiraCompletaPage from './components/CarteiraCompletaPage';
 import ComitesPage from './components/ComitesPage';
 import ComiteDetailPage from './components/ComiteDetailPage';
 import ComiteVideoPage from './components/ComiteVideoPage';
-import { BGPattern } from './components/ui/bg-pattern';
 import { fetchApi } from './utils/api';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://antigravity-crm-two.vercel.app';
@@ -906,10 +905,7 @@ const App: React.FC = () => {
   }
 
   return (
-    <div className="flex h-screen bg-gray-50 dark:bg-[#080b12] font-sans transition-colors duration-200 relative z-0">
-      <div className="absolute inset-0 z-[-1] pointer-events-none overflow-hidden">
-        <BGPattern variant="dots" fill="currentColor" className="text-blue-900/15 dark:text-white/15" mask="fade-y" size={32} />
-      </div>
+    <div className="flex h-screen bg-[#F0F4F8] dark:bg-[#080b12] font-sans transition-colors duration-200 relative z-0">
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
       <NewTaskModal
         isOpen={newTaskModalState.isOpen}
