@@ -711,7 +711,16 @@ const ComiteDetailPage: React.FC<ComiteDetailPageProps> = ({ comiteId, apiUrl, s
     );
   }
 
-  const itemsBySecao = (secaoId: number) => comite.itens.filter(i => i.secao_id === secaoId);
+  const PRIO_ORDER: Record<string, number> = { urgente: 0, alta: 1, normal: 2 };
+  const itemsBySecao = (secaoId: number) =>
+    comite.itens
+      .filter(i => i.secao_id === secaoId)
+      .sort((a, b) => {
+        const prioA = PRIO_ORDER[a.prioridade] ?? 2;
+        const prioB = PRIO_ORDER[b.prioridade] ?? 2;
+        if (prioA !== prioB) return prioA - prioB;
+        return (b.comentarios?.length || 0) - (a.comentarios?.length || 0);
+      });
   const unassignedItems = comite.itens.filter(i => !i.secao_id);
 
   return (
@@ -1269,12 +1278,20 @@ const ComiteDetailPage: React.FC<ComiteDetailPageProps> = ({ comiteId, apiUrl, s
                 <select
                   value={newItem.tipo_caso}
                   onChange={e => setNewItem({ ...newItem, tipo_caso: e.target.value, operation_id: e.target.value === 'geral' ? null : newItem.operation_id })}
-                  className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm"
+                  disabled={comite.rule?.tipo === 'monitoramento'}
+                  className={`w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm ${comite.rule?.tipo === 'monitoramento' ? 'opacity-60 cursor-not-allowed' : ''}`}
                 >
                   <option value="geral">Geral</option>
-                  <option value="aprovacao">Aprovação</option>
-                  <option value="revisao">Revisão</option>
+                  {comite.rule?.tipo !== 'monitoramento' && (
+                    <>
+                      <option value="aprovacao">Aprovação</option>
+                      <option value="revisao">Revisão</option>
+                    </>
+                  )}
                 </select>
+                {comite.rule?.tipo === 'monitoramento' && (
+                  <p className="text-[11px] text-amber-600 dark:text-amber-400 mt-1">Comitês de monitoramento aceitam apenas itens gerais.</p>
+                )}
               </div>
             </div>
 

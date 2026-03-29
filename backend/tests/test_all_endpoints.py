@@ -1531,6 +1531,88 @@ class TestComiteCompletarRelatorioEndpoints:
         assert data['ata_gerada_em'] is not None
 
 
+class TestComiteAutoCompleteOverdue:
+    """Testa a auto-conclusão de comitês que passaram de 12h do horário agendado."""
+
+    def test_auto_complete_overdue_comite(self, client):
+        """
+        Cria um comitê com data 24h no passado e verifica que
+        ao listar comitês ele é marcado como 'concluido' automaticamente.
+        """
+        from datetime import datetime, timedelta
+
+        # 1. Create rule
+        res = client.post('/api/comite/rules', json={
+            'tipo': 'investimento',
+            'area': 'AUTO_COMPLETE_TEST',
+            'dia_da_semana': 'Segunda',
+            'horario': '10:00',
+        })
+        assert res.status_code == 201
+        rule_id = json.loads(res.data)['id']
+
+        # 2. Create comitê com data 24h no passado (> 12h threshold)
+        past_date = (datetime.now() - timedelta(hours=24)).strftime('%Y-%m-%dT%H:%M:%S')
+        res = client.post('/api/comite/comites', json={
+            'comite_rule_id': rule_id,
+            'data': past_date,
+        })
+        assert res.status_code == 201
+        comite = json.loads(res.data)
+        comite_id = comite['id']
+        assert comite['status'] == 'agendado'
+
+        # 3. GET /api/comite/comites triggers auto-complete
+        res = client.get('/api/comite/comites')
+        assert res.status_code == 200
+        data = json.loads(res.data)
+
+        # 4. Verify the overdue committee is now 'concluido'
+        overdue = [c for c in data if c['id'] == comite_id]
+        assert len(overdue) == 1
+        assert overdue[0]['status'] == 'concluido'
+
+        # 5. Verify a new 'agendado' committee was created for the same rule
+        agendados = [c for c in data if c.get('comite_rule_id') == rule_id and c['status'] == 'agendado']
+        assert len(agendados) >= 1, "Um novo comitê agendado deveria ter sido criado automaticamente"
+
+    def test_no_auto_complete_for_recent_comite(self, client):
+        """
+        Cria um comitê com data no futuro e verifica que
+        ele NÃO é auto-completado.
+        """
+        from datetime import datetime, timedelta
+
+        # 1. Create rule
+        res = client.post('/api/comite/rules', json={
+            'tipo': 'monitoramento',
+            'area': 'NO_AUTO_COMPLETE_TEST',
+            'dia_da_semana': 'Quarta',
+            'horario': '14:00',
+        })
+        assert res.status_code == 201
+        rule_id = json.loads(res.data)['id']
+
+        # 2. Create comitê com data no futuro
+        future_date = (datetime.now() + timedelta(hours=48)).strftime('%Y-%m-%dT%H:%M:%S')
+        res = client.post('/api/comite/comites', json={
+            'comite_rule_id': rule_id,
+            'data': future_date,
+        })
+        assert res.status_code == 201
+        comite = json.loads(res.data)
+        comite_id = comite['id']
+
+        # 3. GET /api/comite/comites should NOT auto-complete this one
+        res = client.get('/api/comite/comites')
+        assert res.status_code == 200
+        data = json.loads(res.data)
+
+        future_comite = [c for c in data if c['id'] == comite_id]
+        assert len(future_comite) == 1
+        assert future_comite[0]['status'] == 'agendado', "Comitê futuro não deveria ser auto-completado"
+
+
 class TestComiteConfigEmailEndpoints:
     """Configuração de email do comitê (upsert)."""
 

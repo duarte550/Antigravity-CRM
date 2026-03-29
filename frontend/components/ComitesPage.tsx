@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Page } from '../types';
-import { CheckCircle, Clock, Plus, Calendar, ChevronRight, Users, FileText, Video, AlertCircle, ArrowRight, Loader2, ArrowLeft, ArrowUpRight, Download, Search, X, MessageCircle, ThumbsUp } from 'lucide-react';
+import { CheckCircle, Clock, Plus, Calendar, ChevronRight, ChevronDown, Users, FileText, Video, AlertCircle, ArrowRight, Loader2, ArrowLeft, ArrowUpRight, Download, Search, X, MessageCircle, ThumbsUp } from 'lucide-react';
 import { Carousel, CarouselContent, CarouselItem, CarouselPrevious, CarouselNext, CarouselApi } from '@/components/ui/carousel';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -67,6 +67,11 @@ const ComitesPage: React.FC<ComitesPageProps> = ({ apiUrl, showToast, pushToGene
   const [showNewRuleModal, setShowNewRuleModal] = useState(false);
   const [isSavingRule, setIsSavingRule] = useState(false);
   const [carouselApi, setCarouselApi] = useState<CarouselApi>();
+  const [expandedTasks, setExpandedTasks] = useState<Record<number, boolean>>({});
+  const [selectedTask, setSelectedTask] = useState<{ pp: ComiteListItem['proximos_passos'][0]; comiteId: number } | null>(null);
+  const [isTogglingStatus, setIsTogglingStatus] = useState(false);
+  const [showConclusionForm, setShowConclusionForm] = useState(false);
+  const [conclusionNote, setConclusionNote] = useState('');
   
   // State for Add Item
   const [showAddItemModal, setShowAddItemModal] = useState(false);
@@ -358,6 +363,79 @@ const ComitesPage: React.FC<ComitesPageProps> = ({ apiUrl, showToast, pushToGene
 
   const selectedRule = activeRules.find(r => r.id === selectedRuleId);
 
+  const handleToggleTaskStatus = async (ppId: number, currentStatus: string, comiteId: number, note?: string) => {
+    const newStatus = currentStatus === 'concluido' ? 'pendente' : 'concluido';
+    setIsTogglingStatus(true);
+
+    // Optimistic UI update
+    setComites(prev => prev.map(c => {
+      if (c.id !== comiteId) return c;
+      return {
+        ...c,
+        proximos_passos: c.proximos_passos.map(pp =>
+          pp.id === ppId ? { ...pp, status: newStatus } : pp
+        ),
+      };
+    }));
+
+    // Update selected task state if open
+    if (selectedTask && selectedTask.pp.id === ppId) {
+      setSelectedTask(prev => prev ? { ...prev, pp: { ...prev.pp, status: newStatus } } : null);
+    }
+
+    try {
+      const currentPp = comites.find(c => c.id === comiteId)?.proximos_passos.find(p => p.id === ppId);
+      const baseDesc = currentPp?.descricao || '';
+      const finalDesc = note ? `${baseDesc}\n\n--- Nota de conclusão ---\n${note}` : baseDesc;
+      const res = await fetch(`${apiUrl}/api/comite/proximos-passos/${ppId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          status: newStatus,
+          descricao: finalDesc,
+          responsavel_nome: currentPp?.responsavel_nome || '',
+        }),
+      });
+      if (res.ok) {
+        showToast(newStatus === 'concluido' ? 'Tarefa concluída!' : 'Tarefa reaberta', 'success');
+        setShowConclusionForm(false);
+        setConclusionNote('');
+      } else {
+        showToast('Erro ao atualizar tarefa', 'error');
+        // Rollback
+        setComites(prev => prev.map(c => {
+          if (c.id !== comiteId) return c;
+          return {
+            ...c,
+            proximos_passos: c.proximos_passos.map(pp =>
+              pp.id === ppId ? { ...pp, status: currentStatus } : pp
+            ),
+          };
+        }));
+        if (selectedTask && selectedTask.pp.id === ppId) {
+          setSelectedTask(prev => prev ? { ...prev, pp: { ...prev.pp, status: currentStatus } } : null);
+        }
+      }
+    } catch {
+      showToast('Erro ao atualizar tarefa', 'error');
+      // Rollback
+      setComites(prev => prev.map(c => {
+        if (c.id !== comiteId) return c;
+        return {
+          ...c,
+          proximos_passos: c.proximos_passos.map(pp =>
+            pp.id === ppId ? { ...pp, status: currentStatus } : pp
+          ),
+        };
+      }));
+      if (selectedTask && selectedTask.pp.id === ppId) {
+        setSelectedTask(prev => prev ? { ...prev, pp: { ...prev.pp, status: currentStatus } } : null);
+      }
+    } finally {
+      setIsTogglingStatus(false);
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-96">
@@ -548,9 +626,16 @@ const ComitesPage: React.FC<ComitesPageProps> = ({ apiUrl, showToast, pushToGene
                               {(c.itens_pauta && c.itens_pauta.length > 0) ? (
                                 <div className="space-y-1.5 pl-2">
                                   {c.itens_pauta.slice(0, 5).map((item, i) => (
-                                    <div key={i} className="flex items-center gap-2 group">
+                                    <button
+                                      key={i}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        onNavigate(Page.COMITE_DETAIL, c.id);
+                                      }}
+                                      className="flex items-center gap-2 group w-full text-left rounded-md px-1.5 py-0.5 -mx-1.5 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors cursor-pointer"
+                                    >
                                       <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${item.engagement > 0 ? 'bg-blue-500' : 'bg-gray-300 dark:bg-gray-600'}`} />
-                                      <span className="text-sm text-gray-700 dark:text-gray-300 truncate flex-1" title={item.titulo}>{item.titulo}</span>
+                                      <span className="text-sm text-gray-700 dark:text-gray-300 truncate flex-1 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors" title={item.titulo}>{item.titulo}</span>
                                       {(item.comments_count > 0 || item.likes_count > 0) && (
                                         <div className="flex items-center gap-1.5 flex-shrink-0">
                                           {item.comments_count > 0 && (
@@ -565,10 +650,19 @@ const ComitesPage: React.FC<ComitesPageProps> = ({ apiUrl, showToast, pushToGene
                                           )}
                                         </div>
                                       )}
-                                    </div>
+                                      <ChevronRight className="w-3 h-3 text-gray-300 dark:text-gray-600 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
+                                    </button>
                                   ))}
                                   {c.itens_pauta.length > 5 && (
-                                    <p className="text-xs text-gray-400 italic pl-3.5">+ {c.itens_pauta.length - 5} itens</p>
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        onNavigate(Page.COMITE_DETAIL, c.id);
+                                      }}
+                                      className="text-xs text-blue-500 dark:text-blue-400 hover:text-blue-600 dark:hover:text-blue-300 font-medium pl-3.5 transition-colors cursor-pointer"
+                                    >
+                                      + {c.itens_pauta.length - 5} itens →
+                                    </button>
                                   )}
                                 </div>
                               ) : (
@@ -601,11 +695,19 @@ const ComitesPage: React.FC<ComitesPageProps> = ({ apiUrl, showToast, pushToGene
                               </div>
                               {c.proximos_passos && c.proximos_passos.length > 0 ? (
                                 <div className="space-y-2.5 pl-2">
-                                  {c.proximos_passos.slice(0, 3).map(pp => (
-                                    <div key={pp.id} className="flex flex-col gap-0.5 bg-gray-50 dark:bg-white/5 p-2 rounded-md border border-gray-100 dark:border-white/10">
+                                  {c.proximos_passos.slice(0, expandedTasks[c.id] ? undefined : 3).map(pp => (
+                                    <button
+                                      key={pp.id}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setSelectedTask({ pp, comiteId: c.id });
+                                      }}
+                                      className="flex flex-col gap-0.5 bg-gray-50 dark:bg-white/5 p-2 rounded-md border border-gray-100 dark:border-white/10 w-full text-left hover:bg-blue-50 dark:hover:bg-blue-900/15 hover:border-blue-200 dark:hover:border-blue-800/40 transition-all cursor-pointer group"
+                                    >
                                       <div className="flex items-center gap-2">
                                         <div className={`w-2 h-2 rounded-full shrink-0 ${pp.status === 'concluido' ? 'bg-emerald-500' : 'bg-amber-400'}`} />
-                                        <span className="text-xs font-medium text-gray-700 dark:text-gray-200 line-clamp-2 leading-tight">{pp.descricao}</span>
+                                        <span className="text-xs font-medium text-gray-700 dark:text-gray-200 line-clamp-2 leading-tight group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors flex-1">{pp.descricao}</span>
+                                        <ChevronRight className="w-3 h-3 text-gray-300 dark:text-gray-600 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
                                       </div>
                                       <div className="flex justify-between items-center mt-1 pl-4">
                                          <span className="text-[10px] text-gray-500 dark:text-gray-400">{pp.responsavel_nome || 'Sem responsável'}</span>
@@ -617,10 +719,31 @@ const ComitesPage: React.FC<ComitesPageProps> = ({ apiUrl, showToast, pushToGene
                                           {pp.status}
                                         </span>
                                       </div>
-                                    </div>
+                                    </button>
                                   ))}
-                                  {c.proximos_passos.length > 3 && (
-                                    <p className="text-xs text-center font-medium text-gray-400 pt-1">+ {c.proximos_passos.length - 3} tarefas ocultas</p>
+                                  {c.proximos_passos.length > 3 && !expandedTasks[c.id] && (
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setExpandedTasks(prev => ({ ...prev, [c.id]: true }));
+                                      }}
+                                      className="flex items-center justify-center gap-1.5 text-xs font-medium text-blue-500 dark:text-blue-400 hover:text-blue-600 dark:hover:text-blue-300 pt-1 w-full transition-colors cursor-pointer group"
+                                    >
+                                      <ChevronDown className="w-3.5 h-3.5 group-hover:translate-y-0.5 transition-transform" />
+                                      Mostrar + {c.proximos_passos.length - 3} tarefas ocultas
+                                    </button>
+                                  )}
+                                  {c.proximos_passos.length > 3 && expandedTasks[c.id] && (
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setExpandedTasks(prev => ({ ...prev, [c.id]: false }));
+                                      }}
+                                      className="flex items-center justify-center gap-1.5 text-xs font-medium text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 pt-1 w-full transition-colors cursor-pointer"
+                                    >
+                                      <ChevronDown className="w-3.5 h-3.5 rotate-180 transition-transform" />
+                                      Ocultar tarefas
+                                    </button>
                                   )}
                                 </div>
                               ) : (
@@ -660,6 +783,134 @@ const ComitesPage: React.FC<ComitesPageProps> = ({ apiUrl, showToast, pushToGene
         </div>
       )}
 
+
+      {/* ─── Modal: Detalhe da Tarefa ─── */}
+      {selectedTask && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={() => setSelectedTask(null)}>
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden" onClick={e => e.stopPropagation()}>
+            {/* Header */}
+            <div className={`px-6 py-4 border-b ${
+              selectedTask.pp.status === 'concluido'
+                ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800'
+                : 'bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800'
+            }`}>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className={`w-3 h-3 rounded-full ${
+                    selectedTask.pp.status === 'concluido' ? 'bg-emerald-500' : 'bg-amber-400'
+                  }`} />
+                  <span className={`text-xs font-bold uppercase tracking-wider ${
+                    selectedTask.pp.status === 'concluido'
+                      ? 'text-emerald-700 dark:text-emerald-300'
+                      : 'text-amber-700 dark:text-amber-300'
+                  }`}>
+                    {selectedTask.pp.status === 'concluido' ? 'Concluída' : 'Pendente'}
+                  </span>
+                </div>
+                <button
+                  onClick={() => setSelectedTask(null)}
+                  className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+                >
+                  <X className="w-4 h-4 text-gray-500" />
+                </button>
+              </div>
+            </div>
+
+            {/* Body */}
+            <div className="px-6 py-5 space-y-4">
+              <div>
+                <label className="block text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-1">Descrição</label>
+                <p className="text-sm font-medium text-gray-900 dark:text-white leading-relaxed">{selectedTask.pp.descricao}</p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-1">Responsável</label>
+                  <p className="text-sm text-gray-700 dark:text-gray-300">{selectedTask.pp.responsavel_nome || 'Sem responsável'}</p>
+                </div>
+                {selectedTask.pp.item_titulo && (
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-1">Item de Pauta</label>
+                    <p className="text-sm text-gray-700 dark:text-gray-300">{selectedTask.pp.item_titulo}</p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="px-6 py-4 border-t border-gray-200 dark:border-gray-700">
+              {/* Conclusion form — shown when user clicks "Concluir" on a pending task */}
+              {showConclusionForm && selectedTask.pp.status !== 'concluido' ? (
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5">Nota de conclusão <span className="text-gray-400 font-normal">(opcional)</span></label>
+                    <textarea
+                      value={conclusionNote}
+                      onChange={e => setConclusionNote(e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm placeholder-gray-400 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-all resize-none"
+                      rows={3}
+                      placeholder="Adicione uma observação sobre a conclusão desta tarefa..."
+                      autoFocus
+                    />
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => {
+                        handleToggleTaskStatus(selectedTask.pp.id, selectedTask.pp.status, selectedTask.comiteId, conclusionNote.trim() || undefined);
+                      }}
+                      disabled={isTogglingStatus}
+                      className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-semibold rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm disabled:opacity-50 transition-all border border-transparent"
+                    >
+                      {isTogglingStatus ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <><CheckCircle className="w-4 h-4" /> Confirmar Conclusão</>
+                      )}
+                    </button>
+                    <button
+                      onClick={() => { setShowConclusionForm(false); setConclusionNote(''); }}
+                      className="px-4 py-2.5 text-sm font-medium text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-xl transition-colors"
+                    >
+                      Cancelar
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex gap-3">
+                  {selectedTask.pp.status === 'concluido' ? (
+                    <button
+                      onClick={() => {
+                        handleToggleTaskStatus(selectedTask.pp.id, selectedTask.pp.status, selectedTask.comiteId);
+                      }}
+                      disabled={isTogglingStatus}
+                      className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-semibold rounded-xl bg-amber-100 hover:bg-amber-200 text-amber-800 dark:bg-amber-900/30 dark:hover:bg-amber-900/50 dark:text-amber-300 border border-amber-200 dark:border-amber-800 shadow-sm disabled:opacity-50 transition-all"
+                    >
+                      {isTogglingStatus ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <><Clock className="w-4 h-4" /> Reabrir Tarefa</>
+                      )}
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => setShowConclusionForm(true)}
+                      className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-semibold rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm transition-all border border-transparent"
+                    >
+                      <CheckCircle className="w-4 h-4" /> Marcar como Concluída
+                    </button>
+                  )}
+                  <button
+                    onClick={() => { setSelectedTask(null); setShowConclusionForm(false); setConclusionNote(''); }}
+                    className="px-4 py-2.5 text-sm font-medium text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-xl transition-colors"
+                  >
+                    Fechar
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ─── Modal: Adicionar Item na Pauta ─── */}
       {showAddItemModal && (

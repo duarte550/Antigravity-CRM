@@ -8,7 +8,7 @@ Todas as rotas usam try/except/finally, JSON snake_case, e IDs via get_next_uniq
 from flask import Blueprint, jsonify, request, current_app
 from db import get_db_connection
 from utils import safe_isoformat, parse_iso_date, format_row, get_next_unique_id
-from datetime import datetime
+from datetime import datetime, timedelta
 import json
 import logging
 
@@ -41,6 +41,196 @@ MONITORAMENTO_DEFAULT_SECOES = [
     "Assuntos Gerais", "Watchlist",
     "Assunto Recorrente da Semana", "Inovação"
 ]
+
+# Mapa de dia da semana (PT-BR) → weekday int do Python (segunda=0, terça=1, ...)
+_DIA_SEMANA_MAP = {
+    'segunda': 0, 'terça': 1, 'terca': 1, 'quarta': 2,
+    'quinta': 3, 'sexta': 4, 'sábado': 5, 'sabado': 5, 'domingo': 6,
+}
+
+AUTO_COMPLETE_THRESHOLD_HOURS = 12
+
+
+def _parse_comite_scheduled_datetime(comite_data_str, horario_str):
+    """Combina a data do comitê com o horário da regra para obter o datetime agendado.
+    
+    Se horario_str for algo como '10:00', combina com a data.
+    Se a data já tiver horário incorporado, usa ele diretamente.
+    """
+    try:
+        # comite_data_str vem em formato ISO
+        dt = datetime.fromisoformat(str(comite_data_str).replace('Z', ''))
+    except Exception:
+        return None
+
+    # Se o horário está armazenado separadamente na regra, substituir
+    if horario_str:
+        try:
+            parts = str(horario_str).strip().split(':')
+            hour = int(parts[0])
+            minute = int(parts[1]) if len(parts) > 1 else 0
+            dt = dt.replace(hour=hour, minute=minute, second=0)
+        except Exception:
+            pass
+
+    return dt
+
+
+def _create_next_comite_for_rule(cursor, rule_id, rule_tipo, dia_da_semana_str):
+    """Cria o próximo comitê agendado para uma regra, 7 dias após o mais recente.
+    
+    Só cria se não existir nenhum comitê 'agendado' para essa regra.
+    """
+    # Verificar se já existe agendado
+    cursor.execute(
+        f"SELECT COUNT(*) as cnt FROM {COMITE_SCHEMA_PREFIX}.comites WHERE comite_rule_id = ? AND status = 'agendado'",
+        (rule_id,)
+    )
+    row = cursor.fetchone()
+    if row and int(row.cnt) > 0:
+        return  # já tem um próximo agendado
+
+    # Pegar a data do último comitê dessa regra
+    cursor.execute(
+        f"SELECT MAX(data) as last_date FROM {COMITE_SCHEMA_PREFIX}.comites WHERE comite_rule_id = ?",
+        (rule_id,)
+    )
+    row = cursor.fetchone()
+    if not row or not row.last_date:
+        return
+
+    try:
+        last_date = datetime.fromisoformat(str(row.last_date).replace('Z', ''))
+    except Exception:
+        return
+
+    # Próximo comitê: 7 dias depois do último
+    next_date = last_date + timedelta(days=7)
+
+    # Ajustar para o dia da semana correto (se houver)
+    if dia_da_semana_str:
+        target_weekday = _DIA_SEMANA_MAP.get(dia_da_semana_str.lower().strip())
+        if target_weekday is not None:
+            current_weekday = next_date.weekday()
+            diff = (target_weekday - current_weekday) % 7
+            if diff == 0:
+                diff = 7  # se cair no mesmo dia, pula pra semana seguinte
+            next_date = (last_date + timedelta(days=1))  # dia seguinte ao último
+            current_weekday = next_date.weekday()
+            diff = (target_weekday - current_weekday) % 7
+            next_date = next_date + timedelta(days=diff)
+            # Se next_date ficar antes de hoje, avançar semana(s)
+            now = datetime.now()
+            while next_date < now:
+                next_date += timedelta(days=7)
+
+    new_id = _get_next_id(cursor, 'comites')
+    cursor.execute(
+        f"INSERT INTO {COMITE_SCHEMA_PREFIX}.comites (id, comite_rule_id, data, status) VALUES (?, ?, ?, ?)",
+        (new_id, rule_id, next_date, 'agendado')
+    )
+    # Criar seções default
+    _create_default_secoes(cursor, new_id, rule_tipo)
+
+
+def _auto_complete_overdue_comites(conn):
+    """Verifica comitês 'agendado' cuja data+horário já passou há mais de 12h.
+    Marca-os como 'concluido', gera eventos CRM, e cria o próximo agendado.
+    
+    Chamado de forma lazy no início do GET /api/comite/comites (padrão Vercel-compatible).
+    """
+    now = datetime.now()
+    completed_ids = []
+    try:
+        with conn.cursor() as cursor:
+            # Buscar todos os comitês agendados com dados da regra
+            cursor.execute(f"""
+                SELECT c.id, c.data, c.comite_rule_id,
+                       cr.horario, cr.tipo, cr.dia_da_semana
+                FROM {COMITE_SCHEMA_PREFIX}.comites c
+                JOIN {COMITE_SCHEMA_PREFIX}.comite_rules cr ON c.comite_rule_id = cr.id
+                WHERE c.status = 'agendado'
+            """)
+            agendados = [format_row(r, cursor) for r in cursor.fetchall()]
+
+            for ag in agendados:
+                scheduled_dt = _parse_comite_scheduled_datetime(
+                    ag.get('data'), ag.get('horario')
+                )
+                if not scheduled_dt:
+                    continue
+
+                # Verificar se passou mais de 12h
+                if (now - scheduled_dt) < timedelta(hours=AUTO_COMPLETE_THRESHOLD_HOURS):
+                    continue
+
+                comite_id = ag['id']
+                rule_id = ag.get('comite_rule_id')
+                rule_tipo = ag.get('tipo', 'investimento')
+                dia_da_semana = ag.get('dia_da_semana')
+
+                # ── Marcar como concluído ──
+                cursor.execute(
+                    f"UPDATE {COMITE_SCHEMA_PREFIX}.comites SET status = ?, ata_gerada_em = ? WHERE id = ?",
+                    ('concluido', now, comite_id)
+                )
+
+                # ── Gerar eventos CRM para itens vinculados a operações ──
+                comite_date = scheduled_dt
+                event_type = f"Comitê de {rule_tipo.capitalize()}" if rule_tipo else "Comitê"
+
+                cursor.execute(
+                    f"SELECT * FROM {COMITE_SCHEMA_PREFIX}.comite_itens_pauta WHERE comite_id = ? AND operation_id IS NOT NULL",
+                    (comite_id,)
+                )
+                itens_com_operacao = [format_row(r, cursor) for r in cursor.fetchall()]
+
+                for item in itens_com_operacao:
+                    op_id = item.get('operation_id')
+                    if not op_id:
+                        continue
+
+                    # Próximos passos do item
+                    cursor.execute(
+                        f"SELECT descricao, responsavel_nome FROM {COMITE_SCHEMA_PREFIX}.comite_proximos_passos WHERE item_pauta_id = ? ORDER BY created_at",
+                        (item['id'],)
+                    )
+                    pp_rows = [format_row(r, cursor) for r in cursor.fetchall()]
+                    next_steps_parts = []
+                    for pp_data in pp_rows:
+                        resp = pp_data.get('responsavel_nome', '')
+                        desc = pp_data.get('descricao', '')
+                        if resp:
+                            next_steps_parts.append(f"• {desc} (Resp: {resp})")
+                        else:
+                            next_steps_parts.append(f"• {desc}")
+                    next_steps_text = "\n".join(next_steps_parts) if next_steps_parts else None
+
+                    event_id = get_next_unique_id(cursor, 'events')
+                    cursor.execute(
+                        """INSERT INTO cri_cra_dev.crm.events
+                        (id, operation_id, date, type, title, description, registered_by, next_steps)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                        (event_id, op_id, comite_date, event_type,
+                         item.get('titulo', 'Item de Comitê'),
+                         item.get('descricao', ''),
+                         item.get('criador_nome', 'Sistema (auto-complete)'),
+                         next_steps_text)
+                    )
+
+                # ── Criar próximo comitê para a mesma regra ──
+                _create_next_comite_for_rule(cursor, rule_id, rule_tipo, dia_da_semana)
+
+                completed_ids.append(comite_id)
+
+        if completed_ids:
+            conn.commit()
+            logging.info(
+                "Auto-complete: %d comitê(s) marcados como concluídos: %s",
+                len(completed_ids), completed_ids
+            )
+    except Exception as e:
+        logging.error("Error in _auto_complete_overdue_comites: %s", e, exc_info=True)
 
 
 def _create_default_secoes(cursor, comite_id, tipo):
@@ -387,6 +577,9 @@ def delete_comite_rule(rule_id):
 def get_comites():
     conn = get_db_connection()
     try:
+        # ── Auto-complete comitês que já passaram da hora (12h threshold) ──
+        _auto_complete_overdue_comites(conn)
+
         area_filter = request.args.get('area')
         status_filter = request.args.get('status')
 
@@ -642,6 +835,18 @@ def add_item_pauta(comite_id):
         operation_id = data.get('operation_id')
         if tipo_caso in ('revisao', 'aprovacao') and not operation_id:
             return jsonify({"error": "Itens de revisão ou aprovação devem estar vinculados a uma operação."}), 400
+
+        # ── Server-side validation: monitoramento committees only accept "geral" ──
+        with conn.cursor() as cur_check:
+            cur_check.execute(
+                f"""SELECT cr.tipo FROM {COMITE_SCHEMA_PREFIX}.comites c
+                JOIN {COMITE_SCHEMA_PREFIX}.comite_rules cr ON c.comite_rule_id = cr.id
+                WHERE c.id = ?""",
+                (comite_id,)
+            )
+            rule_row_check = cur_check.fetchone()
+            if rule_row_check and rule_row_check.tipo == 'monitoramento' and tipo_caso != 'geral':
+                return jsonify({"error": "Comitês de monitoramento aceitam apenas itens gerais."}), 400
 
         with conn.cursor() as cursor:
             # If revisão, validate the operation is active (not structuring)
