@@ -199,6 +199,7 @@ const ComiteDetailPage: React.FC<ComiteDetailPageProps> = ({ comiteId, apiUrl, s
 
   useEffect(() => {
     fetchDetail();
+    fetchPautaOperations(); // Pre-load operation names for inline links
   }, [comiteId]);
 
   // Expand all sections by default
@@ -888,6 +889,14 @@ const ComiteDetailPage: React.FC<ComiteDetailPageProps> = ({ comiteId, apiUrl, s
                             </div>
                             <div className="flex items-center gap-3 mt-0.5">
                               <span className="text-[11px] text-gray-400">{item.criador_nome}</span>
+                              {item.operation_id && (() => {
+                                const op = [...pautaOpsAtivas, ...pautaOpsEstruturacao].find(o => o.id === item.operation_id);
+                                return (
+                                  <span className="flex items-center gap-1 text-[11px] text-blue-500 dark:text-blue-400 font-medium">
+                                    <CircleDot className="w-3 h-3" /> {op?.name || `Op #${item.operation_id}`}
+                                  </span>
+                                );
+                              })()}
                               {item.comentarios.length > 0 && (
                                 <span className="flex items-center gap-1 text-[11px] text-gray-400">
                                   <MessageSquare className="w-3 h-3" /> {item.comentarios.length}
@@ -912,6 +921,40 @@ const ComiteDetailPage: React.FC<ComiteDetailPageProps> = ({ comiteId, apiUrl, s
                                 <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap">{item.descricao}</p>
                               </div>
                             )}
+
+                            {/* Linked Operation */}
+                            {item.operation_id && (() => {
+                              const linkedOp = [...pautaOpsAtivas, ...pautaOpsEstruturacao].find(op => op.id === item.operation_id);
+                              const isStructuring = linkedOp?.is_structuring;
+                              return (
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    onNavigate(
+                                      isStructuring ? Page.STRUCTURING_OPERATION_DETAIL : Page.DETAIL,
+                                      item.operation_id!
+                                    );
+                                  }}
+                                  className="flex items-center gap-2.5 w-full p-3 bg-blue-50 dark:bg-blue-900/10 rounded-lg border border-blue-200 dark:border-blue-800 hover:bg-blue-100 dark:hover:bg-blue-900/20 transition-colors text-left group"
+                                >
+                                  <div className="w-8 h-8 rounded-lg bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center flex-shrink-0">
+                                    <ExternalLink className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-xs font-semibold text-blue-600 dark:text-blue-400 uppercase tracking-wider">
+                                      Operação {isStructuring ? '(Em Estruturação)' : 'Vinculada'}
+                                    </p>
+                                    <p className="text-sm font-medium text-gray-900 dark:text-white truncate group-hover:text-blue-700 dark:group-hover:text-blue-300 transition-colors">
+                                      {linkedOp?.name || `Operação #${item.operation_id}`}
+                                    </p>
+                                    {linkedOp?.area && (
+                                      <span className="text-[10px] text-gray-500 dark:text-gray-400">{linkedOp.area}</span>
+                                    )}
+                                  </div>
+                                  <ChevronRight className="w-4 h-4 text-blue-400 group-hover:text-blue-600 dark:group-hover:text-blue-300 transition-colors" />
+                                </button>
+                              );
+                            })()}
 
                             {/* Video section */}
                             {item.tipo === 'video' && (

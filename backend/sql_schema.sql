@@ -125,6 +125,7 @@ CREATE TABLE IF NOT EXISTS cri_cra_dev.crm.rating_history (
     date TIMESTAMP NOT NULL,
     rating_operation STRING NOT NULL,
     rating_group STRING NOT NULL,
+    rating_master_group STRING,
     watchlist STRING,
     sentiment STRING,
     event_id BIGINT

@@ -583,7 +583,7 @@ const ComiteVideoPage: React.FC<ComiteVideoPageProps> = ({
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <button
-            onClick={() => onNavigate(Page.COMITE_DETAIL, comiteId)}
+            onClick={() => onNavigate(Page.COMITE_DETAIL, data?.item?.comite_id || data?.comite?.id || comiteId)}
             className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
           >
             <ArrowLeft className="w-5 h-5 text-gray-500" />

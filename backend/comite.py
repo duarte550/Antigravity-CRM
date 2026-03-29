@@ -54,12 +54,17 @@ AUTO_COMPLETE_THRESHOLD_HOURS = 12
 def _parse_comite_scheduled_datetime(comite_data_str, horario_str):
     """Combina a data do comitê com o horário da regra para obter o datetime agendado.
     
-    Se horario_str for algo como '10:00', combina com a data.
-    Se a data já tiver horário incorporado, usa ele diretamente.
+    Retorna sempre um datetime naive (UTC-stripped) para comparação consistente.
     """
     try:
-        # comite_data_str vem em formato ISO
-        dt = datetime.fromisoformat(str(comite_data_str).replace('Z', ''))
+        raw = str(comite_data_str)
+        # Remove timezone info para obter datetime naive consistente
+        # Databricks retorna '+00:00', mas pode vir 'Z' também
+        raw = raw.replace('Z', '').replace('+00:00', '')
+        # Remove qualquer offset restante no formato +HH:MM ou -HH:MM
+        if len(raw) > 19 and (raw[-6] == '+' or raw[-6] == '-'):
+            raw = raw[:-6]
+        dt = datetime.fromisoformat(raw)
     except Exception:
         return None
 
@@ -139,7 +144,7 @@ def _auto_complete_overdue_comites(conn):
     
     Chamado de forma lazy no início do GET /api/comite/comites (padrão Vercel-compatible).
     """
-    now = datetime.now()
+    now = datetime.utcnow()  # naive UTC — matches stripped datetimes from _parse_comite_scheduled_datetime
     completed_ids = []
     try:
         with conn.cursor() as cursor:
