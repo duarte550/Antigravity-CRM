@@ -197,32 +197,29 @@ const StructuringOperationDetailsPage: React.FC<StructuringOperationDetailsPageP
     const firstIncomplete = sortedNewStages.find(s => !s.isCompleted);
     const nextStageName = firstIncomplete ? firstIncomplete.name : 'Concluído';
     
-    // Optimistic
+    // Optimistic UI — update local state immediately
     setOperation(prev => prev ? { ...prev, stages: newStages, stage: nextStageName } : null);
 
     try {
-      const payload = { stages: newStages };
-      if (pushToGenericQueue) {
-          pushToGenericQueue(`${apiUrl}/api/structuring-operations/${operationId}/stages`, 'PUT', payload);
-          // Also update the stage field on the operation
-          pushToGenericQueue(`${apiUrl}/api/structuring-operations/${operationId}`, 'PUT', { stage: nextStageName });
-      } else {
-          const response = await fetchApi(`${apiUrl}/api/structuring-operations/${operationId}/stages`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload),
-          });
-          if (!response.ok) throw new Error('Falha ao atualizar etapas');
-          // Also update the stage field on the operation
-          await fetchApi(`${apiUrl}/api/structuring-operations/${operationId}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ stage: nextStageName }),
-          });
-          await fetchOperation();
-      }
+      // CRITICAL: Stage transitions use DIRECT API calls (not the debounced queue)
+      // so the backend is updated immediately. When the user navigates back to
+      // the Origination Kanban, fetchOperations() will return the updated stage.
+      const [stagesRes, stageFieldRes] = await Promise.all([
+        fetchApi(`${apiUrl}/api/structuring-operations/${operationId}/stages`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ stages: newStages }),
+        }),
+        fetchApi(`${apiUrl}/api/structuring-operations/${operationId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ stage: nextStageName }),
+        })
+      ]);
 
-      // Auto-generate event if stage is being completed
+      if (!stagesRes.ok) throw new Error('Falha ao atualizar etapas');
+
+      // Auto-generate event (this can use the queue — not navigation-critical)
       if (!stage.isCompleted) {
         const eventPayload = {
           title: `Etapa Concluída: ${stage.name}`,
@@ -233,21 +230,22 @@ const StructuringOperationDetailsPage: React.FC<StructuringOperationDetailsPageP
         };
         if (pushToGenericQueue) {
             pushToGenericQueue(`${apiUrl}/api/structuring-operations/${operationId}/events`, 'POST', eventPayload);
-            setOperation(prev => prev ? { ...prev, events: [{...eventPayload, id: Date.now()} as any, ...(prev.events || [])] } : null);
         } else {
             fetchApi(`${apiUrl}/api/structuring-operations/${operationId}/events`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify(eventPayload),
-            }).then(() => fetchOperation()).catch(console.error);
+            }).catch(console.error);
         }
+        // Update events locally for optimistic display
+        setOperation(prev => prev ? { ...prev, events: [{...eventPayload, id: Date.now()} as any, ...(prev.events || [])] } : null);
         showToast(`Etapa ${stage.name} concluída! Avançou para: ${nextStageName}`, 'success');
       } else {
         showToast(`Etapa ${stage.name} reaberta. Status: ${nextStageName}`, 'success');
       }
     } catch (e) {
       showToast('Erro ao marcar etapa', 'error');
-      // Rollback (simplified)
+      // Rollback
       fetchOperation();
     }
   };

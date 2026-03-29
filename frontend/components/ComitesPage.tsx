@@ -1,6 +1,9 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Page } from '../types';
-import { CheckCircle, Clock, Plus, Calendar, ChevronRight, Users, FileText, Video, AlertCircle, ArrowRight, Loader2 } from 'lucide-react';
+import { CheckCircle, Clock, Plus, Calendar, ChevronRight, Users, FileText, Video, AlertCircle, ArrowRight, Loader2, ArrowLeft, ArrowUpRight, Download } from 'lucide-react';
+import { Carousel, CarouselContent, CarouselItem, CarouselPrevious, CarouselNext, CarouselApi } from '@/components/ui/carousel';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://antigravity-crm-two.vercel.app';
 
@@ -45,6 +48,7 @@ const ComitesPage: React.FC<ComitesPageProps> = ({ apiUrl, showToast, pushToGene
   const [showAddItemModal, setShowAddItemModal] = useState(false);
   const [showNewComiteModal, setShowNewComiteModal] = useState(false);
   const [showNewRuleModal, setShowNewRuleModal] = useState(false);
+  const [carouselApi, setCarouselApi] = useState<CarouselApi>();
 
   // Form state for new item
   const [newItem, setNewItem] = useState({
@@ -99,6 +103,34 @@ const ComitesPage: React.FC<ComitesPageProps> = ({ apiUrl, showToast, pushToGene
     [filteredComites]
   );
   const proximoAtivo = agendados[0] || null;
+
+  const comitesCarrossel = useMemo(() => {
+    const arr = [...concluidos.slice().reverse()];
+    if (proximoAtivo) {
+      arr.push(proximoAtivo);
+    }
+    return arr;
+  }, [concluidos, proximoAtivo]);
+
+  // Handle Carousel focus on load
+  useEffect(() => {
+    if (carouselApi && comitesCarrossel.length > 0) {
+      // Scroll to the "next committee" if it exists (which is at the end of the array)
+      const targetIndex = proximoAtivo ? comitesCarrossel.length - 1 : comitesCarrossel.length - 1;
+      // Use setTimeout to ensure Embla is fully initialized
+      setTimeout(() => {
+        carouselApi.scrollTo(targetIndex, true);
+      }, 100);
+    }
+  }, [carouselApi, comitesCarrossel.length, proximoAtivo]);
+
+  const handleDownloadAta = (id: number) => {
+    showToast(`Baixando Ata do Comitê #${id}...`, 'success');
+    // Implementação mockada de PDF
+    setTimeout(() => {
+      showToast(`Ata baixada com sucesso!`, 'success');
+    }, 1500);
+  };
 
   const handleAddItem = async () => {
     if (!newItem.titulo || !newItem.comite_id) return;
@@ -262,12 +294,18 @@ const ComitesPage: React.FC<ComitesPageProps> = ({ apiUrl, showToast, pushToGene
         </div>
       )}
 
-      {/* Timeline */}
-      <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
-        <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-6">Timeline de Comitês</h2>
-
-        {filteredComites.length === 0 ? (
-          <div className="text-center py-12">
+      {/* Carrossel de Comitês */}
+      <div className="w-full relative mt-8">
+        <div className="flex items-center justify-between mb-4 px-2">
+          <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Linha do Tempo de Comitês</h2>
+          <div className="flex gap-2">
+            <CarouselPrevious className="relative inset-0 transform-none h-10 w-10 border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-white" />
+            <CarouselNext className="relative inset-0 transform-none h-10 w-10 border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-white" />
+          </div>
+        </div>
+        
+        {comitesCarrossel.length === 0 ? (
+          <div className="text-center py-12 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700">
             <Calendar className="w-12 h-12 mx-auto text-gray-300 dark:text-gray-600 mb-3" />
             <p className="text-gray-500 dark:text-gray-400">Nenhum comitê encontrado para os filtros selecionados.</p>
             <button
@@ -278,125 +316,127 @@ const ComitesPage: React.FC<ComitesPageProps> = ({ apiUrl, showToast, pushToGene
             </button>
           </div>
         ) : (
-          <>
-            {/* Horizontal timeline */}
-            <div className="relative">
-              {/* Timeline line */}
-              <div className="absolute top-6 left-0 right-0 h-0.5 bg-gray-200 dark:bg-gray-700" />
+          <Carousel
+            setApi={setCarouselApi}
+            opts={{
+              align: 'start',
+              dragFree: true,
+            }}
+            className="w-full"
+          >
+            <CarouselContent className="-ml-4">
+              {comitesCarrossel.map((c) => {
+                const isProximo = c.status === 'agendado';
+                const uniquePautas = Array.from(new Set(c.proximos_passos?.map(pp => pp.item_titulo).filter(Boolean)));
+                
+                return (
+                  <CarouselItem key={c.id} className="pl-4 basis-full md:basis-1/2 lg:basis-1/3">
+                    <Card className={`h-full flex flex-col border-2 transition-all duration-300 ${isProximo ? 'border-blue-500 shadow-lg shadow-blue-500/10 dark:bg-gray-800/80 scale-[1.02]' : 'border-gray-200 dark:border-gray-700 dark:bg-gray-800/50 hover:border-gray-300 dark:hover:border-gray-600'}`}>
+                      <CardHeader className="pb-3 border-b border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-900/20 rounded-t-lg">
+                        <div className="flex items-start justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className={`w-10 h-10 flex items-center justify-center rounded-full border-2 ${isProximo ? 'bg-blue-100 border-blue-500 text-blue-600 dark:bg-blue-900/40 dark:text-blue-400' : 'bg-emerald-100 border-emerald-500 text-emerald-600 dark:bg-emerald-900/40 dark:text-emerald-400'}`}>
+                              {isProximo ? <Clock className="w-5 h-5" /> : <CheckCircle className="w-5 h-5" />}
+                            </div>
+                            <div>
+                              <CardTitle className="text-lg font-bold capitalize text-gray-900 dark:text-white">
+                                {c.tipo} — {c.area}
+                              </CardTitle>
+                              <CardDescription className="text-sm font-medium mt-0.5">
+                                {formatDate(c.data)} {c.horario ? `às ${c.horario}` : ''}
+                              </CardDescription>
+                            </div>
+                          </div>
+                          {isProximo && (
+                            <span className="px-2.5 py-1 text-[10px] font-bold tracking-wider text-blue-700 bg-blue-100 rounded-full dark:bg-blue-900/60 dark:text-blue-300 uppercase animate-pulse">
+                              PRÓXIMO
+                            </span>
+                          )}
+                        </div>
+                      </CardHeader>
+                      
+                      <CardContent className="flex-1 pt-5 pb-5">
+                        <div className="mb-4">
+                          <div className="flex items-center gap-2 mb-2 text-sm font-semibold text-gray-700 dark:text-gray-300">
+                            <FileText className="w-4 h-4 text-gray-400" /> Principais Pautas
+                          </div>
+                          {uniquePautas.length > 0 ? (
+                            <ul className="list-disc pl-9 text-sm text-gray-600 dark:text-gray-400 space-y-1">
+                              {uniquePautas.map((p, i) => (
+                                <li key={i} className="line-clamp-1 truncate" title={p as string}>{p as string}</li>
+                              ))}
+                            </ul>
+                          ) : (
+                            <p className="text-sm text-gray-500 dark:text-gray-500 pl-6 italic">{c.itens_count} itens na pauta</p>
+                          )}
+                        </div>
 
-              <div className="flex items-start gap-0 overflow-x-auto pb-4 relative">
-                {/* Completed comites */}
-                {concluidos.slice(0, 6).reverse().map((c, idx) => (
-                  <div
-                    key={c.id}
-                    className="flex flex-col items-center min-w-[140px] cursor-pointer group"
-                    onClick={() => onNavigate(Page.COMITE_DETAIL, c.id)}
-                  >
-                    <div className="relative z-10 w-12 h-12 rounded-full bg-emerald-100 dark:bg-emerald-900/40 border-2 border-emerald-500 flex items-center justify-center group-hover:scale-110 transition-transform">
-                      <CheckCircle className="w-6 h-6 text-emerald-500" />
-                    </div>
-                    <div className="mt-3 text-center">
-                      <p className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">{formatShortDate(c.data)}</p>
-                      <p className="text-[10px] text-gray-500 dark:text-gray-400 capitalize mt-0.5">{c.tipo}</p>
-                      <p className="text-[10px] text-gray-400 dark:text-gray-500">{c.area}</p>
-                      {c.itens_count > 0 && (
-                        <span className="inline-flex items-center gap-1 mt-1 text-[10px] text-gray-500 dark:text-gray-400">
-                          <FileText className="w-3 h-3" /> {c.itens_count}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                ))}
+                        <hr className="my-5 mx-8 border-gray-200 dark:border-gray-700/80" />
 
-                {/* Next active (highlighted) */}
-                {proximoAtivo && (
-                  <div
-                    className="flex flex-col items-center min-w-[160px] cursor-pointer group"
-                    onClick={() => onNavigate(Page.COMITE_DETAIL, proximoAtivo.id)}
-                  >
-                    <div className="relative z-10 w-14 h-14 rounded-full bg-blue-100 dark:bg-blue-900/40 border-3 border-blue-500 flex items-center justify-center shadow-lg shadow-blue-200/50 dark:shadow-blue-900/50 animate-pulse group-hover:animate-none group-hover:scale-110 transition-transform">
-                      <Clock className="w-7 h-7 text-blue-500" />
-                    </div>
-                    <div className="mt-3 text-center">
-                      <p className="text-xs font-bold text-blue-600 dark:text-blue-400">{formatDate(proximoAtivo.data)}</p>
-                      <p className="text-[11px] font-semibold text-gray-700 dark:text-gray-300 capitalize mt-0.5">{proximoAtivo.tipo}</p>
-                      <p className="text-[10px] text-gray-500 dark:text-gray-400">{proximoAtivo.area}</p>
-                      <span className="inline-block mt-1 px-2 py-0.5 text-[10px] font-semibold bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 rounded-full">
-                        PRÓXIMO
-                      </span>
-                    </div>
-                  </div>
-                )}
+                        <div>
+                          <div className="flex items-center gap-2 mb-2 text-sm font-semibold text-gray-700 dark:text-gray-300">
+                            <CheckCircle className="w-4 h-4 text-gray-400" /> Tarefas & Decisões
+                          </div>
+                          {c.proximos_passos && c.proximos_passos.length > 0 ? (
+                            <div className="space-y-2.5 pl-2">
+                              {c.proximos_passos.slice(0, 3).map(pp => (
+                                <div key={pp.id} className="flex flex-col gap-0.5 bg-gray-50 dark:bg-gray-900/50 p-2 rounded-md border border-gray-100 dark:border-gray-800">
+                                  <div className="flex items-center gap-2">
+                                    <div className={`w-2 h-2 rounded-full shrink-0 ${pp.status === 'concluido' ? 'bg-emerald-500' : 'bg-amber-400'}`} />
+                                    <span className="text-xs font-medium text-gray-700 dark:text-gray-300 line-clamp-2 leading-tight">{pp.descricao}</span>
+                                  </div>
+                                  <div className="flex justify-between items-center mt-1 pl-4">
+                                     <span className="text-[10px] text-gray-500">{pp.responsavel_nome || 'Sem responsável'}</span>
+                                     <span className={`text-[9px] px-1.5 py-0.5 font-bold uppercase tracking-wider rounded-full ${
+                                      pp.status === 'concluido'
+                                        ? 'text-emerald-700 dark:text-emerald-400 bg-emerald-100 dark:bg-emerald-900/30'
+                                        : 'text-amber-700 dark:text-amber-400 bg-amber-100 dark:bg-amber-900/30'
+                                    }`}>
+                                      {pp.status}
+                                    </span>
+                                  </div>
+                                </div>
+                              ))}
+                              {c.proximos_passos.length > 3 && (
+                                <p className="text-xs text-center font-medium text-gray-400 pt-1">+ {c.proximos_passos.length - 3} tarefas ocultas</p>
+                              )}
+                            </div>
+                          ) : (
+                            <p className="text-sm text-gray-500 dark:text-gray-500 pl-6 italic">Sem tarefas adicionais geradas.</p>
+                          )}
+                        </div>
+                      </CardContent>
 
-                {/* Future ones hidden (just a hint) */}
-                {agendados.length > 1 && (
-                  <div className="flex flex-col items-center min-w-[100px]">
-                    <div className="relative z-10 w-10 h-10 rounded-full bg-gray-100 dark:bg-gray-700 border-2 border-dashed border-gray-300 dark:border-gray-600 flex items-center justify-center">
-                      <span className="text-xs text-gray-400">+{agendados.length - 1}</span>
-                    </div>
-                    <p className="mt-3 text-[10px] text-gray-400">futuros</p>
-                  </div>
-                )}
-              </div>
-            </div>
-          </>
+                      <CardFooter className="pt-0 pb-4 px-4 flex gap-2 w-full mt-auto">
+                        <Button 
+                          variant="outline" 
+                          className="flex-1 text-xs border-blue-200 dark:border-blue-900/50 text-blue-700 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onNavigate(Page.COMITE_DETAIL, c.id);
+                          }}
+                        >
+                          <ArrowUpRight className="w-3.5 h-3.5 mr-1" /> Abrir Comitê
+                        </Button>
+                        <Button 
+                          variant="secondary" 
+                          className="flex-1 text-xs"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDownloadAta(c.id);
+                          }}
+                        >
+                          <Download className="w-3.5 h-3.5 mr-1" /> Baixar Ata
+                        </Button>
+                      </CardFooter>
+                    </Card>
+                  </CarouselItem>
+                );
+              })}
+            </CarouselContent>
+          </Carousel>
         )}
       </div>
-
-      {/* Recent completed comites with próximos passos */}
-      {concluidos.slice(0, 4).map(c => (
-        <div
-          key={c.id}
-          className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-5 hover:border-gray-300 dark:hover:border-gray-600 transition-colors cursor-pointer group"
-          onClick={() => onNavigate(Page.COMITE_DETAIL, c.id)}
-        >
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center">
-                <CheckCircle className="w-4 h-4 text-emerald-500" />
-              </div>
-              <div>
-                <h3 className="text-sm font-semibold text-gray-900 dark:text-white capitalize">
-                  {c.tipo} — {c.area}
-                </h3>
-                <p className="text-xs text-gray-500 dark:text-gray-400">{formatDate(c.data)}</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-gray-500 dark:text-gray-400">{c.itens_count} itens</span>
-              <ChevronRight className="w-4 h-4 text-gray-400 group-hover:text-blue-500 transition-colors" />
-            </div>
-          </div>
-
-          {/* Próximos passos deste comitê */}
-          {c.proximos_passos && c.proximos_passos.length > 0 && (
-            <div className="mt-3 border-t border-gray-100 dark:border-gray-700 pt-3">
-              <p className="text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase mb-2">Próximos Passos</p>
-              <div className="space-y-1.5">
-                {c.proximos_passos.slice(0, 3).map(pp => (
-                  <div key={pp.id} className="flex items-center gap-2">
-                    <div className={`w-1.5 h-1.5 rounded-full ${pp.status === 'concluido' ? 'bg-emerald-500' : 'bg-amber-400'}`} />
-                    <span className="text-xs text-gray-700 dark:text-gray-300 flex-1 truncate">{pp.descricao}</span>
-                    {pp.responsavel_nome && (
-                      <span className="text-[10px] text-gray-400 dark:text-gray-500">{pp.responsavel_nome}</span>
-                    )}
-                    <span className={`text-[10px] px-1.5 py-0.5 rounded ${
-                      pp.status === 'concluido'
-                        ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400'
-                        : 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400'
-                    }`}>
-                      {pp.status === 'concluido' ? 'Concluído' : 'Pendente'}
-                    </span>
-                  </div>
-                ))}
-                {c.proximos_passos.length > 3 && (
-                  <p className="text-[10px] text-gray-400">+ {c.proximos_passos.length - 3} mais</p>
-                )}
-              </div>
-            </div>
-          )}
-        </div>
-      ))}
 
       {/* ─── Modal: Adicionar Item na Pauta ─── */}
       {showAddItemModal && (

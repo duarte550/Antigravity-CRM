@@ -24,10 +24,23 @@ app.register_blueprint(economic_groups_bp)
 app.register_blueprint(fund_simulator_bp)
 app.register_blueprint(comite_bp)
 logging.basicConfig(level=logging.INFO)
+##############################################################################################################################
+# DELETAR QUANDO FORMOS RODAR NA AZURE
+# Lazy schema migration: runs once on first request per cold-start (ideal for Vercel serverless).
+_schema_migrated = False
 
-# Schema is now updated via Docker CMD before gunicorn starts
-# update_db.update_schema() has been removed from here to prevent worker timeouts.
+@app.before_request
+def _ensure_schema():
+    global _schema_migrated
+    if not _schema_migrated:
+        try:
+            update_db.update_schema()
+            app.logger.info("Schema migration completed successfully on first request.")
+        except Exception as e:
+            app.logger.error(f"Schema migration failed: {e}", exc_info=True)
+        _schema_migrated = True
 
+##############################################################################################################################
 # Configuração de CORS dinâmica baseada em variável de ambiente.
 allowed_origins_env = os.environ.get('ALLOWED_ORIGINS', 'http://localhost:3000,http://localhost:3001,https://front-crm-cri.azurewebsites.net')
 allowed_origins_list = [origin.strip() for origin in allowed_origins_env.split(',') if origin.strip()]

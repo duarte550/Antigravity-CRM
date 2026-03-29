@@ -540,7 +540,7 @@ const OriginationPipelinePage: React.FC<OriginationPipelinePageProps> = ({ onNav
         if (resumoOriginatorFilter) ops = ops.filter(o => o.originator === resumoOriginatorFilter);
         if (resumoTemperatureFilter) ops = ops.filter(o => o.temperature === resumoTemperatureFilter);
         if (resumoIndexerFilter) ops = ops.filter(o => o.series?.some(s => s.indexer === resumoIndexerFilter));
-        if (resumoStatusFilter) ops = ops.filter(o => o.stage === resumoStatusFilter);
+        if (resumoStatusFilter) ops = ops.filter(o => getActiveColumn(o) === resumoStatusFilter);
         if (resumoDateFilter) ops = ops.filter(o => o.createdAt && o.createdAt.startsWith(resumoDateFilter));
 
 

@@ -486,54 +486,84 @@ def manage_structuring_operation(so_id):
                 return jsonify(so)
         elif request.method == 'PUT':
             data = request.json
+            if not data:
+                return jsonify({"error": "Request body is empty or invalid JSON"}), 400
             with conn.cursor() as cursor:
                 user_name = data.get('userName', 'Sistema')
                 cursor.execute("SELECT risk, temperature, structuring_analyst as analyst, area, master_group_id, economic_group_id FROM cri_cra_dev.crm.operations WHERE id=?", (so_id,))
                 old_row = cursor.fetchone()
-                old_op = format_row(old_row, cursor) if old_row else {}
+                if not old_row:
+                    return jsonify({"error": "Operation not found"}), 404
+                old_op = format_row(old_row, cursor)
                 
-                cursor.execute("SELECT SUM(volume) as total_vol FROM cri_cra_dev.crm.operation_series WHERE operation_id=?", (so_id,))
-                old_vol_row = cursor.fetchone()
-                old_vol = float(old_vol_row.total_vol) if old_vol_row and old_vol_row.total_vol else 0.0
-
-                is_active_val = data.get('isActive')
-                if is_active_val is None:
-                    is_active_val = True
-
-                # If area is omitted from frontend json, fetch the original or assume CRI
-                new_area = data.get('area')
-                if not new_area:
-                    new_area = old_op.get('area') or 'CRI'
-
-                # Update EconomicGroup rating optionally or create it
+                # Build dynamic UPDATE — only touch fields present in the payload
+                field_map = {
+                    'name': 'name',
+                    'area': 'area',
+                    'stage': 'pipeline_stage',
+                    'liquidationDate': 'liquidation_date',
+                    'risk': 'risk',
+                    'temperature': 'temperature',
+                    'isActive': 'is_active',
+                    'analyst': 'structuring_analyst',
+                    'originator': 'originator',
+                    'modality': 'modality',
+                    'description': 'description',
+                }
                 
-                new_economic_group_id = data.get('economicGroupId')
-                if new_economic_group_id == 'new' and data.get('newEGName'):
-                    new_economic_group_id = get_next_unique_id(cursor, 'economic_groups')
-                    cursor.execute("INSERT INTO cri_cra_dev.crm.economic_groups (id, name, master_group_id, rating) VALUES (?, ?, ?, ?)",
-                                   (new_economic_group_id, data.get('newEGName'), old_op.get('master_group_id'), data.get('risk')))
-                elif new_economic_group_id == '':
-                    new_economic_group_id = None
-                else:
-                    new_economic_group_id = old_op.get('economic_group_id') if new_economic_group_id is None else new_economic_group_id
-
-                cursor.execute("UPDATE cri_cra_dev.crm.operations SET name=?, area=?, pipeline_stage=?, liquidation_date=?, risk=?, temperature=?, is_active=?, structuring_analyst=?, originator=?, modality=?, economic_group_id=?, description=? WHERE id=?",
-                               (data.get('name'), new_area, data.get('stage'), parse_iso_date(data.get('liquidationDate')), data.get('risk'), data.get('temperature'), is_active_val, data.get('analyst'), data.get('originator'), data.get('modality'), new_economic_group_id, data.get('description'), so_id))
-                               
-                cursor.execute("DELETE FROM cri_cra_dev.crm.operation_series WHERE operation_id=?", (so_id,))
-                series = data.get('series', [])
+                set_clauses = []
+                set_values = []
+                
+                for json_key, db_col in field_map.items():
+                    if json_key in data:
+                        val = data[json_key]
+                        if json_key == 'liquidationDate':
+                            val = parse_iso_date(val)
+                        set_clauses.append(f"{db_col}=?")
+                        set_values.append(val)
+                
+                # Handle economicGroupId specially
+                if 'economicGroupId' in data:
+                    new_economic_group_id = data.get('economicGroupId')
+                    if new_economic_group_id == 'new' and data.get('newEGName'):
+                        new_economic_group_id = get_next_unique_id(cursor, 'economic_groups')
+                        cursor.execute("INSERT INTO cri_cra_dev.crm.economic_groups (id, name, master_group_id, rating) VALUES (?, ?, ?, ?)",
+                                       (new_economic_group_id, data.get('newEGName'), old_op.get('master_group_id'), data.get('risk')))
+                    elif new_economic_group_id == '':
+                        new_economic_group_id = None
+                    set_clauses.append("economic_group_id=?")
+                    set_values.append(new_economic_group_id)
+                
+                if set_clauses:
+                    set_values.append(so_id)
+                    cursor.execute(f"UPDATE cri_cra_dev.crm.operations SET {', '.join(set_clauses)} WHERE id=?", set_values)
+                
+                # Only delete/recreate series if 'series' is explicitly provided
+                old_vol = 0.0
                 new_vol = 0.0
-                for s in series:
-                    vol = float(s.get('volume', 0.0) or 0.0)
-                    new_vol += vol
-                    cursor.execute("INSERT INTO cri_cra_dev.crm.operation_series (operation_id, name, rate, indexer, volume, fund) VALUES (?, ?, ?, ?, ?, ?)",
-                                   (so_id, s.get('name', 'Série Única'), s.get('rate'), s.get('indexer'), vol, s.get('fund')))
+                if 'series' in data:
+                    cursor.execute("SELECT SUM(volume) as total_vol FROM cri_cra_dev.crm.operation_series WHERE operation_id=?", (so_id,))
+                    old_vol_row = cursor.fetchone()
+                    old_vol = float(old_vol_row.total_vol) if old_vol_row and old_vol_row.total_vol else 0.0
+
+                    cursor.execute("DELETE FROM cri_cra_dev.crm.operation_series WHERE operation_id=?", (so_id,))
+                    series = data.get('series', [])
+                    for s in series:
+                        vol = float(s.get('volume', 0.0) or 0.0)
+                        new_vol += vol
+                        cursor.execute("INSERT INTO cri_cra_dev.crm.operation_series (operation_id, name, rate, indexer, volume, fund) VALUES (?, ?, ?, ?, ?, ?)",
+                                       (so_id, s.get('name', 'Série Única'), s.get('rate'), s.get('indexer'), vol, s.get('fund')))
                 
+                # Track attribute changes for auto-event (only for fields actually sent)
                 changes = []
-                if old_op.get('risk') != data.get('risk'): changes.append(f"Risco: {old_op.get('risk') or 'N/A'} -> {data.get('risk') or 'N/A'}")
-                if old_op.get('temperature') != data.get('temperature'): changes.append(f"Temperatura: {old_op.get('temperature') or 'N/A'} -> {data.get('temperature') or 'N/A'}")
-                if old_op.get('analyst') != data.get('analyst'): changes.append(f"Analista: {old_op.get('analyst') or 'N/A'} -> {data.get('analyst') or 'N/A'}")
-                if old_vol != new_vol: changes.append(f"Volume: R$ {old_vol} -> R$ {new_vol}")
+                if 'risk' in data and old_op.get('risk') != data.get('risk'):
+                    changes.append(f"Risco: {old_op.get('risk') or 'N/A'} -> {data.get('risk') or 'N/A'}")
+                if 'temperature' in data and old_op.get('temperature') != data.get('temperature'):
+                    changes.append(f"Temperatura: {old_op.get('temperature') or 'N/A'} -> {data.get('temperature') or 'N/A'}")
+                if 'analyst' in data and old_op.get('analyst') != data.get('analyst'):
+                    changes.append(f"Analista: {old_op.get('analyst') or 'N/A'} -> {data.get('analyst') or 'N/A'}")
+                if 'series' in data and old_vol != new_vol:
+                    changes.append(f"Volume: R$ {old_vol} -> R$ {new_vol}")
                 
                 if changes:
                     msg = "Alterações detectadas: " + " | ".join(changes)
@@ -570,6 +600,7 @@ def manage_structuring_operation(so_id):
                 conn.commit()
                 return '', 204
     except Exception as e:
+        logging.error(f"Error in /api/structuring-operations/{so_id}: {e}", exc_info=True)
         return jsonify({"error": str(e)}), 500
     finally:
         if conn: conn.close()
