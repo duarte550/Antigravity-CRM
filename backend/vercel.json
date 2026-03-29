@@ -1,5 +1,6 @@
 {
   "version": 2,
+  "buildCommand": "pip install -r requirements.txt && python update_db.py",
   "builds": [
     {
       "src": "app.py",

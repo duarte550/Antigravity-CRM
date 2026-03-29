@@ -4,7 +4,7 @@ from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
 from db import get_db_connection
 from task_engine import generate_tasks_for_operation
-import update_db
+## import update_db  # Schema migration runs at BUILD time only (see vercel.json)
 from datetime import datetime, date, timedelta
 from utils import safe_isoformat, parse_iso_date, get_next_unique_id
 from collections import defaultdict
@@ -25,21 +25,10 @@ app.register_blueprint(fund_simulator_bp)
 app.register_blueprint(comite_bp)
 logging.basicConfig(level=logging.INFO)
 ##############################################################################################################################
-# DELETAR QUANDO FORMOS RODAR NA AZURE
-# Lazy schema migration: runs once on first request per cold-start (ideal for Vercel serverless).
-_schema_migrated = False
-
-@app.before_request
-def _ensure_schema():
-    global _schema_migrated
-    if not _schema_migrated:
-        try:
-            update_db.update_schema()
-            app.logger.info("Schema migration completed successfully on first request.")
-        except Exception as e:
-            app.logger.error(f"Schema migration failed: {e}", exc_info=True)
-        _schema_migrated = True
-
+# Schema migration now runs at BUILD time via vercel.json buildCommand.
+# Do NOT re-enable a before_request hook here — on Vercel serverless every cold
+# start resets globals, so update_schema() would run (30-60 s of Databricks DDL)
+# on almost every request, causing cascading timeouts.
 ##############################################################################################################################
 # Configuração de CORS dinâmica baseada em variável de ambiente.
 allowed_origins_env = os.environ.get('ALLOWED_ORIGINS', 'http://localhost:3000,http://localhost:3001,https://front-crm-cri.azurewebsites.net')
