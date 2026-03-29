@@ -55,13 +55,11 @@ const Sidebar: React.FC<SidebarProps> = ({ operations, currentPage, selectedOper
   }> = ({ onClick, isActive, children, isSubItem = false, className = '' }) => (
     <button
       onClick={onClick}
-      className={`w-full text-left flex items-center gap-3 rounded-md transition-all duration-200 ${
-        isSubItem ? 'pl-9 pr-2 py-1.5 text-xs' : 'px-4 py-2'
-      } ${
-        isActive
+      className={`w-full text-left flex items-center gap-3 rounded-md transition-all duration-200 ${isSubItem ? 'pl-9 pr-2 py-1.5 text-xs' : 'px-4 py-2'
+        } ${isActive
           ? 'bg-blue-600 text-white shadow-sm'
           : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-white'
-      } ${className}`}
+        } ${className}`}
     >
       {children}
     </button>
@@ -70,15 +68,13 @@ const Sidebar: React.FC<SidebarProps> = ({ operations, currentPage, selectedOper
   return (
     <div className="w-64 bg-white dark:bg-gray-900 text-gray-800 dark:text-white flex flex-col h-screen border-r border-gray-200 dark:border-gray-800 shadow-xl transition-colors duration-200">
       <div className="p-6 border-b border-gray-200 dark:border-gray-800 flex items-center justify-center">
-        <div className="dark:bg-white dark:px-4 dark:py-2 dark:rounded-lg dark:shadow-sm transition-all flex items-center justify-center">
-          <img 
-            src="/kinea-logo.png" 
-            alt="Kinea Itaú" 
-            className="h-7 md:h-8 w-auto object-contain" 
-          />
-        </div>
+        <img
+          src="/kinea-logo.svg"
+          alt="Kinea Itaú"
+          className="h-10 md:h-12 w-auto object-contain transition-all invert opacity-80 dark:invert-0 dark:opacity-100"
+        />
       </div>
-      
+
       <nav className="flex-1 flex flex-col min-h-0">
         <div className="p-3 space-y-1">
           <NavLink
@@ -116,7 +112,7 @@ const Sidebar: React.FC<SidebarProps> = ({ operations, currentPage, selectedOper
             <ClipboardCheckIcon className="w-5 h-5" />
             <span className="font-medium">Tarefas</span>
           </NavLink>
-          
+
           <NavLink
             onClick={() => onNavigate(Page.CREDIT_REVIEWS)}
             isActive={currentPage === Page.CREDIT_REVIEWS}
@@ -168,7 +164,7 @@ const Sidebar: React.FC<SidebarProps> = ({ operations, currentPage, selectedOper
               className="w-full bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-md py-1.5 pl-3 pr-8 text-xs text-gray-900 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-transparent placeholder-gray-500 transition-colors duration-200"
             />
             {searchTerm && (
-              <button 
+              <button
                 onClick={() => setSearchTerm('')}
                 className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
               >
@@ -181,7 +177,7 @@ const Sidebar: React.FC<SidebarProps> = ({ operations, currentPage, selectedOper
         <div className="flex-1 overflow-y-auto px-3 pb-4 custom-scrollbar">
           {Object.keys(groupedOperations).sort().map(area => (
             <div key={area} className="mt-4 first:mt-2">
-              <button 
+              <button
                 onClick={() => toggleArea(area)}
                 className="w-full flex items-center justify-between px-2 mb-1 group"
               >
@@ -192,7 +188,7 @@ const Sidebar: React.FC<SidebarProps> = ({ operations, currentPage, selectedOper
                   ▼
                 </span>
               </button>
-              
+
               {!collapsedAreas[area] && (
                 <div className="space-y-0.5">
                   {groupedOperations[area as Area].map(op => (
@@ -213,7 +209,7 @@ const Sidebar: React.FC<SidebarProps> = ({ operations, currentPage, selectedOper
               )}
             </div>
           ))}
-          
+
           {Object.keys(groupedOperations).length === 0 && (
             <div className="mt-8 text-center px-4">
               <p className="text-xs text-gray-500 dark:text-gray-400">Nenhuma operação encontrada para "{searchTerm}"</p>
@@ -225,11 +221,10 @@ const Sidebar: React.FC<SidebarProps> = ({ operations, currentPage, selectedOper
           <div className="grid grid-cols-3 gap-2">
             <button
               onClick={() => onNavigate(Page.AUDIT_LOG)}
-              className={`flex flex-col items-center justify-center gap-1 p-2 rounded-md text-[9px] font-medium transition-all border ${
-                currentPage === Page.AUDIT_LOG
+              className={`flex flex-col items-center justify-center gap-1 p-2 rounded-md text-[9px] font-medium transition-all border ${currentPage === Page.AUDIT_LOG
                   ? 'bg-blue-500/20 text-blue-600 dark:text-blue-400 border-blue-500/40'
                   : 'text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-800 dark:text-gray-400 border-transparent hover:border-gray-300 dark:hover:border-gray-700'
-              }`}
+                }`}
               title="Auditoria"
             >
               <HistoryIcon className="w-4 h-4" />
@@ -237,11 +232,10 @@ const Sidebar: React.FC<SidebarProps> = ({ operations, currentPage, selectedOper
             </button>
             <button
               onClick={() => onNavigate(Page.CHANGE_LOG)}
-              className={`flex flex-col items-center justify-center gap-1 p-2 rounded-md text-[9px] font-medium transition-all border ${
-                currentPage === Page.CHANGE_LOG
+              className={`flex flex-col items-center justify-center gap-1 p-2 rounded-md text-[9px] font-medium transition-all border ${currentPage === Page.CHANGE_LOG
                   ? 'bg-blue-500/20 text-blue-600 dark:text-blue-400 border-blue-500/40'
                   : 'text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-800 dark:text-gray-400 border-transparent hover:border-gray-300 dark:hover:border-gray-700'
-              }`}
+                }`}
               title="Mudanças"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
@@ -249,11 +243,10 @@ const Sidebar: React.FC<SidebarProps> = ({ operations, currentPage, selectedOper
             </button>
             <button
               onClick={() => onNavigate(Page.LEGACY)}
-              className={`flex flex-col items-center justify-center gap-1 p-2 rounded-md text-[9px] font-medium transition-all border ${
-                currentPage === Page.LEGACY
+              className={`flex flex-col items-center justify-center gap-1 p-2 rounded-md text-[9px] font-medium transition-all border ${currentPage === Page.LEGACY
                   ? 'bg-blue-500/20 text-blue-600 dark:text-blue-400 border-blue-500/40'
                   : 'text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-800 dark:text-gray-400 border-transparent hover:border-gray-300 dark:hover:border-gray-700'
-              }`}
+                }`}
               title="Legado"
             >
               <ArchiveIcon className="w-4 h-4" />
@@ -270,14 +263,13 @@ const Sidebar: React.FC<SidebarProps> = ({ operations, currentPage, selectedOper
               <SyncIcon className="w-4 h-4" />
               <span>Regras</span>
             </button>
-            
+
             <button
               onClick={() => onNavigate(Page.SYNC_QUEUE)}
-              className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-md text-[10px] font-medium transition-all border relative ${
-                currentPage === Page.SYNC_QUEUE
+              className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-md text-[10px] font-medium transition-all border relative ${currentPage === Page.SYNC_QUEUE
                   ? 'bg-amber-500/20 text-amber-500 dark:text-amber-400 border-amber-500/40'
                   : 'text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-800 border-gray-300 dark:border-gray-700'
-              }`}
+                }`}
               title="Fila de Sincronização"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
