@@ -860,7 +860,15 @@ const App: React.FC = () => {
           pushToGenericQueue={pushToGenericQueue}
         />;
       case Page.CARTEIRA_COMPLETA:
-        return <CarteiraCompletaPage />;
+        return <CarteiraCompletaPage
+          operations={filteredOperations.filter(op => op.operationType !== 'Geral')}
+          onSelectOperation={(id) => handleNavigate(Page.DETAIL, id)}
+          onAddOperation={handleAddOperation}
+          onOpenNewTaskModal={openNewTaskModal}
+          onDeleteOperation={handleDeleteOperation}
+          onUpdateOperation={handleUpdateOperation}
+          apiUrl={API_BASE_URL}
+        />;
       case Page.COMITES:
         return <ComitesPage />;
       case Page.COMITE_DETAIL:
@@ -910,22 +918,37 @@ const App: React.FC = () => {
         syncQueueCount={syncQueue.length + genericSyncQueue.length}
       />
       <div className="flex-1 flex flex-col overflow-hidden">
-        <header className="bg-white dark:bg-gray-800 shadow-sm z-10 transition-colors duration-200">
-          <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex items-center justify-between h-16">
+        <header className="relative shadow-md z-10 overflow-hidden">
+          {/* Background Image with Blue Filter */}
+          <div
+            className="absolute inset-0 z-0 bg-gray-200 dark:bg-gray-800"
+            style={{
+              backgroundImage: `url('/header-bg.jpg')`,
+              backgroundSize: 'cover',
+              backgroundPosition: 'center 75%',
+            }}
+          >
+            {/* Simple Overlay - Instead of multiply, a clean gradient is safer */}
+            <div className="absolute inset-0 bg-blue-900/40 dark:bg-blue-900/60"></div>
+            {/* Darker left edge for text readability */}
+            <div className="absolute inset-0 bg-gradient-to-r from-blue-900/80 via-blue-900/30 to-transparent dark:from-gray-900/90 dark:via-gray-900/50 dark:to-transparent"></div>
+          </div>
+
+          <div className="container mx-auto px-4 sm:px-6 lg:px-8 relative z-10 h-full">
+            <div className="flex items-center justify-between h-24">
               <div className="flex items-center gap-4">
-                <h1 className="text-2xl font-bold text-gray-800 dark:text-white">
+                <h1 className="text-2xl font-bold text-white drop-shadow-md">
                   CRM de Crédito Estruturado
                 </h1>
                 {(isSyncing || syncQueue.length > 0 || genericSyncQueue.length > 0) && (
-                  <span className="flex items-center gap-2 text-xs font-semibold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 px-2 py-1 rounded-full animate-pulse border border-blue-200 dark:border-blue-800 shadow-sm">
-                    <div className="w-2 h-2 bg-blue-600 dark:bg-blue-400 rounded-full"></div>
+                  <span className="flex items-center gap-2 text-xs font-semibold text-white/90 bg-white/20 px-2 py-1 rounded-full animate-pulse border border-white/30 shadow-sm backdrop-blur-md">
+                    <div className="w-2 h-2 bg-white rounded-full"></div>
                     Sincronizando Databricks... {(syncQueue.length + genericSyncQueue.length) > 0 ? `(${syncQueue.length + genericSyncQueue.length} pendentes)` : ''}
                   </span>
                 )}
                 {isRefreshing && operations.length > 0 && (
-                  <span className="flex items-center gap-2 text-xs font-semibold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/30 px-2 py-1 rounded-full animate-pulse border border-amber-200 dark:border-amber-800 shadow-sm" title="Atualizando dados em tempo real... Alguns itens podem estar desatualizados.">
-                    <div className="w-2 h-2 bg-amber-600 dark:bg-amber-400 rounded-full animate-spin border border-t-transparent"></div>
+                  <span className="flex items-center gap-2 text-xs font-semibold text-white/90 bg-white/20 px-2 py-1 rounded-full animate-pulse border border-white/30 shadow-sm backdrop-blur-md" title="Atualizando dados em tempo real... Alguns itens podem estar desatualizados.">
+                    <div className="w-2 h-2 rounded-full animate-spin border-2 border-white border-t-transparent"></div>
                     Atualizando...
                   </span>
                 )}
@@ -934,7 +957,7 @@ const App: React.FC = () => {
               <div className="flex items-center gap-4">
                 <button
                   onClick={toggleDarkMode}
-                  className="p-2 rounded-full text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                  className="p-2 rounded-full text-white/80 hover:text-white hover:bg-white/20 transition-all backdrop-blur-sm shadow-sm"
                   title={isDarkMode ? "Modo Claro" : "Modo Escuro"}
                 >
                   {isDarkMode ? (
@@ -948,12 +971,12 @@ const App: React.FC = () => {
                   )}
                 </button>
 
-                <div className="flex items-center bg-gray-100 dark:bg-gray-800 p-1 rounded-lg border border-gray-200 dark:border-gray-700">
+                <div className="flex items-center bg-black/20 backdrop-blur-md p-1 rounded-lg border border-white/10 shadow-inner">
                   <button
                     onClick={() => setSelectedArea('CRI')}
                     className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all duration-200 ${selectedArea === 'CRI'
-                      ? 'bg-white dark:bg-gray-700 text-blue-600 dark:text-blue-400 shadow-sm'
-                      : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
+                      ? 'bg-white text-blue-900 shadow-md scale-105'
+                      : 'text-white/80 hover:text-white hover:bg-white/10'
                       }`}
                   >
                     CRI
@@ -961,8 +984,8 @@ const App: React.FC = () => {
                   <button
                     onClick={() => setSelectedArea('Capital Solutions')}
                     className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all duration-200 ${selectedArea === 'Capital Solutions'
-                      ? 'bg-white dark:bg-gray-700 text-blue-600 dark:text-blue-400 shadow-sm'
-                      : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
+                      ? 'bg-white text-blue-900 shadow-md scale-105'
+                      : 'text-white/80 hover:text-white hover:bg-white/10'
                       }`}
                   >
                     Capital Solutions
@@ -970,8 +993,8 @@ const App: React.FC = () => {
                   <button
                     onClick={() => setSelectedArea('Mixed')}
                     className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all duration-200 ${selectedArea === 'Mixed'
-                      ? 'bg-white dark:bg-gray-700 text-blue-600 dark:text-blue-400 shadow-sm'
-                      : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
+                      ? 'bg-white text-blue-900 shadow-md scale-105'
+                      : 'text-white/80 hover:text-white hover:bg-white/10'
                       }`}
                   >
                     Mixed
@@ -980,9 +1003,9 @@ const App: React.FC = () => {
 
                 <button
                   onClick={() => handleNavigate(Page.ORIGINATION_PIPELINE)}
-                  className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 border ${currentPage === Page.ORIGINATION_PIPELINE
-                    ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
-                    : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 shadow-sm'
+                  className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 border backdrop-blur-sm ${currentPage === Page.ORIGINATION_PIPELINE
+                    ? 'bg-white text-blue-900 border-white shadow-md font-bold'
+                    : 'bg-white/10 text-white border-white/20 hover:bg-white/20 hover:border-white/40 shadow-sm'
                     }`}
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg>

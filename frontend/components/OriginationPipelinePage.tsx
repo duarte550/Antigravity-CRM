@@ -48,6 +48,10 @@ const OriginationPipelinePage: React.FC<OriginationPipelinePageProps> = ({ onNav
   const [resumoTemperatureFilter, setResumoTemperatureFilter] = useState('');
   const [resumoIndexerFilter, setResumoIndexerFilter] = useState('');
   const [resumoStatusFilter, setResumoStatusFilter] = useState('');
+
+  // HY/HG toggle filters — apply globally to all tabs
+  const [showHighYield, setShowHighYield] = useState(true);
+  const [showHighGrade, setShowHighGrade] = useState(true);
   
   const originatorsOpts = useMemo(() => Array.from(new Set(operations.map(o => o.originator).filter(Boolean))), [operations]);
   const indexersOpts = useMemo(() => Array.from(new Set(operations.flatMap(o => o.series?.map(s => s.indexer) || []).filter(Boolean))), [operations]);
@@ -146,6 +150,9 @@ const OriginationPipelinePage: React.FC<OriginationPipelinePageProps> = ({ onNav
     if (selectedAnalyst && op.analyst !== selectedAnalyst && !op.recentEvents?.some(e => e.registeredBy === selectedAnalyst)) return false;
     if (masterGroupFilter !== 'All' && (op.masterGroupName || 'Sem Master Group') !== masterGroupFilter) return false;
     if (economicGroupFilter !== 'All' && (op.economicGroupName || 'Sem Grupo Econômico') !== economicGroupFilter) return false;
+    // HY/HG filter
+    if (!showHighYield && op.risk === 'High Yield') return false;
+    if (!showHighGrade && op.risk === 'High Grade') return false;
     return true;
   });
 
@@ -683,12 +690,30 @@ const OriginationPipelinePage: React.FC<OriginationPipelinePageProps> = ({ onNav
                     {economicGroupsOpts.map(eg => <option key={eg} value={eg}>{eg === 'All' ? 'Grupo Econômico: Todos' : eg}</option>)}
                 </select>
                 
-                {(selectedAnalyst || masterGroupFilter !== 'All' || economicGroupFilter !== 'All') && (
+                {/* HY / HG Toggle Filters */}
+                <div className="flex items-center gap-1 ml-2 border-l border-gray-200 dark:border-gray-600 pl-3">
+                    <button
+                        onClick={() => setShowHighYield(!showHighYield)}
+                        className={`px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider transition-all border ${showHighYield ? 'bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400 border-amber-300 dark:border-amber-700 shadow-sm' : 'bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-500 border-gray-200 dark:border-gray-700 opacity-60'}`}
+                    >
+                        High Yield
+                    </button>
+                    <button
+                        onClick={() => setShowHighGrade(!showHighGrade)}
+                        className={`px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider transition-all border ${showHighGrade ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400 border-blue-300 dark:border-blue-700 shadow-sm' : 'bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-500 border-gray-200 dark:border-gray-700 opacity-60'}`}
+                    >
+                        High Grade
+                    </button>
+                </div>
+
+                {(selectedAnalyst || masterGroupFilter !== 'All' || economicGroupFilter !== 'All' || !showHighYield || !showHighGrade) && (
                     <button 
                         onClick={() => {
                             setSelectedAnalyst('');
                             setMasterGroupFilter('All');
                             setEconomicGroupFilter('All');
+                            setShowHighYield(true);
+                            setShowHighGrade(true);
                         }}
                         className="ml-2 text-xs text-gray-400 hover:text-red-500 dark:text-gray-500 dark:hover:text-red-400 transition-colors flex items-center gap-1 font-medium"
                     >

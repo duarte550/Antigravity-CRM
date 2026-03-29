@@ -69,11 +69,14 @@ const Sidebar: React.FC<SidebarProps> = ({ operations, currentPage, selectedOper
 
   return (
     <div className="w-64 bg-white dark:bg-gray-900 text-gray-800 dark:text-white flex flex-col h-screen border-r border-gray-200 dark:border-gray-800 shadow-xl transition-colors duration-200">
-      <div className="p-6 border-b border-gray-200 dark:border-gray-800">
-        <h2 className="text-lg font-bold tracking-tight flex items-center gap-2 text-gray-900 dark:text-white">
-          <div className="w-2 h-6 bg-blue-500 rounded-full"></div>
-          Navegação
-        </h2>
+      <div className="p-6 border-b border-gray-200 dark:border-gray-800 flex items-center justify-center">
+        <div className="dark:bg-white dark:px-4 dark:py-2 dark:rounded-lg dark:shadow-sm transition-all flex items-center justify-center">
+          <img 
+            src="/kinea-logo.png" 
+            alt="Kinea Itaú" 
+            className="h-7 md:h-8 w-auto object-contain" 
+          />
+        </div>
       </div>
       
       <nav className="flex-1 flex flex-col min-h-0">

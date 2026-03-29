@@ -41,19 +41,67 @@ const PorFundoTab: React.FC<PorFundoTabProps> = ({ operations, apiUrl, showToast
     const [selectedTemperatures, setSelectedTemperatures] = useState<string[]>(ALL_TEMPERATURES);
     const [overrides, setOverrides] = useState<Record<string, any>>({});
 
+    // Cache of fund cash data for auto-selecting the fund with most cash
+    const [fundCashMap, setFundCashMap] = useState<Record<string, number>>({});
+
+    // Persist the selected fund to localStorage
     useEffect(() => {
-        fetchApi(`${apiUrl}/api/fund-simulator/funds`)
-            .then(res => res.json())
-            .then(data => {
-                if (Array.isArray(data)) {
-                    setFunds(data);
-                    if (data.length > 0) setSelectedFund(data[0]);
+        if (selectedFund) {
+            localStorage.setItem('crm_porfundo_last_fund', selectedFund);
+        }
+    }, [selectedFund]);
+
+    useEffect(() => {
+        const loadFunds = async () => {
+            try {
+                const res = await fetchApi(`${apiUrl}/api/fund-simulator/funds`);
+                const data = await res.json();
+                if (!Array.isArray(data) || data.length === 0) return;
+
+                setFunds(data);
+
+                // Check localStorage for the last-used fund
+                const cachedFund = localStorage.getItem('crm_porfundo_last_fund');
+                if (cachedFund && data.includes(cachedFund)) {
+                    setSelectedFund(cachedFund);
+                    return;
                 }
-            })
-            .catch(err => {
+
+                // No cached fund — determine the one with the most cash available
+                // Fetch cash data for each fund in parallel to find max caixa
+                try {
+                    const cashResults = await Promise.all(
+                        data.map(async (fundName: string) => {
+                            try {
+                                const fundRes = await fetchApi(`${apiUrl}/api/fund-simulator/data/${encodeURIComponent(fundName)}`);
+                                const fundData = await fundRes.json();
+                                const caixa = (fundData.riscoData || []).find((d: any) => d.Info === 'Caixa Líquido - Financeiro');
+                                return { fund: fundName, cash: caixa ? (caixa.Valor || 0) : 0 };
+                            } catch {
+                                return { fund: fundName, cash: 0 };
+                            }
+                        })
+                    );
+
+                    // Store the cash map for reference
+                    const newCashMap: Record<string, number> = {};
+                    cashResults.forEach(r => { newCashMap[r.fund] = r.cash; });
+                    setFundCashMap(newCashMap);
+
+                    // Select the fund with the highest cash
+                    const bestFund = cashResults.reduce((best, curr) => curr.cash > best.cash ? curr : best, cashResults[0]);
+                    setSelectedFund(bestFund.fund);
+                } catch {
+                    // Fallback: just select the first fund
+                    setSelectedFund(data[0]);
+                }
+            } catch (err) {
                 console.error(err);
                 showToast("Erro ao carregar fundos", "error");
-            });
+            }
+        };
+
+        loadFunds();
     }, [apiUrl]);
 
     useEffect(() => {

@@ -407,6 +407,50 @@ const AnalystHub: React.FC<AnalystHubProps> = ({
     return events.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, 10);
   }, [analystOperations]);
 
+  // ── Weekly Summary Boards ──
+  const weeklyCompletedTasks = useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const startOfWeek = new Date(today);
+    startOfWeek.setDate(today.getDate() - today.getDay());
+
+    return analystTasks.filter(t => {
+      if (t.status !== TaskStatus.COMPLETED) return false;
+      // Find the completion event to get the actual completion date
+      const op = operations.find(o => o.id === t.operationId);
+      const completionEvent = op?.events?.find(e => e.completedTaskId === t.id);
+      if (completionEvent) {
+        const completedDate = new Date(completionEvent.date);
+        completedDate.setHours(0, 0, 0, 0);
+        return completedDate >= startOfWeek && completedDate <= today;
+      }
+      // Fallback: use dueDate
+      if (!t.dueDate) return false;
+      const dueDate = new Date(t.dueDate);
+      dueDate.setHours(0, 0, 0, 0);
+      return dueDate >= startOfWeek && dueDate <= today;
+    });
+  }, [analystTasks, operations]);
+
+  const nextWeekTasks = useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const nextMonday = new Date(today);
+    nextMonday.setDate(today.getDate() + (7 - today.getDay()) + 1);
+    const nextSunday = new Date(nextMonday);
+    nextSunday.setDate(nextMonday.getDate() + 6);
+
+    return analystTasks.filter(t => {
+      if (t.status === TaskStatus.COMPLETED) return false;
+      if (!t.dueDate) return false;
+      const dueDate = new Date(t.dueDate);
+      dueDate.setHours(0, 0, 0, 0);
+      return dueDate >= nextMonday && dueDate <= nextSunday;
+    }).sort((a, b) => {
+      return new Date(a.dueDate!).getTime() - new Date(b.dueDate!).getTime();
+    });
+  }, [analystTasks]);
+
   // Task Filters
   const [taskFilter, setTaskFilter] = useState<'Todas' | 'Pendentes' | 'Concluídas' | 'Atrasadas'>('Pendentes');
   const [taskViewMode, setTaskViewMode] = useState<'list' | 'kanban' | 'calendar'>('list');
@@ -1081,6 +1125,89 @@ const AnalystHub: React.FC<AnalystHubProps> = ({
               ))}
             </tbody>
           </table>
+        </div>
+      </div>
+
+      {/* Weekly Summary Boards */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-8">
+        {/* Concluídas esta semana */}
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
+          <div className="p-4 border-b border-gray-200 dark:border-gray-700 bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20">
+            <h3 className="font-bold text-green-800 dark:text-green-400 text-sm flex items-center gap-2">
+              <CheckCircleIcon className="w-4 h-4" />
+              Resumo da Semana — Concluídas
+              <span className="ml-auto bg-green-200 dark:bg-green-900/50 text-green-800 dark:text-green-300 px-2 py-0.5 rounded-full text-xs font-bold">{weeklyCompletedTasks.length}</span>
+            </h3>
+          </div>
+          <div className="divide-y divide-gray-50 dark:divide-gray-700/50 max-h-72 overflow-y-auto">
+            {weeklyCompletedTasks.length === 0 ? (
+              <div className="p-6 text-center text-gray-400 dark:text-gray-500 text-sm">
+                <span className="text-2xl block mb-1">📋</span>
+                Nenhuma tarefa concluída esta semana ainda.
+              </div>
+            ) : (
+              weeklyCompletedTasks.map(task => {
+                const op = operations.find(o => o.id === task.operationId);
+                return (
+                  <div key={task.id} className="px-4 py-3 flex items-start gap-3 hover:bg-green-50/30 dark:hover:bg-green-900/10 transition-colors">
+                    <div className="mt-0.5 flex-shrink-0 w-5 h-5 rounded-full bg-green-500 flex items-center justify-center">
+                      <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" /></svg>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-semibold text-gray-700 dark:text-gray-200 line-through opacity-70">{task.ruleName}</p>
+                      <p className="text-[10px] text-blue-600 dark:text-blue-400 font-medium cursor-pointer hover:underline" onClick={() => onNavigate(Page.DETAIL, op?.id)}>{op?.name}</p>
+                    </div>
+                    <span className="text-[10px] text-gray-400 dark:text-gray-500 whitespace-nowrap">
+                      {task.dueDate ? new Date(task.dueDate).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' }) : ''}
+                    </span>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+
+        {/* A Vir — Próxima Semana */}
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
+          <div className="p-4 border-b border-gray-200 dark:border-gray-700 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20">
+            <h3 className="font-bold text-blue-800 dark:text-blue-400 text-sm flex items-center gap-2">
+              <CalendarIcon className="w-4 h-4" />
+              Resumo da Semana — A Vir (Próxima Semana)
+              <span className="ml-auto bg-blue-200 dark:bg-blue-900/50 text-blue-800 dark:text-blue-300 px-2 py-0.5 rounded-full text-xs font-bold">{nextWeekTasks.length}</span>
+            </h3>
+          </div>
+          <div className="divide-y divide-gray-50 dark:divide-gray-700/50 max-h-72 overflow-y-auto">
+            {nextWeekTasks.length === 0 ? (
+              <div className="p-6 text-center text-gray-400 dark:text-gray-500 text-sm">
+                <span className="text-2xl block mb-1">🌟</span>
+                Nenhuma tarefa agendada para a próxima semana.
+              </div>
+            ) : (
+              nextWeekTasks.map(task => {
+                const op = operations.find(o => o.id === task.operationId);
+                const rulePriority = task.priority || op?.taskRules?.find(r => r.id === task.ruleId)?.priority;
+                return (
+                  <div key={task.id} className="px-4 py-3 flex items-start gap-3 hover:bg-blue-50/30 dark:hover:bg-blue-900/10 transition-colors">
+                    <div className="mt-0.5 flex-shrink-0 w-5 h-5 rounded-full border-2 border-blue-400 dark:border-blue-600 flex items-center justify-center">
+                      <div className="w-2 h-2 rounded-full bg-blue-400 dark:bg-blue-500" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-0.5">
+                        <p className="text-xs font-semibold text-gray-800 dark:text-gray-200 truncate">{task.ruleName}</p>
+                        {rulePriority && (
+                          <span className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded ${getPriorityColor(rulePriority)}`}>{rulePriority}</span>
+                        )}
+                      </div>
+                      <p className="text-[10px] text-blue-600 dark:text-blue-400 font-medium cursor-pointer hover:underline" onClick={() => onNavigate(Page.DETAIL, op?.id)}>{op?.name}</p>
+                    </div>
+                    <span className="text-[10px] text-gray-500 dark:text-gray-400 font-medium whitespace-nowrap">
+                      {task.dueDate ? new Date(task.dueDate).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' }) : 'Sem prazo'}
+                    </span>
+                  </div>
+                );
+              })
+            )}
+          </div>
         </div>
       </div>
 
