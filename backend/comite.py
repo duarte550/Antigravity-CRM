@@ -1024,13 +1024,15 @@ def add_or_update_voto(item_id):
         with conn.cursor() as cursor:
             # Check for existing vote
             cursor.execute(
-                f"SELECT id FROM {COMITE_SCHEMA_PREFIX}.comite_votos WHERE item_pauta_id = ? AND user_id = ?",
+                f"SELECT id, tipo_voto FROM {COMITE_SCHEMA_PREFIX}.comite_votos WHERE item_pauta_id = ? AND user_id = ?",
                 (item_id, user_id)
             )
             existing = cursor.fetchone()
             now = datetime.now()
+            old_tipo_voto = None
 
             if existing:
+                old_tipo_voto = existing.tipo_voto
                 cursor.execute(
                     f"""UPDATE {COMITE_SCHEMA_PREFIX}.comite_votos SET
                     tipo_voto = ?, cargo_voto = ?, comentario = ?, updated_at = ?
@@ -1049,6 +1051,16 @@ def add_or_update_voto(item_id):
                      data.get('tipo_voto'), data.get('cargo_voto'),
                      data.get('comentario'), now, now)
                 )
+
+            # ── Record vote history ──
+            hist_id = _get_next_id(cursor, 'comite_voto_historico')
+            cursor.execute(
+                f"""INSERT INTO {COMITE_SCHEMA_PREFIX}.comite_voto_historico
+                (id, voto_id, user_id, tipo_voto_anterior, tipo_voto_novo, changed_at)
+                VALUES (?, ?, ?, ?, ?, ?)""",
+                (hist_id, voto_id, user_id, old_tipo_voto, data.get('tipo_voto'), now)
+            )
+
         conn.commit()
         return jsonify({
             'id': voto_id,
@@ -1059,6 +1071,7 @@ def add_or_update_voto(item_id):
             'cargo_voto': data.get('cargo_voto'),
             'comentario': data.get('comentario'),
             'created_at': safe_isoformat(now),
+            'updated_at': safe_isoformat(now),
         }), 201
     except Exception as e:
         current_app.logger.error(f"Error POST voto: {e}", exc_info=True)
@@ -1599,3 +1612,289 @@ def _build_relatorio_html(detail):
     </body></html>
     """
     return html
+
+
+# ══════════════════════════════════════════════════════════════
+# ROTA — Item de Pauta Completo (para Video Page)
+# ══════════════════════════════════════════════════════════════
+
+@comite_bp.route('/api/comite/itens/<int:item_id>/full', methods=['GET'])
+def get_item_full(item_id):
+    """Retorna item de pauta completo com dados enriquecidos para a Video Page.
+    
+    Includes: item data, committee context, votes grouped by cargo,
+    comments with threading, operation risks/ratings, and video status.
+    """
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cursor:
+            # ── 1. Fetch item ──
+            cursor.execute(
+                f"SELECT * FROM {COMITE_SCHEMA_PREFIX}.comite_itens_pauta WHERE id = ?",
+                (item_id,)
+            )
+            item_row = cursor.fetchone()
+            if not item_row:
+                return jsonify({"error": "Item não encontrado."}), 404
+            item = format_row(item_row, cursor)
+
+            comite_id = item.get('comite_id')
+            operation_id = item.get('operation_id')
+
+            # ── 2. Fetch committee + rule context ──
+            cursor.execute(
+                f"SELECT * FROM {COMITE_SCHEMA_PREFIX}.comites WHERE id = ?",
+                (comite_id,)
+            )
+            comite_row = cursor.fetchone()
+            comite = format_row(comite_row, cursor) if comite_row else {}
+
+            cursor.execute(
+                f"SELECT * FROM {COMITE_SCHEMA_PREFIX}.comite_rules WHERE id = ?",
+                (comite.get('comite_rule_id'),)
+            )
+            rule_row = cursor.fetchone()
+            rule = format_row(rule_row, cursor) if rule_row else {}
+
+            # ── 3. Fetch comentários with likes ──
+            cursor.execute(
+                f"SELECT * FROM {COMITE_SCHEMA_PREFIX}.comite_comentarios WHERE item_pauta_id = ? ORDER BY created_at",
+                (item_id,)
+            )
+            comentarios_raw = [format_row(r, cursor) for r in cursor.fetchall()]
+            comment_ids = [c['id'] for c in comentarios_raw]
+
+            likes_by_comment = {}
+            if comment_ids:
+                in_clause = ','.join(['?'] * len(comment_ids))
+                cursor.execute(
+                    f"SELECT comentario_id, COUNT(*) as cnt FROM {COMITE_SCHEMA_PREFIX}.comite_likes WHERE comentario_id IN ({in_clause}) GROUP BY comentario_id",
+                    comment_ids
+                )
+                for r in cursor.fetchall():
+                    row = format_row(r, cursor)
+                    likes_by_comment[row['comentario_id']] = int(row['cnt'])
+
+            # Check which comments the requesting user has liked
+            requesting_user_id = request.args.get('user_id', type=int)
+            liked_by_user = set()
+            if requesting_user_id and comment_ids:
+                in_clause = ','.join(['?'] * len(comment_ids))
+                cursor.execute(
+                    f"SELECT comentario_id FROM {COMITE_SCHEMA_PREFIX}.comite_likes WHERE comentario_id IN ({in_clause}) AND user_id = ?",
+                    comment_ids + [requesting_user_id]
+                )
+                for r in cursor.fetchall():
+                    row = format_row(r, cursor)
+                    liked_by_user.add(row['comentario_id'])
+
+            comentarios = []
+            for c in comentarios_raw:
+                comentarios.append({
+                    'id': c['id'],
+                    'item_pauta_id': c['item_pauta_id'],
+                    'user_id': c.get('user_id'),
+                    'user_nome': c.get('user_nome'),
+                    'texto': c.get('texto'),
+                    'parent_comment_id': c.get('parent_comment_id'),
+                    'created_at': safe_isoformat(c.get('created_at')),
+                    'likes': likes_by_comment.get(c['id'], 0),
+                    'liked_by_me': c['id'] in liked_by_user,
+                })
+
+            # ── 4. Fetch votos with history ──
+            cursor.execute(
+                f"SELECT * FROM {COMITE_SCHEMA_PREFIX}.comite_votos WHERE item_pauta_id = ? ORDER BY created_at",
+                (item_id,)
+            )
+            votos_raw = [format_row(r, cursor) for r in cursor.fetchall()]
+            voto_ids = [v['id'] for v in votos_raw]
+
+            historico_by_voto = {}
+            if voto_ids:
+                in_clause = ','.join(['?'] * len(voto_ids))
+                cursor.execute(
+                    f"SELECT * FROM {COMITE_SCHEMA_PREFIX}.comite_voto_historico WHERE voto_id IN ({in_clause}) ORDER BY changed_at",
+                    voto_ids
+                )
+                for r in cursor.fetchall():
+                    h = format_row(r, cursor)
+                    vid = h.get('voto_id')
+                    if vid not in historico_by_voto:
+                        historico_by_voto[vid] = []
+                    historico_by_voto[vid].append({
+                        'tipo_voto_anterior': h.get('tipo_voto_anterior'),
+                        'tipo_voto_novo': h.get('tipo_voto_novo'),
+                        'changed_at': safe_isoformat(h.get('changed_at')),
+                    })
+
+            votos = []
+            for v in votos_raw:
+                votos.append({
+                    'id': v['id'],
+                    'item_pauta_id': v['item_pauta_id'],
+                    'user_id': v.get('user_id'),
+                    'user_nome': v.get('user_nome'),
+                    'tipo_voto': v.get('tipo_voto'),
+                    'cargo_voto': v.get('cargo_voto'),
+                    'comentario': v.get('comentario'),
+                    'created_at': safe_isoformat(v.get('created_at')),
+                    'updated_at': safe_isoformat(v.get('updated_at')),
+                    'historico': historico_by_voto.get(v['id'], []),
+                })
+
+            # ── 5. Fetch videos assistidos ──
+            cursor.execute(
+                f"SELECT * FROM {COMITE_SCHEMA_PREFIX}.comite_videos_assistidos WHERE item_pauta_id = ?",
+                (item_id,)
+            )
+            videos_assistidos = []
+            for va_row in cursor.fetchall():
+                va = format_row(va_row, cursor)
+                videos_assistidos.append({
+                    'id': va['id'],
+                    'item_pauta_id': va['item_pauta_id'],
+                    'user_id': va.get('user_id'),
+                    'user_nome': va.get('user_nome'),
+                    'assistido': va.get('assistido'),
+                    'created_at': safe_isoformat(va.get('created_at')),
+                })
+
+            # ── 6. Fetch próximos passos ──
+            cursor.execute(
+                f"SELECT * FROM {COMITE_SCHEMA_PREFIX}.comite_proximos_passos WHERE item_pauta_id = ? ORDER BY created_at",
+                (item_id,)
+            )
+            proximos_passos = []
+            for pp_row in cursor.fetchall():
+                pp = format_row(pp_row, cursor)
+                proximos_passos.append({
+                    'id': pp['id'],
+                    'item_pauta_id': pp.get('item_pauta_id'),
+                    'comite_id': pp.get('comite_id'),
+                    'descricao': pp.get('descricao'),
+                    'responsavel_nome': pp.get('responsavel_nome'),
+                    'status': pp.get('status', 'pendente'),
+                    'prazo': safe_isoformat(pp.get('prazo')),
+                    'prioridade': pp.get('prioridade', 'media'),
+                    'created_at': safe_isoformat(pp.get('created_at')),
+                })
+
+            # ── 7. Operation data (risks, ratings, watchlist) ──
+            operation_data = None
+            if operation_id:
+                cursor.execute(
+                    "SELECT * FROM cri_cra_dev.crm.operations WHERE id = ?",
+                    (operation_id,)
+                )
+                op_row = cursor.fetchone()
+                if op_row:
+                    op = format_row(op_row, cursor)
+                    # Fetch risks
+                    cursor.execute(
+                        "SELECT * FROM cri_cra_dev.crm.operation_risks WHERE operation_id = ? ORDER BY created_at DESC",
+                        (operation_id,)
+                    )
+                    risks = []
+                    for r in cursor.fetchall():
+                        rd = format_row(r, cursor)
+                        risks.append({
+                            'id': rd['id'],
+                            'title': rd.get('title'),
+                            'description': rd.get('description'),
+                            'severity': rd.get('severity'),
+                            'created_at': safe_isoformat(rd.get('created_at')),
+                        })
+
+                    # Latest rating history
+                    cursor.execute(
+                        "SELECT * FROM cri_cra_dev.crm.rating_history WHERE operation_id = ? ORDER BY date DESC LIMIT 1",
+                        (operation_id,)
+                    )
+                    rh_row = cursor.fetchone()
+                    latest_rating = None
+                    if rh_row:
+                        rh = format_row(rh_row, cursor)
+                        latest_rating = {
+                            'rating_operation': rh.get('rating_operation'),
+                            'rating_group': rh.get('rating_group'),
+                            'watchlist': rh.get('watchlist'),
+                            'sentiment': rh.get('sentiment'),
+                            'date': safe_isoformat(rh.get('date')),
+                        }
+
+                    operation_data = {
+                        'id': op['id'],
+                        'name': op.get('name'),
+                        'area': op.get('area'),
+                        'rating_operation': op.get('rating_operation'),
+                        'watchlist': op.get('watchlist'),
+                        'status': op.get('status'),
+                        'risks': risks,
+                        'latest_rating': latest_rating,
+                    }
+
+            # ── 8. Group votos by cargo for triple approval ──
+            farois = {}
+            for cargo in ['gestao', 'risco', 'diretoria']:
+                cargo_votos = [v for v in votos if v.get('cargo_voto') == cargo]
+                if not cargo_votos:
+                    farois[cargo] = {'status': 'pendente', 'votos': []}
+                else:
+                    # Determine status: if any reprovado → vermelho, if any discussao → amarelo, all aprovado → verde
+                    has_reprovado = any(v['tipo_voto'] == 'reprovado' for v in cargo_votos)
+                    has_discussao = any(v['tipo_voto'] == 'discussao' for v in cargo_votos)
+                    all_aprovado = all(v['tipo_voto'] == 'aprovado' for v in cargo_votos)
+
+                    if has_reprovado:
+                        status = 'reprovado'
+                    elif has_discussao:
+                        status = 'discussao'
+                    elif all_aprovado:
+                        status = 'aprovado'
+                    else:
+                        status = 'pendente'
+
+                    farois[cargo] = {'status': status, 'votos': cargo_votos}
+
+            return jsonify({
+                'item': {
+                    'id': item['id'],
+                    'comite_id': item['comite_id'],
+                    'secao_id': item.get('secao_id'),
+                    'titulo': item.get('titulo'),
+                    'descricao': item.get('descricao'),
+                    'criador_user_id': item.get('criador_user_id'),
+                    'criador_nome': item.get('criador_nome'),
+                    'tipo': item.get('tipo'),
+                    'video_url': item.get('video_url'),
+                    'video_duracao': item.get('video_duracao'),
+                    'prioridade': item.get('prioridade', 'normal'),
+                    'operation_id': item.get('operation_id'),
+                    'tipo_caso': item.get('tipo_caso'),
+                    'created_at': safe_isoformat(item.get('created_at')),
+                },
+                'comite': {
+                    'id': comite.get('id'),
+                    'data': safe_isoformat(comite.get('data')),
+                    'status': comite.get('status'),
+                    'rule': {
+                        'tipo': rule.get('tipo'),
+                        'area': rule.get('area'),
+                        'dia_da_semana': rule.get('dia_da_semana'),
+                        'horario': rule.get('horario'),
+                    } if rule else None,
+                },
+                'comentarios': comentarios,
+                'votos': votos,
+                'farois': farois,
+                'videos_assistidos': videos_assistidos,
+                'proximos_passos': proximos_passos,
+                'operation': operation_data,
+            })
+    except Exception as e:
+        current_app.logger.error(f"Error GET /api/comite/itens/{item_id}/full: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            conn.close()

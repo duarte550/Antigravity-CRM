@@ -960,8 +960,10 @@ const App: React.FC = () => {
       case Page.COMITE_VIDEO:
         return <ComiteVideoPage
           itemPautaId={selectedOperationId || 0}
+          comiteId={0}
           apiUrl={API_BASE_URL}
           showToast={showToast}
+          pushToGenericQueue={pushToGenericQueue}
           onNavigate={handleNavigate}
         />;
       default:

@@ -221,6 +221,8 @@ Cada prompt abaixo instrui exaustivamente o Gemini 3.1 referenciando **todas** a
 > - Feed de comentários com: nome do usuário, data, texto.
 > - Funcionalidade de **resposta** (threading com `parent_comment_id`).
 > - Botão de **like com contador**.
+> - os comentários dessa pagina devem ser os mesmos comentários da pagina do comitê específico.
+> - comentários devem ter a funcionalidade de resposta
 >
 > **5. Aprovação Cruzada:**
 > - Usuários devem poder aprovar **tanto na página de comitê específico quanto na página de vídeo** (mesmas rotas backend).

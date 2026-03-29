@@ -994,3 +994,335 @@ class TestPautaOperationEndToEnd:
 
         # Cleanup
         client.delete(f"/api/structuring-operations/{so_id}")
+
+
+# ══════════════════════════════════════════════════════════════
+# Testes — GET item/full (Video Page endpoint)
+# ══════════════════════════════════════════════════════════════
+
+class TestItemFull:
+    """Testes para GET /api/comite/itens/<item_id>/full (Video Page)."""
+
+    def test_get_item_full_basic(self, client):
+        """Endpoint retorna dados enriquecidos do item existente."""
+        # Item 1 was created by previous tests (TestItensPauta)
+        resp = client.get('/api/comite/itens/1/full')
+        assert resp.status_code == 200
+        data = resp.get_json()
+
+        # Verify top-level keys
+        assert 'item' in data
+        assert 'comite' in data
+        assert 'comentarios' in data
+        assert 'votos' in data
+        assert 'farois' in data
+        assert 'videos_assistidos' in data
+        assert 'proximos_passos' in data
+
+    def test_get_item_full_item_fields(self, client):
+        """Verifica campos do item retornado."""
+        resp = client.get('/api/comite/itens/1/full')
+        data = resp.get_json()
+        item = data['item']
+
+        assert 'id' in item
+        assert 'comite_id' in item
+        assert 'titulo' in item
+        assert 'tipo' in item
+        assert 'prioridade' in item
+        assert 'tipo_caso' in item
+
+    def test_get_item_full_comite_context(self, client):
+        """Verifica dados do comitê e regra."""
+        resp = client.get('/api/comite/itens/1/full')
+        data = resp.get_json()
+
+        comite = data['comite']
+        assert 'id' in comite
+        assert 'data' in comite
+        assert 'status' in comite
+        assert 'rule' in comite
+        assert comite['rule']['tipo'] is not None
+
+    def test_get_item_full_farois_structure(self, client):
+        """Verifica estrutura dos faróis tríplices."""
+        resp = client.get('/api/comite/itens/1/full')
+        data = resp.get_json()
+
+        farois = data['farois']
+        # Must have all 3 cargos
+        assert 'gestao' in farois
+        assert 'risco' in farois
+        assert 'diretoria' in farois
+
+        for cargo in ['gestao', 'risco', 'diretoria']:
+            assert 'status' in farois[cargo]
+            assert 'votos' in farois[cargo]
+            assert farois[cargo]['status'] in ['pendente', 'aprovado', 'reprovado', 'discussao']
+
+    def test_get_item_full_not_found(self, client):
+        """Item inexistente retorna 404."""
+        resp = client.get('/api/comite/itens/99999/full')
+        assert resp.status_code == 404
+
+    def test_get_item_full_with_comments(self, client):
+        """Verifica que comentários são retornados com likes."""
+        resp = client.get('/api/comite/itens/1/full')
+        data = resp.get_json()
+
+        # Item 1 had comments added in previous tests
+        assert isinstance(data['comentarios'], list)
+        if len(data['comentarios']) > 0:
+            c = data['comentarios'][0]
+            assert 'id' in c
+            assert 'texto' in c
+            assert 'likes' in c
+            assert 'user_nome' in c
+
+    def test_get_item_full_with_user_id(self, client):
+        """Verifica que liked_by_me é populado quando user_id é passado."""
+        resp = client.get('/api/comite/itens/1/full?user_id=2')
+        assert resp.status_code == 200
+        data = resp.get_json()
+        for c in data['comentarios']:
+            assert 'liked_by_me' in c
+
+
+class TestVotoHistorico:
+    """Testes para histórico de votos (comite_voto_historico)."""
+
+    def test_first_vote_creates_history(self, client):
+        """Primeiro voto cria registro no histórico com tipo_voto_anterior = null."""
+        # Create a new item for clean test
+        detail = client.get('/api/comite/comites/1').get_json()
+        secao_id = detail['secoes'][0]['id']
+
+        item_resp = client.post('/api/comite/comites/1/itens', json={
+            'titulo': 'Item Teste Hist Voto',
+            'secao_id': secao_id,
+            'criador_user_id': 1,
+            'criador_nome': 'Admin',
+            'tipo_caso': 'geral',
+        })
+        item_id = item_resp.get_json()['id']
+
+        # Cast first vote
+        resp = client.post(f'/api/comite/itens/{item_id}/votos', json={
+            'user_id': 10,
+            'user_nome': 'Hist User',
+            'tipo_voto': 'aprovado',
+            'cargo_voto': 'gestao',
+        })
+        assert resp.status_code == 201
+        data = resp.get_json()
+        assert data['tipo_voto'] == 'aprovado'
+        assert 'updated_at' in data
+
+        # Get full item and check history
+        full_resp = client.get(f'/api/comite/itens/{item_id}/full')
+        full = full_resp.get_json()
+        votos = full['votos']
+        hist_voto = next((v for v in votos if v['user_id'] == 10), None)
+        assert hist_voto is not None
+        assert len(hist_voto.get('historico', [])) >= 1
+        first_entry = hist_voto['historico'][0]
+        assert first_entry['tipo_voto_anterior'] is None
+        assert first_entry['tipo_voto_novo'] == 'aprovado'
+
+    def test_vote_change_records_history(self, client):
+        """Mudança de voto cria novo registro com tipo_voto_anterior preenchido."""
+        # Use same item as above (item created by test_first_vote_creates_history)
+        detail = client.get('/api/comite/comites/1').get_json()
+        secao_id = detail['secoes'][0]['id']
+
+        item_resp = client.post('/api/comite/comites/1/itens', json={
+            'titulo': 'Item Teste Change Vote',
+            'secao_id': secao_id,
+            'criador_user_id': 1,
+            'criador_nome': 'Admin',
+            'tipo_caso': 'geral',
+        })
+        item_id = item_resp.get_json()['id']
+
+        # First vote
+        client.post(f'/api/comite/itens/{item_id}/votos', json={
+            'user_id': 11,
+            'user_nome': 'Change User',
+            'tipo_voto': 'aprovado',
+            'cargo_voto': 'risco',
+        })
+
+        # Change vote
+        client.post(f'/api/comite/itens/{item_id}/votos', json={
+            'user_id': 11,
+            'user_nome': 'Change User',
+            'tipo_voto': 'reprovado',
+            'cargo_voto': 'risco',
+            'comentario': 'Mudei de ideia após análise',
+        })
+
+        # Get full item and check history
+        full_resp = client.get(f'/api/comite/itens/{item_id}/full')
+        full = full_resp.get_json()
+        votos = full['votos']
+        hist_voto = next((v for v in votos if v['user_id'] == 11), None)
+        assert hist_voto is not None
+        assert hist_voto['tipo_voto'] == 'reprovado'
+        assert len(hist_voto.get('historico', [])) >= 2
+
+        # First entry: no anterior
+        assert hist_voto['historico'][0]['tipo_voto_anterior'] is None
+        assert hist_voto['historico'][0]['tipo_voto_novo'] == 'aprovado'
+
+        # Second entry: anterior = aprovado, novo = reprovado
+        assert hist_voto['historico'][1]['tipo_voto_anterior'] == 'aprovado'
+        assert hist_voto['historico'][1]['tipo_voto_novo'] == 'reprovado'
+
+
+class TestFaroisTriplices:
+    """Testes para lógica de faróis tríplices."""
+
+    @pytest.fixture(autouse=True)
+    def _setup(self, client):
+        detail = client.get('/api/comite/comites/1').get_json()
+        secao_id = detail['secoes'][0]['id']
+
+        item_resp = client.post('/api/comite/comites/1/itens', json={
+            'titulo': 'Item Teste Faróis',
+            'secao_id': secao_id,
+            'criador_user_id': 1,
+            'criador_nome': 'Admin',
+            'tipo_caso': 'geral',
+        })
+        assert item_resp.status_code == 201, f"Failed to create item: {item_resp.get_json()}"
+        self.item_id = item_resp.get_json()['id']
+        yield
+
+    def test_farois_all_pendente_initial(self, client):
+        """Sem votos, todos os faróis devem estar 'pendente'."""
+        resp = client.get(f'/api/comite/itens/{self.item_id}/full')
+        farois = resp.get_json()['farois']
+
+        for cargo in ['gestao', 'risco', 'diretoria']:
+            assert farois[cargo]['status'] == 'pendente'
+
+    def test_farol_aprovado(self, client):
+        """Gestão vota aprovado → farol gestao fica 'aprovado'."""
+        client.post(f'/api/comite/itens/{self.item_id}/votos', json={
+            'user_id': 20,
+            'user_nome': 'Gestor 1',
+            'tipo_voto': 'aprovado',
+            'cargo_voto': 'gestao',
+        })
+
+        resp = client.get(f'/api/comite/itens/{self.item_id}/full')
+        farois = resp.get_json()['farois']
+        assert farois['gestao']['status'] == 'aprovado'
+        assert farois['risco']['status'] == 'pendente'
+        assert farois['diretoria']['status'] == 'pendente'
+
+    def test_farol_reprovado_takes_priority(self, client):
+        """Se alguém no cargo reprova, o farol fica 'reprovado'."""
+        # First, approve
+        client.post(f'/api/comite/itens/{self.item_id}/votos', json={
+            'user_id': 30,
+            'user_nome': 'Risco 1',
+            'tipo_voto': 'aprovado',
+            'cargo_voto': 'risco',
+        })
+        # Then, another person in same cargo reproves
+        client.post(f'/api/comite/itens/{self.item_id}/votos', json={
+            'user_id': 31,
+            'user_nome': 'Risco 2',
+            'tipo_voto': 'reprovado',
+            'cargo_voto': 'risco',
+        })
+
+        resp = client.get(f'/api/comite/itens/{self.item_id}/full')
+        farois = resp.get_json()['farois']
+        assert farois['risco']['status'] == 'reprovado'
+
+    def test_farol_discussao(self, client):
+        """Se alguém vota discussão sem reprovação, farol fica 'discussao'."""
+        client.post(f'/api/comite/itens/{self.item_id}/votos', json={
+            'user_id': 40,
+            'user_nome': 'Diretor 1',
+            'tipo_voto': 'discussao',
+            'cargo_voto': 'diretoria',
+        })
+
+        resp = client.get(f'/api/comite/itens/{self.item_id}/full')
+        farois = resp.get_json()['farois']
+        assert farois['diretoria']['status'] == 'discussao'
+
+
+class TestItemFullWithOperation:
+    """Testes para GET /itens/<id>/full com operação vinculada."""
+
+    def test_item_full_includes_operation_data(self, client, mock_connection):
+        """Item vinculado a operação retorna dados da operação, riscos e ratings."""
+        # Ensure the operation exists (from TestCompletarERelatorio setup)
+        with mock_connection.cursor() as c:
+            c.cursor.execute("SELECT id FROM operations WHERE id = 9999")
+            row = c.cursor.fetchone()
+            if not row:
+                c.cursor.execute(
+                    """INSERT INTO operations (id, name, area, operation_type, responsible_analyst,
+                       review_frequency, call_frequency, df_frequency, segmento,
+                       rating_operation, watchlist) VALUES
+                       (9999, 'Op Teste Video', 'CRI', 'CRI', 'Analista',
+                        'Mensal', 'Mensal', 'Trimestral', 'Corporate', 'Ba1', 'Verde')"""
+                )
+                mock_connection.conn.commit()
+
+        # Add a risk
+        with mock_connection.cursor() as c:
+            c.cursor.execute(
+                "INSERT OR IGNORE INTO operation_risks (id, operation_id, title, severity) VALUES (9999, 9999, 'Risco Teste', 'Alta')"
+            )
+            mock_connection.conn.commit()
+
+        # Create item linked to operation 9999
+        detail = client.get('/api/comite/comites/1').get_json()
+        secao_id = detail['secoes'][0]['id']
+
+        item_resp = client.post('/api/comite/comites/1/itens', json={
+            'titulo': 'Item Com Operação Full',
+            'secao_id': secao_id,
+            'criador_user_id': 1,
+            'criador_nome': 'Admin',
+            'tipo_caso': 'geral',
+            'operation_id': 9999,
+        })
+        assert item_resp.status_code == 201, f"Failed: {item_resp.get_json()}"
+        item_id = item_resp.get_json()['id']
+
+        # Get full data
+        resp = client.get(f'/api/comite/itens/{item_id}/full')
+        assert resp.status_code == 200
+        data = resp.get_json()
+
+        # Verify operation data exists
+        assert data['operation'] is not None
+        assert data['operation']['id'] == 9999
+        assert data['operation']['name'] is not None  # Name may vary depending on test order
+        assert isinstance(data['operation']['risks'], list)
+
+    def test_item_full_without_operation(self, client):
+        """Item sem operação retorna operation como None."""
+        detail = client.get('/api/comite/comites/1').get_json()
+        secao_id = detail['secoes'][0]['id']
+
+        item_resp = client.post('/api/comite/comites/1/itens', json={
+            'titulo': 'Item Sem Operação Full',
+            'secao_id': secao_id,
+            'criador_user_id': 1,
+            'criador_nome': 'Admin',
+            'tipo_caso': 'geral',
+        })
+        item_id = item_resp.get_json()['id']
+
+        resp = client.get(f'/api/comite/itens/{item_id}/full')
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data['operation'] is None

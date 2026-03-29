@@ -919,8 +919,14 @@ const ComiteDetailPage: React.FC<ComiteDetailPageProps> = ({ comiteId, apiUrl, s
                                 <div className="flex items-center justify-between mb-2">
                                   <div className="flex items-center gap-2">
                                     <Video className="w-4 h-4 text-rose-500" />
-                                    <a href={item.video_url} target="_blank" rel="noopener noreferrer" className="text-sm font-medium text-rose-600 dark:text-rose-400 hover:underline">
-                                      Assistir Vídeo
+                                    <button
+                                      onClick={() => onNavigate(Page.COMITE_VIDEO, item.id)}
+                                      className="text-sm font-medium text-rose-600 dark:text-rose-400 hover:underline"
+                                    >
+                                      Abrir Player →
+                                    </button>
+                                    <a href={item.video_url} target="_blank" rel="noopener noreferrer" className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 flex items-center gap-1">
+                                      <ExternalLink className="w-3 h-3" /> Externo
                                     </a>
                                     {item.video_duracao && <span className="text-xs text-gray-400">({item.video_duracao})</span>}
                                   </div>
@@ -995,6 +1001,12 @@ const ComiteDetailPage: React.FC<ComiteDetailPageProps> = ({ comiteId, apiUrl, s
                                     ))}
                                   </div>
                                 )}
+                                <button
+                                  onClick={() => onNavigate(Page.COMITE_VIDEO, item.id)}
+                                  className="text-xs text-purple-600 dark:text-purple-400 hover:underline font-medium mt-2 flex items-center gap-1"
+                                >
+                                  Ver painel completo de aprovação →
+                                </button>
                               </div>
                             )}
 
