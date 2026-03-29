@@ -33,6 +33,53 @@ import { fetchApi } from './utils/api';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://antigravity-crm-two.vercel.app';
 
+// ─── URL ↔ Page mapping ───
+const PAGE_TO_PATH: Record<Page, string> = {
+  [Page.OVERVIEW]: '/',
+  [Page.DETAIL]: '/operacao',
+  [Page.TASKS]: '/tarefas',
+  [Page.CREDIT_REVIEWS]: '/revisoes',
+  [Page.AUDIT_LOG]: '/audit-log',
+  [Page.WATCHLIST]: '/watchlist',
+  [Page.ANALYST_HUB]: '/analyst-hub',
+  [Page.CHANGE_LOG]: '/changelog',
+  [Page.LEGACY]: '/legado',
+  [Page.SYNC_QUEUE]: '/sync-queue',
+  [Page.MASTER_GROUPS]: '/master-groups',
+  [Page.MASTER_GROUP_DETAIL]: '/master-group',
+  [Page.ECONOMIC_GROUPS]: '/economic-groups',
+  [Page.ECONOMIC_GROUP_DETAIL]: '/economic-group',
+  [Page.ORIGINATION_PIPELINE]: '/originacao',
+  [Page.STRUCTURING_OPERATION_DETAIL]: '/structuring-operation',
+  [Page.CARTEIRA_COMPLETA]: '/carteira',
+  [Page.COMITES]: '/comites',
+  [Page.COMITE_DETAIL]: '/comite',
+  [Page.COMITE_VIDEO]: '/comite-video',
+  [Page.COMITE_ITEM_PAUTA]: '/comite-item',
+  [Page.COMITE_PROXIMOS_PASSOS]: '/comite-proximos-passos',
+};
+
+const PATH_TO_PAGE: Record<string, Page> = Object.fromEntries(
+  Object.entries(PAGE_TO_PATH).map(([page, path]) => [path, page as Page])
+) as Record<string, Page>;
+
+const buildUrl = (page: Page, id?: number): string => {
+  const base = PAGE_TO_PATH[page] || '/';
+  return id ? `${base}/${id}` : base;
+};
+
+const parseUrl = (pathname: string): { page: Page; id?: number } => {
+  const clean = pathname.replace(/\/+$/, '') || '/';
+  // Try exact match first
+  if (PATH_TO_PAGE[clean]) return { page: PATH_TO_PAGE[clean] };
+  // Try /path/id pattern
+  const match = clean.match(/^(\/[\w-]+)\/([\d]+)$/);
+  if (match && PATH_TO_PAGE[match[1]]) {
+    return { page: PATH_TO_PAGE[match[1]], id: parseInt(match[2]) };
+  }
+  return { page: Page.OVERVIEW };
+};
+
 const App: React.FC = () => {
   const [operations, setOperations] = useState<Operation[]>(() => {
     const cached = localStorage.getItem('operations_cache');
@@ -45,8 +92,14 @@ const App: React.FC = () => {
     }
     return [];
   });
-  const [currentPage, setCurrentPage] = useState<Page>(Page.OVERVIEW);
-  const [selectedOperationId, setSelectedOperationId] = useState<number | null>(null);
+  const [currentPage, setCurrentPage] = useState<Page>(() => {
+    const { page } = parseUrl(window.location.pathname);
+    return page;
+  });
+  const [selectedOperationId, setSelectedOperationId] = useState<number | null>(() => {
+    const { id } = parseUrl(window.location.pathname);
+    return id ?? null;
+  });
   const [selectedArea, setSelectedArea] = useState<Area | 'Mixed'>('Mixed');
   const [newTaskModalState, setNewTaskModalState] = useState<{ isOpen: boolean; operationId?: number; analystName?: string }>({ isOpen: false });
   const [reviewModalState, setReviewModalState] = useState<{ isOpen: boolean; task: Task | null }>({ isOpen: false, task: null });
@@ -406,9 +459,29 @@ const App: React.FC = () => {
     }
   };
 
+  // ─── Browser back/forward navigation ───
+  useEffect(() => {
+    const handlePopState = () => {
+      const { page, id } = parseUrl(window.location.pathname);
+      setCurrentPage(page);
+      setSelectedOperationId(id ?? null);
+      if (page === Page.DETAIL && id) {
+        fetchOperationDetails(id);
+      }
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
   const handleNavigate = async (page: Page, operationId?: number) => {
     setCurrentPage(page);
     setSelectedOperationId(operationId ?? null);
+
+    // Push URL to browser history
+    const url = buildUrl(page, operationId);
+    if (window.location.pathname !== url) {
+      window.history.pushState({ page, operationId }, '', url);
+    }
 
     if (page === Page.DETAIL && operationId) {
       await fetchOperationDetails(operationId);
@@ -1026,6 +1099,17 @@ const App: React.FC = () => {
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg>
                   Originação
+                </button>
+
+                <button
+                  onClick={() => handleNavigate(Page.COMITES)}
+                  className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 border backdrop-blur-sm ${currentPage === Page.COMITES || currentPage === Page.COMITE_DETAIL
+                    ? 'bg-white text-blue-900 border-white shadow-md font-bold'
+                    : 'bg-white/10 text-white border-white/20 hover:bg-white/20 hover:border-white/40 shadow-sm'
+                    }`}
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                  Comitês
                 </button>
               </div>
             </div>

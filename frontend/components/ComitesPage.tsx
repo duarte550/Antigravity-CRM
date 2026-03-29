@@ -63,6 +63,7 @@ const ComitesPage: React.FC<ComitesPageProps> = ({ apiUrl, showToast, pushToGene
   const [rules, setRules] = useState<ComiteRule[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedArea, setSelectedArea] = useState<string>('all');
+  const [selectedRuleId, setSelectedRuleId] = useState<number | null>(null);
   const [showNewRuleModal, setShowNewRuleModal] = useState(false);
   const [isSavingRule, setIsSavingRule] = useState(false);
   const [carouselApi, setCarouselApi] = useState<CarouselApi>();
@@ -106,7 +107,15 @@ const ComitesPage: React.FC<ComitesPageProps> = ({ apiUrl, showToast, pushToGene
         fetch(`${apiUrl}/api/comite/rules`),
       ]);
       if (comitesRes.ok) setComites(await comitesRes.json());
-      if (rulesRes.ok) setRules(await rulesRes.json());
+      if (rulesRes.ok) {
+        const fetchedRules = await rulesRes.json();
+        setRules(fetchedRules);
+        // Auto-select the first active rule if none selected
+        if (!selectedRuleId) {
+          const activeR = fetchedRules.filter((r: ComiteRule) => r.ativo);
+          if (activeR.length > 0) setSelectedRuleId(activeR[0].id);
+        }
+      }
     } catch (e) {
       console.error('Error fetching comites:', e);
     } finally {
@@ -114,41 +123,75 @@ const ComitesPage: React.FC<ComitesPageProps> = ({ apiUrl, showToast, pushToGene
     }
   };
 
-  const filteredComites = useMemo(() => {
-    if (selectedArea === 'all') return comites;
-    return comites.filter(c => c.area === selectedArea);
-  }, [comites, selectedArea]);
+  const activeRules = useMemo(() => rules.filter(r => r.ativo), [rules]);
 
-  // Separate: concluidos (past), agendado (next active)
+  // Filter active rules by selected area
+  const filteredRules = useMemo(() => {
+    if (selectedArea === 'all') return activeRules;
+    return activeRules.filter(r => r.area === selectedArea);
+  }, [activeRules, selectedArea]);
+
+  // When area filter changes and selected rule is no longer visible, auto-select first visible rule
+  useEffect(() => {
+    if (filteredRules.length > 0 && !filteredRules.some(r => r.id === selectedRuleId)) {
+      setSelectedRuleId(filteredRules[0].id);
+    }
+  }, [filteredRules, selectedRuleId]);
+
+  // Get comitês for the selected rule, grouped
+  const selectedRuleComites = useMemo(() => {
+    if (!selectedRuleId) return [];
+    return comites.filter(c => c.comite_rule_id === selectedRuleId);
+  }, [comites, selectedRuleId]);
+
+  // Split into concluded (history, sorted newest first) and agendados (next scheduled, sorted soonest first)
   const concluidos = useMemo(() =>
-    filteredComites.filter(c => c.status === 'concluido').sort((a, b) => new Date(b.data).getTime() - new Date(a.data).getTime()),
-    [filteredComites]
+    selectedRuleComites.filter(c => c.status === 'concluido').sort((a, b) => new Date(b.data).getTime() - new Date(a.data).getTime()),
+    [selectedRuleComites]
   );
   const agendados = useMemo(() =>
-    filteredComites.filter(c => c.status === 'agendado').sort((a, b) => new Date(a.data).getTime() - new Date(b.data).getTime()),
-    [filteredComites]
+    selectedRuleComites.filter(c => c.status === 'agendado').sort((a, b) => new Date(a.data).getTime() - new Date(b.data).getTime()),
+    [selectedRuleComites]
   );
-  const proximoAtivo = agendados[0] || null;
 
+  // For the carousel: oldest to newest concluded, then all upcoming
   const comitesCarrossel = useMemo(() => {
-    const arr = [...concluidos.slice().reverse()];
-    if (proximoAtivo) {
-      arr.push(proximoAtivo);
-    }
+    const arr = [...concluidos.slice().reverse()]; // oldest first
+    arr.push(...agendados); // upcoming at the end
     return arr;
-  }, [concluidos, proximoAtivo]);
+  }, [concluidos, agendados]);
 
-  // Handle Carousel focus on load
+  // Focus carousel on the first upcoming (or last concluded)
   useEffect(() => {
     if (carouselApi && comitesCarrossel.length > 0) {
-      // Scroll to the "next committee" if it exists (which is at the end of the array)
-      const targetIndex = proximoAtivo ? comitesCarrossel.length - 1 : comitesCarrossel.length - 1;
-      // Use setTimeout to ensure Embla is fully initialized
+      const firstUpcomingIdx = comitesCarrossel.findIndex(c => c.status === 'agendado');
+      const targetIndex = firstUpcomingIdx >= 0 ? firstUpcomingIdx : comitesCarrossel.length - 1;
       setTimeout(() => {
         carouselApi.scrollTo(targetIndex, true);
       }, 100);
     }
-  }, [carouselApi, comitesCarrossel.length, proximoAtivo]);
+  }, [carouselApi, selectedRuleId, comitesCarrossel.length]);
+
+  // Summary: count next scheduled per rule (for badges)
+  const nextPerRule = useMemo(() => {
+    const map: Record<number, ComiteListItem | null> = {};
+    for (const rule of activeRules) {
+      const upcoming = comites
+        .filter(c => c.comite_rule_id === rule.id && c.status === 'agendado')
+        .sort((a, b) => new Date(a.data).getTime() - new Date(b.data).getTime());
+      map[rule.id] = upcoming[0] || null;
+    }
+    return map;
+  }, [activeRules, comites]);
+
+  // Count history per rule
+  const historyCountPerRule = useMemo(() => {
+    const map: Record<number, number> = {};
+    for (const rule of activeRules) {
+      map[rule.id] = comites.filter(c => c.comite_rule_id === rule.id && c.status === 'concluido').length;
+    }
+    return map;
+  }, [activeRules, comites]);
 
   const fetchPautaOperations = async () => {
     if (pautaOpsAtivas.length > 0 || isLoadingOps) return;
@@ -285,6 +328,8 @@ const ComitesPage: React.FC<ComitesPageProps> = ({ apiUrl, showToast, pushToGene
         // Replace optimistic entry with server data
         setRules(prev => prev.map(r => r.id === optimisticRule.id ? serverRule : r));
         setNewRule({ tipo: 'investimento', area: 'CRI', dia_da_semana: 'Segunda', horario: '10:00' });
+        // Auto-select the new rule
+        setSelectedRuleId(serverRule.id);
         // Refresh comites to pick up auto-generated next comitê
         fetchData();
       } else {
@@ -311,7 +356,7 @@ const ComitesPage: React.FC<ComitesPageProps> = ({ apiUrl, showToast, pushToGene
     return d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
   };
 
-  const activeRules = rules.filter(r => r.ativo);
+  const selectedRule = activeRules.find(r => r.id === selectedRuleId);
 
   if (isLoading) {
     return (
@@ -341,221 +386,279 @@ const ComitesPage: React.FC<ComitesPageProps> = ({ apiUrl, showToast, pushToGene
         </div>
       </div>
 
-      <Carousel
-        setApi={setCarouselApi}
-        opts={{
-          align: 'start',
-          dragFree: true,
-        }}
-        className="w-full relative mt-4"
-      >
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-          {/* Area Tabs */}
-          <div className="flex items-center gap-1 p-1 bg-gray-100 dark:bg-gray-800 rounded-lg w-fit">
+      {/* Area Tabs */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex items-center gap-1 p-1 bg-gray-100 dark:bg-gray-800 rounded-lg w-fit">
+          <button
+            onClick={() => setSelectedArea('all')}
+            className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all ${
+              selectedArea === 'all'
+                ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
+                : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+            }`}
+          >
+            Todos
+          </button>
+          {AREAS.map(area => (
             <button
-              onClick={() => setSelectedArea('all')}
+              key={area}
+              onClick={() => setSelectedArea(area)}
               className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all ${
-                selectedArea === 'all'
+                selectedArea === area
                   ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
                   : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
               }`}
             >
-              Todos
+              {area}
             </button>
-            {AREAS.map(area => (
+          ))}
+        </div>
+      </div>
+
+      {/* Rule Selection Cards — one card per active rule */}
+      {filteredRules.length > 0 ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+          {filteredRules.map(rule => {
+            const isSelected = rule.id === selectedRuleId;
+            const nextComite = nextPerRule[rule.id];
+            const histCount = historyCountPerRule[rule.id] || 0;
+            return (
               <button
-                key={area}
-                onClick={() => setSelectedArea(area)}
-                className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all ${
-                  selectedArea === area
-                    ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
-                    : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+                key={rule.id}
+                onClick={() => setSelectedRuleId(rule.id)}
+                className={`flex items-center gap-3 p-4 rounded-xl border-2 transition-all text-left ${
+                  isSelected
+                    ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20 shadow-md ring-1 ring-blue-200 dark:ring-blue-800'
+                    : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 hover:border-gray-300 dark:hover:border-gray-600 hover:shadow-sm'
                 }`}
               >
-                {area}
-              </button>
-            ))}
-          </div>
-
-          <div className="flex gap-2">
-            {comitesCarrossel.length > 0 && (
-              <>
-                <CarouselPrevious className="relative inset-0 transform-none h-10 w-10 border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-white" />
-                <CarouselNext className="relative inset-0 transform-none h-10 w-10 border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-white" />
-              </>
-            )}
-          </div>
-        </div>
-
-        {/* Active Rules Summary */}
-        {activeRules.length > 0 && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 mb-8">
-            {activeRules.filter(r => selectedArea === 'all' || r.area === selectedArea).map(rule => (
-              <div key={rule.id} className="flex items-center gap-3 p-3 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
-                <div className={`w-2 h-2 rounded-full ${rule.tipo === 'investimento' ? 'bg-emerald-500' : 'bg-blue-500'}`} />
+                <div className={`w-3 h-3 rounded-full flex-shrink-0 ${rule.tipo === 'investimento' ? 'bg-emerald-500' : 'bg-blue-500'}`} />
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-gray-900 dark:text-white capitalize truncate">{rule.tipo} — {rule.area}</p>
+                  <p className={`text-sm font-semibold capitalize truncate ${isSelected ? 'text-blue-900 dark:text-blue-100' : 'text-gray-900 dark:text-white'}`}>
+                    {rule.tipo} — {rule.area}
+                  </p>
                   <p className="text-xs text-gray-500 dark:text-gray-400">{rule.dia_da_semana} · {rule.horario}</p>
+                  <div className="flex items-center gap-3 mt-1.5">
+                    <span className="text-[10px] font-medium text-gray-400 dark:text-gray-500">
+                      {histCount} realizado{histCount !== 1 ? 's' : ''}
+                    </span>
+                    {nextComite ? (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-blue-600 dark:text-blue-400">
+                        <Clock className="w-3 h-3" />
+                        Próx: {formatShortDate(nextComite.data)}
+                      </span>
+                    ) : (
+                      <span className="text-[10px] font-medium text-gray-400 italic">Sem agendamento</span>
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
-        )}
+                {isSelected && (
+                  <ChevronRight className="w-4 h-4 text-blue-500 flex-shrink-0" />
+                )}
+              </button>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="text-center py-8 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700">
+          <Calendar className="w-10 h-10 mx-auto text-gray-300 dark:text-gray-600 mb-2" />
+          <p className="text-gray-500 dark:text-gray-400 text-sm">Nenhuma regra de comitê encontrada para esta área.</p>
+          <button
+            onClick={() => setShowNewRuleModal(true)}
+            className="mt-3 inline-flex items-center gap-1.5 text-sm font-semibold text-blue-600 hover:text-blue-700 dark:text-blue-400 transition-colors"
+          >
+            <Plus className="w-4 h-4" /> Criar Regra
+          </button>
+        </div>
+      )}
 
-        {/* Carrossel de Comitês Content */}
-        {comitesCarrossel.length === 0 ? (
-          <div className="text-center py-12 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700">
-            <Calendar className="w-12 h-12 mx-auto text-gray-300 dark:text-gray-600 mb-3" />
-            <p className="text-gray-500 dark:text-gray-400">Os comitês serão gerados automaticamente baseados nas suas regras e agendamentos.</p>
+      {/* Selected Rule — Carousel of its committees */}
+      {selectedRule && (
+        <div>
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <div className={`w-2.5 h-2.5 rounded-full ${selectedRule.tipo === 'investimento' ? 'bg-emerald-500' : 'bg-blue-500'}`} />
+              <h2 className="text-lg font-bold text-gray-900 dark:text-white capitalize">
+                {selectedRule.tipo} — {selectedRule.area}
+              </h2>
+              <span className="text-xs text-gray-400 dark:text-gray-500 ml-2">
+                {comitesCarrossel.length} comitê{comitesCarrossel.length !== 1 ? 's' : ''} registrado{comitesCarrossel.length !== 1 ? 's' : ''}
+              </span>
+            </div>
           </div>
-        ) : (
-          <CarouselContent className="-ml-4">
-              {comitesCarrossel.map((c) => {
-                const isProximo = c.status === 'agendado';
-                
-                return (
-                  <CarouselItem key={c.id} className="pl-4 basis-full md:basis-1/2 lg:basis-1/3 py-2">
-                    <Card className={`h-full min-h-[580px] flex flex-col transition-all duration-300 rounded-2xl border-[#9CA3AF] dark:border-gray-600 ${isProximo ? 'bg-slate-50 border-2 shadow-[8px_8px_16px_-4px_rgba(0,0,0,0.1)] dark:bg-slate-800 dark:shadow-[8px_8px_16px_-4px_rgba(0,0,0,0.4)]' : 'bg-gray-50 border shadow-[4px_4px_10px_-2px_rgba(0,0,0,0.05)] hover:shadow-[6px_6px_12px_-3px_rgba(0,0,0,0.08)] dark:bg-gray-800'}`}>
-                      <CardHeader className="pb-3 border-b border-gray-200 dark:border-gray-700 bg-white/50 dark:bg-gray-800/50 rounded-t-2xl">
-                        <div className="flex items-start justify-between">
-                          <div className="flex items-center gap-3">
-                            <div className={`w-10 h-10 flex items-center justify-center rounded-full border-2 ${isProximo ? 'bg-blue-100 border-blue-500 text-blue-600 dark:bg-blue-900/60 dark:text-blue-300' : 'bg-emerald-100 border-emerald-500 text-emerald-600 dark:bg-emerald-900/60 dark:text-emerald-300'}`}>
-                              {isProximo ? <Clock className="w-5 h-5" /> : <CheckCircle className="w-5 h-5" />}
+
+          <Carousel
+            setApi={setCarouselApi}
+            opts={{
+              align: 'start',
+              dragFree: true,
+            }}
+            className="w-full relative"
+          >
+            <div className="flex justify-end gap-2 mb-4">
+              {comitesCarrossel.length > 0 && (
+                <>
+                  <CarouselPrevious className="relative inset-0 transform-none h-10 w-10 border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-white" />
+                  <CarouselNext className="relative inset-0 transform-none h-10 w-10 border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-white" />
+                </>
+              )}
+            </div>
+
+            {comitesCarrossel.length === 0 ? (
+              <div className="text-center py-12 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700">
+                <Calendar className="w-12 h-12 mx-auto text-gray-300 dark:text-gray-600 mb-3" />
+                <p className="text-gray-500 dark:text-gray-400">Nenhum comitê registrado para esta regra ainda.</p>
+              </div>
+            ) : (
+              <CarouselContent className="-ml-4">
+                  {comitesCarrossel.map((c) => {
+                    const isProximo = c.status === 'agendado';
+                    
+                    return (
+                      <CarouselItem key={c.id} className="pl-4 basis-full md:basis-1/2 lg:basis-1/3 py-2">
+                        <Card className={`h-full min-h-[580px] flex flex-col transition-all duration-300 rounded-2xl border-[#9CA3AF] dark:border-gray-600 ${isProximo ? 'bg-slate-50 border-2 shadow-[8px_8px_16px_-4px_rgba(0,0,0,0.1)] dark:bg-slate-800 dark:shadow-[8px_8px_16px_-4px_rgba(0,0,0,0.4)]' : 'bg-gray-50 border shadow-[4px_4px_10px_-2px_rgba(0,0,0,0.05)] hover:shadow-[6px_6px_12px_-3px_rgba(0,0,0,0.08)] dark:bg-gray-800'}`}>
+                          <CardHeader className="pb-3 border-b border-gray-200 dark:border-gray-700 bg-white/50 dark:bg-gray-800/50 rounded-t-2xl">
+                            <div className="flex items-start justify-between">
+                              <div className="flex items-center gap-3">
+                                <div className={`w-10 h-10 flex items-center justify-center rounded-full border-2 ${isProximo ? 'bg-blue-100 border-blue-500 text-blue-600 dark:bg-blue-900/60 dark:text-blue-300' : 'bg-emerald-100 border-emerald-500 text-emerald-600 dark:bg-emerald-900/60 dark:text-emerald-300'}`}>
+                                  {isProximo ? <Clock className="w-5 h-5" /> : <CheckCircle className="w-5 h-5" />}
+                                </div>
+                                <div>
+                                  <CardTitle className="text-lg font-bold capitalize text-gray-900 dark:text-white">
+                                    {c.tipo} — {c.area}
+                                  </CardTitle>
+                                  <CardDescription className="text-sm font-medium mt-0.5 dark:text-gray-400">
+                                    {formatDate(c.data)} {c.horario ? `às ${c.horario}` : ''}
+                                  </CardDescription>
+                                </div>
+                              </div>
+                              {isProximo && (
+                                <span className="px-2.5 py-1 text-[10px] font-bold tracking-wider text-blue-700 bg-blue-100 rounded-full dark:bg-blue-500/20 dark:text-blue-200 uppercase animate-pulse">
+                                  PRÓXIMO
+                                </span>
+                              )}
                             </div>
-                            <div>
-                              <CardTitle className="text-lg font-bold capitalize text-gray-900 dark:text-white">
-                                {c.tipo} — {c.area}
-                              </CardTitle>
-                              <CardDescription className="text-sm font-medium mt-0.5 dark:text-gray-400">
-                                {formatDate(c.data)} {c.horario ? `às ${c.horario}` : ''}
-                              </CardDescription>
-                            </div>
-                          </div>
-                          {isProximo && (
-                            <span className="px-2.5 py-1 text-[10px] font-bold tracking-wider text-blue-700 bg-blue-100 rounded-full dark:bg-blue-500/20 dark:text-blue-200 uppercase animate-pulse">
-                              PRÓXIMO
-                            </span>
-                          )}
-                        </div>
-                      </CardHeader>
-                      
-                      <CardContent className="flex-1 pt-5 pb-5">
-                        <div className="mb-4">
-                          <div className="flex items-center gap-2 mb-2 text-sm font-semibold text-gray-700 dark:text-gray-300">
-                            <FileText className="w-4 h-4 text-gray-400" /> Principais Pautas
-                          </div>
-                          {(c.itens_pauta && c.itens_pauta.length > 0) ? (
-                            <div className="space-y-1.5 pl-2">
-                              {c.itens_pauta.slice(0, 5).map((item, i) => (
-                                <div key={i} className="flex items-center gap-2 group">
-                                  <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${item.engagement > 0 ? 'bg-blue-500' : 'bg-gray-300 dark:bg-gray-600'}`} />
-                                  <span className="text-sm text-gray-700 dark:text-gray-300 truncate flex-1" title={item.titulo}>{item.titulo}</span>
-                                  {(item.comments_count > 0 || item.likes_count > 0) && (
-                                    <div className="flex items-center gap-1.5 flex-shrink-0">
-                                      {item.comments_count > 0 && (
-                                        <span className="inline-flex items-center gap-0.5 text-[10px] font-medium text-blue-600 dark:text-blue-400">
-                                          <MessageCircle className="w-3 h-3" />{item.comments_count}
-                                        </span>
-                                      )}
-                                      {item.likes_count > 0 && (
-                                        <span className="inline-flex items-center gap-0.5 text-[10px] font-medium text-amber-600 dark:text-amber-400">
-                                          <ThumbsUp className="w-3 h-3" />{item.likes_count}
-                                        </span>
+                          </CardHeader>
+                          
+                          <CardContent className="flex-1 pt-5 pb-5">
+                            <div className="mb-4">
+                              <div className="flex items-center gap-2 mb-2 text-sm font-semibold text-gray-700 dark:text-gray-300">
+                                <FileText className="w-4 h-4 text-gray-400" /> Principais Pautas
+                              </div>
+                              {(c.itens_pauta && c.itens_pauta.length > 0) ? (
+                                <div className="space-y-1.5 pl-2">
+                                  {c.itens_pauta.slice(0, 5).map((item, i) => (
+                                    <div key={i} className="flex items-center gap-2 group">
+                                      <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${item.engagement > 0 ? 'bg-blue-500' : 'bg-gray-300 dark:bg-gray-600'}`} />
+                                      <span className="text-sm text-gray-700 dark:text-gray-300 truncate flex-1" title={item.titulo}>{item.titulo}</span>
+                                      {(item.comments_count > 0 || item.likes_count > 0) && (
+                                        <div className="flex items-center gap-1.5 flex-shrink-0">
+                                          {item.comments_count > 0 && (
+                                            <span className="inline-flex items-center gap-0.5 text-[10px] font-medium text-blue-600 dark:text-blue-400">
+                                              <MessageCircle className="w-3 h-3" />{item.comments_count}
+                                            </span>
+                                          )}
+                                          {item.likes_count > 0 && (
+                                            <span className="inline-flex items-center gap-0.5 text-[10px] font-medium text-amber-600 dark:text-amber-400">
+                                              <ThumbsUp className="w-3 h-3" />{item.likes_count}
+                                            </span>
+                                          )}
+                                        </div>
                                       )}
                                     </div>
+                                  ))}
+                                  {c.itens_pauta.length > 5 && (
+                                    <p className="text-xs text-gray-400 italic pl-3.5">+ {c.itens_pauta.length - 5} itens</p>
                                   )}
                                 </div>
-                              ))}
-                              {c.itens_pauta.length > 5 && (
-                                <p className="text-xs text-gray-400 italic pl-3.5">+ {c.itens_pauta.length - 5} itens</p>
+                              ) : (
+                                <p className="text-sm text-gray-500 dark:text-gray-400 pl-6 italic">Nenhum item na pauta</p>
                               )}
-                            </div>
-                          ) : (
-                            <p className="text-sm text-gray-500 dark:text-gray-400 pl-6 italic">Nenhum item na pauta</p>
-                          )}
-                          {isProximo && (
-                            <div className="mt-3 pl-6">
-                              <button 
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setNewItem(prev => ({ ...prev, comite_id: c.id }));
-                                  setOpsSearchQuery('');
-                                  setShowNewStructuringForm(false);
-                                  setShowAddItemModal(true);
-                                  fetchPautaOperations();
-                                }}
-                                className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 bg-blue-50 hover:bg-blue-100 dark:bg-blue-500/10 dark:hover:bg-blue-500/20 px-2.5 py-1.5 rounded-md transition-colors border border-blue-100 dark:border-blue-900/50 shadow-sm"
-                              >
-                                <Plus className="w-3.5 h-3.5" /> Adicionar na Pauta
-                              </button>
-                            </div>
-                          )}
-                        </div>
-
-                        <hr className="my-5 mx-8 border-gray-200 dark:border-white/10" />
-
-                        <div>
-                          <div className="flex items-center gap-2 mb-2 text-sm font-semibold text-gray-700 dark:text-gray-300">
-                            <CheckCircle className="w-4 h-4 text-gray-400" /> Tarefas & Decisões
-                          </div>
-                          {c.proximos_passos && c.proximos_passos.length > 0 ? (
-                            <div className="space-y-2.5 pl-2">
-                              {c.proximos_passos.slice(0, 3).map(pp => (
-                                <div key={pp.id} className="flex flex-col gap-0.5 bg-gray-50 dark:bg-white/5 p-2 rounded-md border border-gray-100 dark:border-white/10">
-                                  <div className="flex items-center gap-2">
-                                    <div className={`w-2 h-2 rounded-full shrink-0 ${pp.status === 'concluido' ? 'bg-emerald-500' : 'bg-amber-400'}`} />
-                                    <span className="text-xs font-medium text-gray-700 dark:text-gray-200 line-clamp-2 leading-tight">{pp.descricao}</span>
-                                  </div>
-                                  <div className="flex justify-between items-center mt-1 pl-4">
-                                     <span className="text-[10px] text-gray-500 dark:text-gray-400">{pp.responsavel_nome || 'Sem responsável'}</span>
-                                     <span className={`text-[9px] px-1.5 py-0.5 font-bold uppercase tracking-wider rounded-full ${
-                                      pp.status === 'concluido'
-                                        ? 'text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-500/20'
-                                        : 'text-amber-700 dark:text-amber-300 bg-amber-100 dark:bg-amber-500/20'
-                                    }`}>
-                                      {pp.status}
-                                    </span>
-                                  </div>
+                              {isProximo && (
+                                <div className="mt-3 pl-6">
+                                  <button 
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setNewItem(prev => ({ ...prev, comite_id: c.id }));
+                                      setOpsSearchQuery('');
+                                      setShowNewStructuringForm(false);
+                                      setShowAddItemModal(true);
+                                      fetchPautaOperations();
+                                    }}
+                                    className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 bg-blue-50 hover:bg-blue-100 dark:bg-blue-500/10 dark:hover:bg-blue-500/20 px-2.5 py-1.5 rounded-md transition-colors border border-blue-100 dark:border-blue-900/50 shadow-sm"
+                                  >
+                                    <Plus className="w-3.5 h-3.5" /> Adicionar na Pauta
+                                  </button>
                                 </div>
-                              ))}
-                              {c.proximos_passos.length > 3 && (
-                                <p className="text-xs text-center font-medium text-gray-400 pt-1">+ {c.proximos_passos.length - 3} tarefas ocultas</p>
                               )}
                             </div>
-                          ) : (
-                            <p className="text-sm text-gray-500 dark:text-gray-400 pl-6 italic">Sem tarefas adicionais geradas.</p>
-                          )}
-                        </div>
-                      </CardContent>
 
-                      <CardFooter className="pt-0 pb-4 px-4 flex gap-2 w-full mt-auto">
-                        <Button 
-                          className="flex-1 text-xs bg-blue-600 hover:bg-blue-700 text-white shadow-sm border-0 dark:bg-blue-600 dark:hover:bg-blue-700 font-semibold transition-colors"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onNavigate(Page.COMITE_DETAIL, c.id);
-                          }}
-                        >
-                          <ArrowUpRight className="w-3.5 h-3.5 mr-1" /> Abrir Comitê
-                        </Button>
-                        <Button 
-                          variant="secondary" 
-                          className="flex-1 text-xs bg-gray-100 border border-gray-200 hover:bg-gray-200 text-gray-800 dark:bg-gray-700 dark:border-gray-600 dark:hover:bg-gray-600 dark:text-white font-medium shadow-sm transition-colors"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleDownloadAta(c.id);
-                          }}
-                        >
-                          <Download className="w-3.5 h-3.5 mr-1" /> Baixar Ata
-                        </Button>
-                      </CardFooter>
-                    </Card>
-                  </CarouselItem>
-                );
-              })}
-            </CarouselContent>
-        )}
-      </Carousel>
+                            <hr className="my-5 mx-8 border-gray-200 dark:border-white/10" />
+
+                            <div>
+                              <div className="flex items-center gap-2 mb-2 text-sm font-semibold text-gray-700 dark:text-gray-300">
+                                <CheckCircle className="w-4 h-4 text-gray-400" /> Tarefas & Decisões
+                              </div>
+                              {c.proximos_passos && c.proximos_passos.length > 0 ? (
+                                <div className="space-y-2.5 pl-2">
+                                  {c.proximos_passos.slice(0, 3).map(pp => (
+                                    <div key={pp.id} className="flex flex-col gap-0.5 bg-gray-50 dark:bg-white/5 p-2 rounded-md border border-gray-100 dark:border-white/10">
+                                      <div className="flex items-center gap-2">
+                                        <div className={`w-2 h-2 rounded-full shrink-0 ${pp.status === 'concluido' ? 'bg-emerald-500' : 'bg-amber-400'}`} />
+                                        <span className="text-xs font-medium text-gray-700 dark:text-gray-200 line-clamp-2 leading-tight">{pp.descricao}</span>
+                                      </div>
+                                      <div className="flex justify-between items-center mt-1 pl-4">
+                                         <span className="text-[10px] text-gray-500 dark:text-gray-400">{pp.responsavel_nome || 'Sem responsável'}</span>
+                                         <span className={`text-[9px] px-1.5 py-0.5 font-bold uppercase tracking-wider rounded-full ${
+                                          pp.status === 'concluido'
+                                            ? 'text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-500/20'
+                                            : 'text-amber-700 dark:text-amber-300 bg-amber-100 dark:bg-amber-500/20'
+                                        }`}>
+                                          {pp.status}
+                                        </span>
+                                      </div>
+                                    </div>
+                                  ))}
+                                  {c.proximos_passos.length > 3 && (
+                                    <p className="text-xs text-center font-medium text-gray-400 pt-1">+ {c.proximos_passos.length - 3} tarefas ocultas</p>
+                                  )}
+                                </div>
+                              ) : (
+                                <p className="text-sm text-gray-500 dark:text-gray-400 pl-6 italic">Sem tarefas adicionais geradas.</p>
+                              )}
+                            </div>
+                          </CardContent>
+
+                          <CardFooter className="pt-0 pb-4 px-4 flex gap-2 w-full mt-auto">
+                            <Button 
+                              className="flex-1 text-xs bg-blue-600 hover:bg-blue-700 text-white shadow-sm border-0 dark:bg-blue-600 dark:hover:bg-blue-700 font-semibold transition-colors"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onNavigate(Page.COMITE_DETAIL, c.id);
+                              }}
+                            >
+                              <ArrowUpRight className="w-3.5 h-3.5 mr-1" /> Abrir Comitê
+                            </Button>
+                            <Button 
+                              variant="secondary" 
+                              className="flex-1 text-xs bg-gray-100 border border-gray-200 hover:bg-gray-200 text-gray-800 dark:bg-gray-700 dark:border-gray-600 dark:hover:bg-gray-600 dark:text-white font-medium shadow-sm transition-colors"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDownloadAta(c.id);
+                              }}
+                            >
+                              <Download className="w-3.5 h-3.5 mr-1" /> Baixar Ata
+                            </Button>
+                          </CardFooter>
+                        </Card>
+                      </CarouselItem>
+                    );
+                  })}
+                </CarouselContent>
+            )}
+          </Carousel>
+        </div>
+      )}
 
 
       {/* ─── Modal: Adicionar Item na Pauta ─── */}

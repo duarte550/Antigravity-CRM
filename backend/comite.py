@@ -55,7 +55,11 @@ def _create_default_secoes(cursor, comite_id, tipo):
 
 
 def _fetch_comite_detail(cursor, comite_id):
-    """Busca detalhes completos de um comitê."""
+    """Busca detalhes completos de um comitê.
+    
+    OPTIMIZED: Uses batch IN-clause queries instead of per-item loops.
+    Reduces query count from ~5N+4 to ~7 total (where N = number of items).
+    """
     cursor.execute(f"SELECT * FROM {COMITE_SCHEMA_PREFIX}.comites WHERE id = ?", (comite_id,))
     comite_row = cursor.fetchone()
     if not comite_row:
@@ -71,51 +75,53 @@ def _fetch_comite_detail(cursor, comite_id):
     cursor.execute(f"SELECT * FROM {COMITE_SCHEMA_PREFIX}.comite_secoes WHERE comite_id = ? ORDER BY ordem", (comite_id,))
     secoes = [format_row(r, cursor) for r in cursor.fetchall()]
 
-    # Itens de pauta — IMPORTANT: materialize to dicts immediately so that
-    # subsequent cursor.execute() calls don't corrupt cursor.description
+    # Itens de pauta — materialize immediately
     cursor.execute(f"SELECT * FROM {COMITE_SCHEMA_PREFIX}.comite_itens_pauta WHERE comite_id = ? ORDER BY prioridade DESC, created_at", (comite_id,))
     itens_dicts = [format_row(r, cursor) for r in cursor.fetchall()]
 
-    itens = []
-    for item in itens_dicts:
-        item_id = item['id']
+    item_ids = [item['id'] for item in itens_dicts]
 
-        # Comentários do item — materialize immediately
+    # ── Batch: ALL comentários for all items at once ──
+    comentarios_by_item = {}
+    comment_ids_all = []
+    if item_ids:
+        in_clause = ','.join(['?'] * len(item_ids))
         cursor.execute(
-            f"SELECT * FROM {COMITE_SCHEMA_PREFIX}.comite_comentarios WHERE item_pauta_id = ? ORDER BY created_at",
-            (item_id,)
+            f"SELECT * FROM {COMITE_SCHEMA_PREFIX}.comite_comentarios WHERE item_pauta_id IN ({in_clause}) ORDER BY created_at",
+            item_ids
         )
-        comentarios_dicts = [format_row(r, cursor) for r in cursor.fetchall()]
+        all_comentarios = [format_row(r, cursor) for r in cursor.fetchall()]
+        for c in all_comentarios:
+            comment_ids_all.append(c['id'])
+            if c['item_pauta_id'] not in comentarios_by_item:
+                comentarios_by_item[c['item_pauta_id']] = []
+            comentarios_by_item[c['item_pauta_id']].append(c)
 
-        comentarios = []
-        for c in comentarios_dicts:
-            # Contar likes (this changes cursor.description, but c is already a dict)
-            cursor.execute(
-                f"SELECT COUNT(*) as cnt FROM {COMITE_SCHEMA_PREFIX}.comite_likes WHERE comentario_id = ?",
-                (c['id'],)
-            )
-            like_count = cursor.fetchone()
-            c['likes'] = int(like_count.cnt) if like_count else 0
-            comentarios.append({
-                'id': c['id'],
-                'item_pauta_id': c['item_pauta_id'],
-                'user_id': c.get('user_id'),
-                'user_nome': c.get('user_nome'),
-                'texto': c.get('texto'),
-                'parent_comment_id': c.get('parent_comment_id'),
-                'created_at': safe_isoformat(c.get('created_at')),
-                'likes': c['likes'],
-            })
-
-        # Votos do item
+    # ── Batch: likes count per comment (single query) ──
+    likes_by_comment = {}
+    if comment_ids_all:
+        in_clause = ','.join(['?'] * len(comment_ids_all))
         cursor.execute(
-            f"SELECT * FROM {COMITE_SCHEMA_PREFIX}.comite_votos WHERE item_pauta_id = ? ORDER BY created_at",
-            (item_id,)
+            f"SELECT comentario_id, COUNT(*) as cnt FROM {COMITE_SCHEMA_PREFIX}.comite_likes WHERE comentario_id IN ({in_clause}) GROUP BY comentario_id",
+            comment_ids_all
         )
-        votos = []
+        for r in cursor.fetchall():
+            row = format_row(r, cursor)
+            likes_by_comment[row['comentario_id']] = int(row['cnt'])
+
+    # ── Batch: ALL votos for all items ──
+    votos_by_item = {}
+    if item_ids:
+        in_clause = ','.join(['?'] * len(item_ids))
+        cursor.execute(
+            f"SELECT * FROM {COMITE_SCHEMA_PREFIX}.comite_votos WHERE item_pauta_id IN ({in_clause}) ORDER BY created_at",
+            item_ids
+        )
         for v_row in cursor.fetchall():
             v = format_row(v_row, cursor)
-            votos.append({
+            if v['item_pauta_id'] not in votos_by_item:
+                votos_by_item[v['item_pauta_id']] = []
+            votos_by_item[v['item_pauta_id']].append({
                 'id': v['id'],
                 'item_pauta_id': v['item_pauta_id'],
                 'user_id': v.get('user_id'),
@@ -126,15 +132,19 @@ def _fetch_comite_detail(cursor, comite_id):
                 'created_at': safe_isoformat(v.get('created_at')),
             })
 
-        # Videos assistidos
+    # ── Batch: ALL videos assistidos ──
+    videos_by_item = {}
+    if item_ids:
+        in_clause = ','.join(['?'] * len(item_ids))
         cursor.execute(
-            f"SELECT * FROM {COMITE_SCHEMA_PREFIX}.comite_videos_assistidos WHERE item_pauta_id = ?",
-            (item_id,)
+            f"SELECT * FROM {COMITE_SCHEMA_PREFIX}.comite_videos_assistidos WHERE item_pauta_id IN ({in_clause})",
+            item_ids
         )
-        videos_assistidos = []
         for va_row in cursor.fetchall():
             va = format_row(va_row, cursor)
-            videos_assistidos.append({
+            if va['item_pauta_id'] not in videos_by_item:
+                videos_by_item[va['item_pauta_id']] = []
+            videos_by_item[va['item_pauta_id']].append({
                 'id': va['id'],
                 'item_pauta_id': va['item_pauta_id'],
                 'user_id': va.get('user_id'),
@@ -143,15 +153,19 @@ def _fetch_comite_detail(cursor, comite_id):
                 'created_at': safe_isoformat(va.get('created_at')),
             })
 
-        # Próximos passos
+    # ── Batch: ALL próximos passos (with item_pauta_id) ──
+    pp_by_item = {}
+    if item_ids:
+        in_clause = ','.join(['?'] * len(item_ids))
         cursor.execute(
-            f"SELECT * FROM {COMITE_SCHEMA_PREFIX}.comite_proximos_passos WHERE item_pauta_id = ? ORDER BY created_at",
-            (item_id,)
+            f"SELECT * FROM {COMITE_SCHEMA_PREFIX}.comite_proximos_passos WHERE item_pauta_id IN ({in_clause}) ORDER BY created_at",
+            item_ids
         )
-        proximos_passos = []
         for pp_row in cursor.fetchall():
             pp = format_row(pp_row, cursor)
-            proximos_passos.append({
+            if pp['item_pauta_id'] not in pp_by_item:
+                pp_by_item[pp['item_pauta_id']] = []
+            pp_by_item[pp['item_pauta_id']].append({
                 'id': pp['id'],
                 'item_pauta_id': pp.get('item_pauta_id'),
                 'comite_id': pp.get('comite_id'),
@@ -163,6 +177,25 @@ def _fetch_comite_detail(cursor, comite_id):
                 'prioridade': pp.get('prioridade', 'media'),
                 'task_rule_id': pp.get('task_rule_id'),
                 'created_at': safe_isoformat(pp.get('created_at')),
+            })
+
+    # ── Assemble items with pre-fetched data ──
+    itens = []
+    for item in itens_dicts:
+        item_id = item['id']
+
+        # Build comentarios with likes from batch
+        comentarios = []
+        for c in comentarios_by_item.get(item_id, []):
+            comentarios.append({
+                'id': c['id'],
+                'item_pauta_id': c['item_pauta_id'],
+                'user_id': c.get('user_id'),
+                'user_nome': c.get('user_nome'),
+                'texto': c.get('texto'),
+                'parent_comment_id': c.get('parent_comment_id'),
+                'created_at': safe_isoformat(c.get('created_at')),
+                'likes': likes_by_comment.get(c['id'], 0),
             })
 
         itens.append({
@@ -181,9 +214,9 @@ def _fetch_comite_detail(cursor, comite_id):
             'tipo_caso': item.get('tipo_caso'),
             'created_at': safe_isoformat(item.get('created_at')),
             'comentarios': comentarios,
-            'votos': votos,
-            'videos_assistidos': videos_assistidos,
-            'proximos_passos': proximos_passos,
+            'votos': votos_by_item.get(item_id, []),
+            'videos_assistidos': videos_by_item.get(item_id, []),
+            'proximos_passos': pp_by_item.get(item_id, []),
         })
 
     # Próximos passos do comitê (sem item de pauta vinculado)

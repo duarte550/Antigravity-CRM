@@ -1,5 +1,7 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { Page } from '../types';
+import type { CargoVoto } from '../types';
+import { useAuth } from '../contexts/MockAuthContext';
 import {
   ChevronDown, ChevronRight, CheckCircle, Clock, Video, Users, Plus,
   MessageSquare, ThumbsUp, AlertCircle, ArrowLeft, FileText, Send,
@@ -57,9 +59,82 @@ const PRIO_DOT: Record<string, string> = {
   normal: 'bg-gray-400',
 };
 
+// ─── Video duration auto-detection helpers ───
+const formatDuration = (seconds: number): string => {
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = Math.floor(seconds % 60);
+  if (h > 0) return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  return `${m}:${String(s).padStart(2, '0')}`;
+};
+
+const extractYouTubeId = (url: string): string | null => {
+  const patterns = [
+    /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([\w-]{11})/,
+    /youtube\.com\/shorts\/([\w-]{11})/,
+  ];
+  for (const p of patterns) {
+    const m = url.match(p);
+    if (m) return m[1];
+  }
+  return null;
+};
+
+const isDirectVideoUrl = (url: string): boolean => {
+  return /\.(mp4|webm|ogg|mov|avi|mkv)(\?.*)?$/i.test(url);
+};
+
+const detectVideoDuration = (url: string): Promise<string | null> => {
+  return new Promise((resolve) => {
+    if (!url.trim()) { resolve(null); return; }
+
+    // 1) Direct video file — use hidden <video> element
+    if (isDirectVideoUrl(url)) {
+      const video = document.createElement('video');
+      video.preload = 'metadata';
+      video.crossOrigin = 'anonymous';
+      const cleanup = () => { video.src = ''; video.load(); };
+      video.onloadedmetadata = () => {
+        if (video.duration && isFinite(video.duration)) {
+          resolve(formatDuration(video.duration));
+        } else {
+          resolve(null);
+        }
+        cleanup();
+      };
+      video.onerror = () => { resolve(null); cleanup(); };
+      // Timeout fallback
+      setTimeout(() => { resolve(null); cleanup(); }, 8000);
+      video.src = url;
+      return;
+    }
+
+    // 2) YouTube — try noembed (free, no API key)
+    const ytId = extractYouTubeId(url);
+    if (ytId) {
+      // noembed doesn't return duration, but we can try the YouTube oembed endpoint
+      // which also doesn't guarantee duration. Use a lightweight iframe approach instead:
+      // We'll use the returnyoutubedislike API which is free, or simply skip duration for YT.
+      // For now, resolve null for YouTube — duration will show when user watches.
+      resolve(null);
+      return;
+    }
+
+    // 3) Other URLs — can't detect
+    resolve(null);
+  });
+};
+
 const ComiteDetailPage: React.FC<ComiteDetailPageProps> = ({ comiteId, apiUrl, showToast, pushToGenericQueue, onNavigate }) => {
-  const [comite, setComite] = useState<ComiteDetail | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [comite, setComite] = useState<ComiteDetail | null>(() => {
+    // Stale-while-revalidate: load from cache immediately
+    try {
+      const cached = localStorage.getItem(`comite_detail_${comiteId}`);
+      if (cached) return JSON.parse(cached);
+    } catch { /* ignore */ }
+    return null;
+  });
+  const [isLoading, setIsLoading] = useState(!comite);
   const [expandedSecoes, setExpandedSecoes] = useState<Set<number>>(new Set());
   const [expandedItems, setExpandedItems] = useState<Set<number>>(new Set());
   const [commentTexts, setCommentTexts] = useState<Record<number, string>>({});
@@ -67,6 +142,7 @@ const ComiteDetailPage: React.FC<ComiteDetailPageProps> = ({ comiteId, apiUrl, s
   const [showAddSecaoInput, setShowAddSecaoInput] = useState(false);
   const [newSecaoNome, setNewSecaoNome] = useState('');
   const [isCompleting, setIsCompleting] = useState(false);
+  const [isGeneratingReport, setIsGeneratingReport] = useState(false);
 
   // ─── Add Task Modal state (Próximos Passos) ───
   const [showAddTaskModal, setShowAddTaskModal] = useState(false);
@@ -102,9 +178,24 @@ const ComiteDetailPage: React.FC<ComiteDetailPageProps> = ({ comiteId, apiUrl, s
   const [showNewStructuringForm, setShowNewStructuringForm] = useState(false);
   const [newStructuringOp, setNewStructuringOp] = useState({ name: '', area: 'CRI' });
   const [isSavingStructuring, setIsSavingStructuring] = useState(false);
+  const [isDetectingDuration, setIsDetectingDuration] = useState(false);
+  const durationDetectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const mockUserId = 1;
-  const mockUserName = 'Usuário';
+  const { user: authUser, canVote, hasRole } = useAuth();
+  const mockUserId = authUser.id;
+  const mockUserName = authUser.nome;
+
+  // ─── Roles allowed to vote: gestor, risco, diretor_presidente, administrador ───
+  const VOTING_CARGOS: CargoVoto[] = ['gestao', 'risco', 'diretoria'];
+  const userCanVote = VOTING_CARGOS.some(cargo => canVote(cargo));
+
+  // Derive cargo_voto from user's role for backend payload
+  const getUserCargoVoto = (): CargoVoto | undefined => {
+    if (hasRole('diretor_presidente')) return 'diretoria';
+    if (hasRole('gestor')) return 'gestao';
+    if (hasRole('risco')) return 'risco';
+    return undefined;
+  };
 
   useEffect(() => {
     fetchDetail();
@@ -117,11 +208,43 @@ const ComiteDetailPage: React.FC<ComiteDetailPageProps> = ({ comiteId, apiUrl, s
     }
   }, [comite?.id]);
 
+  // ─── Auto-detect video duration when URL changes ───
+  useEffect(() => {
+    if (durationDetectTimerRef.current) clearTimeout(durationDetectTimerRef.current);
+
+    if (newItem.tipo !== 'video' || !newItem.video_url.trim()) {
+      setIsDetectingDuration(false);
+      return;
+    }
+
+    // Debounce 800ms so we don't fire on every keystroke
+    setIsDetectingDuration(true);
+    durationDetectTimerRef.current = setTimeout(async () => {
+      const dur = await detectVideoDuration(newItem.video_url);
+      if (dur) {
+        setNewItem(prev => ({ ...prev, video_duracao: dur }));
+      }
+      setIsDetectingDuration(false);
+    }, 800);
+
+    return () => {
+      if (durationDetectTimerRef.current) clearTimeout(durationDetectTimerRef.current);
+    };
+  }, [newItem.video_url, newItem.tipo]);
+
   const fetchDetail = async () => {
-    setIsLoading(true);
+    // Only show full loading if no cached data
+    if (!comite) setIsLoading(true);
     try {
       const res = await fetch(`${apiUrl}/api/comite/comites/${comiteId}`);
-      if (res.ok) setComite(await res.json());
+      if (res.ok) {
+        const data = await res.json();
+        setComite(data);
+        // Cache for stale-while-revalidate
+        try {
+          localStorage.setItem(`comite_detail_${comiteId}`, JSON.stringify(data));
+        } catch { /* storage full — ignore */ }
+      }
     } catch (e) {
       console.error('Error fetching comite detail:', e);
     } finally {
@@ -342,10 +465,11 @@ const ComiteDetailPage: React.FC<ComiteDetailPageProps> = ({ comiteId, apiUrl, s
   };
 
   const handleVote = async (itemId: number, tipoVoto: string) => {
-    if (isConcluido) return;
+    if (isConcluido || !userCanVote) return;
+    const cargoVoto = getUserCargoVoto();
     const newVoto: Voto = {
       id: Date.now(), item_pauta_id: itemId, user_id: mockUserId, user_nome: mockUserName,
-      tipo_voto: tipoVoto, created_at: new Date().toISOString(),
+      tipo_voto: tipoVoto, cargo_voto: cargoVoto, created_at: new Date().toISOString(),
     };
 
     setComite(prev => {
@@ -362,7 +486,7 @@ const ComiteDetailPage: React.FC<ComiteDetailPageProps> = ({ comiteId, apiUrl, s
     });
 
     pushToGenericQueue(`${apiUrl}/api/comite/itens/${itemId}/votos`, 'POST', {
-      user_id: mockUserId, user_nome: mockUserName, tipo_voto: tipoVoto, cargo_voto: 'risco',
+      user_id: mockUserId, user_nome: mockUserName, tipo_voto: tipoVoto, cargo_voto: cargoVoto,
     });
   };
 
@@ -500,6 +624,8 @@ const ComiteDetailPage: React.FC<ComiteDetailPageProps> = ({ comiteId, apiUrl, s
   };
 
   const handleGetRelatorio = async () => {
+    if (isGeneratingReport) return;
+    setIsGeneratingReport(true);
     try {
       const res = await fetch(`${apiUrl}/api/comite/comites/${comiteId}/relatorio`);
       if (res.ok) {
@@ -510,9 +636,13 @@ const ComiteDetailPage: React.FC<ComiteDetailPageProps> = ({ comiteId, apiUrl, s
           win.document.write(data.html);
           win.document.close();
         }
+      } else {
+        showToast('Erro ao gerar relatório', 'error');
       }
     } catch (e) {
       showToast('Erro ao gerar relatório', 'error');
+    } finally {
+      setIsGeneratingReport(false);
     }
   };
 
@@ -531,9 +661,42 @@ const ComiteDetailPage: React.FC<ComiteDetailPageProps> = ({ comiteId, apiUrl, s
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-96">
-        <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
-        <span className="ml-3 text-gray-500 dark:text-gray-400">Carregando comitê...</span>
+      <div className="space-y-6 animate-pulse">
+        {/* Header skeleton */}
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 rounded-lg bg-gray-200 dark:bg-gray-700" />
+          <div className="flex-1 space-y-2">
+            <div className="h-6 w-48 rounded bg-gray-200 dark:bg-gray-700" />
+            <div className="h-4 w-32 rounded bg-gray-200 dark:bg-gray-700" />
+          </div>
+        </div>
+        {/* Stats skeleton */}
+        <div className="grid grid-cols-4 gap-4">
+          {[1,2,3,4].map(i => (
+            <div key={i} className="h-16 rounded-lg bg-gray-200 dark:bg-gray-700" />
+          ))}
+        </div>
+        {/* Sections skeleton */}
+        {[1,2,3].map(i => (
+          <div key={i} className="rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+            <div className="px-5 py-4 flex items-center gap-3">
+              <div className="w-5 h-5 rounded bg-gray-200 dark:bg-gray-700" />
+              <div className="h-5 w-40 rounded bg-gray-200 dark:bg-gray-700" />
+              <div className="h-4 w-12 rounded-full bg-gray-200 dark:bg-gray-700" />
+            </div>
+            <div className="border-t border-gray-100 dark:border-gray-700 space-y-0">
+              {[1,2].map(j => (
+                <div key={j} className="px-5 py-3 flex items-center gap-3 border-b border-gray-100 dark:border-gray-700 last:border-b-0">
+                  <div className="w-2 h-2 rounded-full bg-gray-300 dark:bg-gray-600" />
+                  <div className="flex-1 space-y-1">
+                    <div className="h-4 w-56 rounded bg-gray-200 dark:bg-gray-700" />
+                    <div className="h-3 w-24 rounded bg-gray-200 dark:bg-gray-700" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
       </div>
     );
   }
@@ -594,10 +757,15 @@ const ComiteDetailPage: React.FC<ComiteDetailPageProps> = ({ comiteId, apiUrl, s
           )}
           <button
             onClick={handleGetRelatorio}
-            className="flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+            disabled={isGeneratingReport}
+            className={`flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg border transition-colors ${
+              isGeneratingReport
+                ? 'border-blue-300 dark:border-blue-700 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 cursor-wait'
+                : 'border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800'
+            }`}
           >
-            <Download className="w-4 h-4" />
-            Relatório
+            {isGeneratingReport ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+            {isGeneratingReport ? 'Gerando...' : 'Relatório'}
           </button>
           {!isConcluido && (
             <button
@@ -638,7 +806,7 @@ const ComiteDetailPage: React.FC<ComiteDetailPageProps> = ({ comiteId, apiUrl, s
         return (
           <div key={secao.id} className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
             {/* Section header */}
-            <div className="w-full flex items-center justify-between px-5 py-4 hover:bg-gray-50 dark:hover:bg-gray-750 transition-colors">
+            <div className="w-full flex items-center justify-between px-5 py-4 hover:bg-gray-100/60 dark:hover:bg-gray-700/40 transition-colors">
               <button
                 onClick={() => toggleSecao(secao.id)}
                 className="flex items-center gap-3 flex-1"
@@ -688,7 +856,11 @@ const ComiteDetailPage: React.FC<ComiteDetailPageProps> = ({ comiteId, apiUrl, s
                         {/* Item collapsed header */}
                         <button
                           onClick={() => toggleItem(item.id)}
-                          className="w-full flex items-center gap-3 px-5 py-3 hover:bg-gray-50 dark:hover:bg-gray-750 transition-colors text-left"
+                          className={`w-full flex items-center gap-3 px-5 py-3 transition-colors text-left ${
+                            isItemExpanded
+                              ? 'bg-gray-100/70 dark:bg-gray-700/50'
+                              : 'hover:bg-gray-100/60 dark:hover:bg-gray-700/40'
+                          }`}
                         >
                           <div className={`w-2 h-2 rounded-full ${PRIO_DOT[item.prioridade] || PRIO_DOT.normal}`} />
                           <div className="flex-1 min-w-0">
@@ -778,24 +950,26 @@ const ComiteDetailPage: React.FC<ComiteDetailPageProps> = ({ comiteId, apiUrl, s
                                 <p className="text-xs font-semibold text-purple-700 dark:text-purple-400 uppercase mb-2">
                                   {item.tipo_caso === 'aprovacao' ? 'Votação de Aprovação' : 'Votação de Revisão'}
                                 </p>
-                                <div className="flex items-center gap-3 mb-3">
-                                  {[
-                                    { key: 'aprovado', label: '✅ Aprovar', color: 'bg-emerald-600 hover:bg-emerald-700' },
-                                    { key: 'reprovado', label: '❌ Reprovar', color: 'bg-red-600 hover:bg-red-700' },
-                                    { key: 'discussao', label: '💬 Discussão', color: 'bg-amber-600 hover:bg-amber-700' },
-                                  ].map(v => (
-                                    <button
-                                      key={v.key}
-                                      onClick={() => handleVote(item.id, v.key)}
-                                      disabled={isConcluido}
-                                      className={`px-3 py-1.5 text-xs font-semibold text-white rounded-lg transition-colors disabled:opacity-50 ${
-                                        myVote?.tipo_voto === v.key ? `${v.color} ring-2 ring-offset-2 dark:ring-offset-gray-800` : `${v.color} opacity-70`
-                                      }`}
-                                    >
-                                      {v.label}
-                                    </button>
-                                  ))}
-                                </div>
+                                {userCanVote && (
+                                  <div className="flex items-center gap-3 mb-3">
+                                    {[
+                                      { key: 'aprovado', label: '✅ Aprovar', color: 'bg-emerald-600 hover:bg-emerald-700' },
+                                      { key: 'reprovado', label: '❌ Reprovar', color: 'bg-red-600 hover:bg-red-700' },
+                                      { key: 'discussao', label: '💬 Discussão', color: 'bg-amber-600 hover:bg-amber-700' },
+                                    ].map(v => (
+                                      <button
+                                        key={v.key}
+                                        onClick={() => handleVote(item.id, v.key)}
+                                        disabled={isConcluido}
+                                        className={`px-3 py-1.5 text-xs font-semibold text-white rounded-lg transition-colors disabled:opacity-50 ${
+                                          myVote?.tipo_voto === v.key ? `${v.color} ring-2 ring-offset-2 dark:ring-offset-gray-800` : `${v.color} opacity-70`
+                                        }`}
+                                      >
+                                        {v.label}
+                                      </button>
+                                    ))}
+                                  </div>
+                                )}
                                 {item.votos.length > 0 && (
                                   <div className="space-y-1">
                                     {item.votos.map(v => (
@@ -1284,25 +1458,34 @@ const ComiteDetailPage: React.FC<ComiteDetailPageProps> = ({ comiteId, apiUrl, s
             )}
 
             {newItem.tipo === 'video' && (
-              <div className="grid grid-cols-2 gap-3 mb-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">URL do Vídeo</label>
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">URL do Vídeo</label>
+                <div className="relative">
                   <input
                     value={newItem.video_url}
-                    onChange={e => setNewItem({ ...newItem, video_url: e.target.value })}
-                    className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm"
-                    placeholder="https://..."
+                    onChange={e => setNewItem({ ...newItem, video_url: e.target.value, video_duracao: '' })}
+                    className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm pr-28"
+                    placeholder="https://exemplo.com/video.mp4"
                   />
+                  {/* Duration auto-detection status */}
+                  <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1.5">
+                    {isDetectingDuration && (
+                      <span className="flex items-center gap-1 text-[11px] text-blue-500">
+                        <Loader2 className="w-3 h-3 animate-spin" /> Detectando...
+                      </span>
+                    )}
+                    {!isDetectingDuration && newItem.video_duracao && (
+                      <span className="flex items-center gap-1 px-2 py-0.5 rounded bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 text-[11px] font-semibold">
+                        <Clock className="w-3 h-3" /> {newItem.video_duracao}
+                      </span>
+                    )}
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Duração</label>
-                  <input
-                    value={newItem.video_duracao}
-                    onChange={e => setNewItem({ ...newItem, video_duracao: e.target.value })}
-                    className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm"
-                    placeholder="15:30"
-                  />
-                </div>
+                {newItem.video_url && !isDetectingDuration && !newItem.video_duracao && (
+                  <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-1">
+                    Duração não detectada automaticamente. Para vídeos do YouTube a duração será exibida após assistir.
+                  </p>
+                )}
               </div>
             )}
 
