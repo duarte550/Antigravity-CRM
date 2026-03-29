@@ -7,7 +7,7 @@ Todas as rotas usam try/except/finally, JSON snake_case, e IDs via get_next_uniq
 
 from flask import Blueprint, jsonify, request, current_app
 from db import get_db_connection
-from utils import safe_isoformat, parse_iso_date, format_row
+from utils import safe_isoformat, parse_iso_date, format_row, get_next_unique_id
 from datetime import datetime
 import json
 import logging
@@ -174,6 +174,7 @@ def _fetch_comite_detail(cursor, comite_id):
                 'status': pp.get('status', 'pendente'),
                 'prazo': safe_isoformat(pp.get('prazo')),
                 'prioridade': pp.get('prioridade', 'media'),
+                'task_rule_id': pp.get('task_rule_id'),
                 'created_at': safe_isoformat(pp.get('created_at')),
             })
 
@@ -215,6 +216,7 @@ def _fetch_comite_detail(cursor, comite_id):
             'status': pp.get('status', 'pendente'),
             'prazo': safe_isoformat(pp.get('prazo')),
             'prioridade': pp.get('prioridade', 'media'),
+            'task_rule_id': pp.get('task_rule_id'),
             'created_at': safe_isoformat(pp.get('created_at')),
         })
 
@@ -388,30 +390,46 @@ def get_comites():
             cursor.execute(query, params)
             rows = cursor.fetchall()
 
-            comites = []
+            comites_raw = []
+            comite_ids = []
             for r in rows:
                 d = format_row(r, cursor)
-                # Count itens and fetch titles
-                cursor.execute(
-                    f"SELECT id, titulo FROM {COMITE_SCHEMA_PREFIX}.comite_itens_pauta WHERE comite_id = ? ORDER BY prioridade DESC, created_at",
-                    (d['id'],)
-                )
-                itens_rows = cursor.fetchall()
-                itens_titulos = [format_row(ir, cursor).get('titulo', '') for ir in itens_rows]
+                comites_raw.append(d)
+                comite_ids.append(d['id'])
 
-                # Get proximos passos summary
+            # ── Batch: itens de pauta para TODOS os comitês de uma vez ──
+            itens_by_comite = {}
+            if comite_ids:
+                in_clause = ','.join(['?'] * len(comite_ids))
                 cursor.execute(
-                    f"""SELECT pp.*, ip.titulo as item_titulo 
+                    f"SELECT comite_id, titulo FROM {COMITE_SCHEMA_PREFIX}.comite_itens_pauta WHERE comite_id IN ({in_clause}) ORDER BY prioridade DESC, created_at",
+                    comite_ids
+                )
+                for ir in cursor.fetchall():
+                    item = format_row(ir, cursor)
+                    cid = item['comite_id']
+                    if cid not in itens_by_comite:
+                        itens_by_comite[cid] = []
+                    itens_by_comite[cid].append(item.get('titulo', ''))
+
+            # ── Batch: próximos passos para TODOS os comitês de uma vez ──
+            pp_by_comite = {}
+            if comite_ids:
+                in_clause = ','.join(['?'] * len(comite_ids))
+                cursor.execute(
+                    f"""SELECT pp.comite_id, pp.id, pp.descricao, pp.responsavel_nome, pp.status,
+                        ip.titulo as item_titulo
                     FROM {COMITE_SCHEMA_PREFIX}.comite_proximos_passos pp
                     LEFT JOIN {COMITE_SCHEMA_PREFIX}.comite_itens_pauta ip ON pp.item_pauta_id = ip.id
-                    WHERE pp.comite_id = ? ORDER BY pp.created_at""",
-                    (d['id'],)
+                    WHERE pp.comite_id IN ({in_clause}) ORDER BY pp.created_at""",
+                    comite_ids
                 )
-                pp_rows = cursor.fetchall()
-                proximos_passos = []
-                for pp_row in pp_rows:
+                for pp_row in cursor.fetchall():
                     pp = format_row(pp_row, cursor)
-                    proximos_passos.append({
+                    cid = pp['comite_id']
+                    if cid not in pp_by_comite:
+                        pp_by_comite[cid] = []
+                    pp_by_comite[cid].append({
                         'id': pp['id'],
                         'descricao': pp.get('descricao'),
                         'responsavel_nome': pp.get('responsavel_nome'),
@@ -419,8 +437,15 @@ def get_comites():
                         'item_titulo': pp.get('item_titulo'),
                     })
 
+            # ── Montar resultado ──
+            comites = []
+            for d in comites_raw:
+                cid = d['id']
+                itens_titulos = itens_by_comite.get(cid, [])
+                proximos_passos = pp_by_comite.get(cid, [])
+
                 comites.append({
-                    'id': d['id'],
+                    'id': cid,
                     'comite_rule_id': d.get('comite_rule_id'),
                     'data': safe_isoformat(d.get('data')),
                     'status': d.get('status'),
@@ -827,38 +852,61 @@ def add_proximo_passo_item(item_id):
     try:
         data = request.get_json(force=True)
         with conn.cursor() as cursor:
-            # Get comite_id from item
+            # Get comite_id AND operation_id from parent item
             cursor.execute(
-                f"SELECT comite_id FROM {COMITE_SCHEMA_PREFIX}.comite_itens_pauta WHERE id = ?",
+                f"SELECT comite_id, operation_id FROM {COMITE_SCHEMA_PREFIX}.comite_itens_pauta WHERE id = ?",
                 (item_id,)
             )
             item_row = cursor.fetchone()
             comite_id = item_row.comite_id if item_row else None
+            operation_id = item_row.operation_id if item_row else None
 
-            new_id = _get_next_id(cursor, 'comite_proximos_passos')
             now = datetime.now()
             prazo_raw = data.get('prazo')
             prazo = parse_iso_date(prazo_raw) if prazo_raw else None
             prioridade = data.get('prioridade', 'media')
+            responsavel_nome = data.get('responsavel_nome', '')
+            descricao = data.get('descricao', '')
+
+            # ── Map comitê prioridade → CRM priority ──
+            PRIO_MAP = {'baixa': 'Baixa', 'media': 'Média', 'alta': 'Alta', 'urgente': 'Urgente'}
+            crm_priority = PRIO_MAP.get(prioridade, 'Média')
+
+            # ── Create task_rule in crm.task_rules ──
+            task_rule_id = get_next_unique_id(cursor, 'task_rules')
+            assignees_json = json.dumps([responsavel_nome]) if responsavel_nome else '[]'
+            cursor.execute(
+                """INSERT INTO cri_cra_dev.crm.task_rules
+                (id, operation_id, name, frequency, start_date, end_date, description, priority, assignees)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (task_rule_id, operation_id, descricao, 'Pontual',
+                 prazo or now, prazo or now,
+                 f'Tarefa de comitê (item #{item_id})',
+                 crm_priority, assignees_json)
+            )
+
+            # ── Create próximo passo record with task_rule_id reference ──
+            new_id = _get_next_id(cursor, 'comite_proximos_passos')
             cursor.execute(
                 f"""INSERT INTO {COMITE_SCHEMA_PREFIX}.comite_proximos_passos 
-                (id, item_pauta_id, comite_id, descricao, responsavel_user_id, responsavel_nome, status, prazo, prioridade, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                (new_id, item_id, comite_id, data.get('descricao'),
-                 data.get('responsavel_user_id'), data.get('responsavel_nome'),
-                 'pendente', prazo, prioridade, now)
+                (id, item_pauta_id, comite_id, descricao, responsavel_user_id, responsavel_nome, status, prazo, prioridade, task_rule_id, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (new_id, item_id, comite_id, descricao,
+                 data.get('responsavel_user_id'), responsavel_nome,
+                 'pendente', prazo, prioridade, task_rule_id, now)
             )
         conn.commit()
         return jsonify({
             'id': new_id,
             'item_pauta_id': item_id,
             'comite_id': comite_id,
-            'descricao': data.get('descricao'),
+            'descricao': descricao,
             'responsavel_user_id': data.get('responsavel_user_id'),
-            'responsavel_nome': data.get('responsavel_nome'),
+            'responsavel_nome': responsavel_nome,
             'status': 'pendente',
             'prazo': safe_isoformat(prazo),
             'prioridade': prioridade,
+            'task_rule_id': task_rule_id,
             'created_at': safe_isoformat(now),
         }), 201
     except Exception as e:
@@ -874,17 +922,88 @@ def update_proximo_passo(pp_id):
     conn = get_db_connection()
     try:
         data = request.get_json(force=True)
+        new_status = data.get('status', 'pendente')
         with conn.cursor() as cursor:
+            # Fetch current record to get task_rule_id and old status
+            cursor.execute(
+                f"SELECT task_rule_id, status FROM {COMITE_SCHEMA_PREFIX}.comite_proximos_passos WHERE id = ?",
+                (pp_id,)
+            )
+            pp_row = cursor.fetchone()
+            task_rule_id = pp_row.task_rule_id if pp_row else None
+            old_status = pp_row.status if pp_row else 'pendente'
+
             prazo_raw = data.get('prazo')
             prazo = parse_iso_date(prazo_raw) if prazo_raw else None
             cursor.execute(
                 f"""UPDATE {COMITE_SCHEMA_PREFIX}.comite_proximos_passos 
                 SET status = ?, descricao = ?, responsavel_nome = ?, prioridade = ?, prazo = ?
                 WHERE id = ?""",
-                (data.get('status', 'pendente'), data.get('descricao'),
+                (new_status, data.get('descricao'),
                  data.get('responsavel_nome'), data.get('prioridade', 'media'),
                  prazo, pp_id)
             )
+
+            # ── Sync completion status with crm.task_rules via task_exceptions ──
+            if task_rule_id and old_status != new_status:
+                # Get operation_id from the task_rule to build the task_id
+                cursor.execute(
+                    "SELECT operation_id FROM cri_cra_dev.crm.task_rules WHERE id = ?",
+                    (task_rule_id,)
+                )
+                rule_row = cursor.fetchone()
+                op_id = rule_row.operation_id if rule_row else None
+
+                # Build task_id matching task_engine Pontual format:
+                # "op{op_id}-rule{rule_id}-{due_date}"  or  "general-rule{rule_id}-{due_date}"
+                if op_id:
+                    start_cursor_row = None
+                    cursor.execute(
+                        "SELECT start_date FROM cri_cra_dev.crm.task_rules WHERE id = ?",
+                        (task_rule_id,)
+                    )
+                    start_cursor_row = cursor.fetchone()
+                    start_date_str = safe_isoformat(start_cursor_row.start_date) if start_cursor_row and start_cursor_row.start_date else None
+                    if start_date_str:
+                        task_id = f"op{op_id}-rule{task_rule_id}-{start_date_str[:10]}"
+                    else:
+                        task_id = f"op{op_id}-rule{task_rule_id}-nodate"
+                else:
+                    # General task (no operation) — still need a unique task_id
+                    task_id = f"general-rule{task_rule_id}"
+
+                if new_status == 'concluido':
+                    # Add to task_exceptions to mark as completed
+                    cursor.execute(
+                        "SELECT task_id FROM cri_cra_dev.crm.task_exceptions WHERE task_id = ?",
+                        (task_id,)
+                    )
+                    if not cursor.fetchone():
+                        cursor.execute(
+                            """INSERT INTO cri_cra_dev.crm.task_exceptions (task_id, operation_id, deleted_at, deleted_by)
+                            VALUES (?, ?, ?, ?)""",
+                            (task_id, op_id, datetime.now(), data.get('responsavel_nome', 'comite'))
+                        )
+                elif new_status == 'pendente':
+                    # Remove from task_exceptions to re-open
+                    cursor.execute(
+                        "DELETE FROM cri_cra_dev.crm.task_exceptions WHERE task_id = ?",
+                        (task_id,)
+                    )
+
+            # ── Also sync task_rule fields if changed ──
+            if task_rule_id:
+                PRIO_MAP = {'baixa': 'Baixa', 'media': 'Média', 'alta': 'Alta', 'urgente': 'Urgente'}
+                crm_priority = PRIO_MAP.get(data.get('prioridade', 'media'), 'Média')
+                responsavel_nome = data.get('responsavel_nome', '')
+                assignees_json = json.dumps([responsavel_nome]) if responsavel_nome else '[]'
+                cursor.execute(
+                    """UPDATE cri_cra_dev.crm.task_rules
+                    SET name = ?, end_date = ?, priority = ?, assignees = ?
+                    WHERE id = ?""",
+                    (data.get('descricao'), prazo, crm_priority, assignees_json, task_rule_id)
+                )
+
         conn.commit()
         return jsonify({"status": "ok"})
     except Exception as e:
@@ -901,23 +1020,88 @@ def update_proximo_passo(pp_id):
 
 @comite_bp.route('/api/comite/comites/<int:comite_id>/completar', methods=['POST'])
 def completar_comite(comite_id):
-    """Marca comitê como concluído e gera ata."""
+    """Marca comitê como concluído, gera ata e cria eventos CRM para itens vinculados a operações."""
     conn = get_db_connection()
     try:
         now = datetime.now()
         with conn.cursor() as cursor:
             # Check comitê exists first
             cursor.execute(
-                f"SELECT id FROM {COMITE_SCHEMA_PREFIX}.comites WHERE id = ?",
+                f"SELECT id, data FROM {COMITE_SCHEMA_PREFIX}.comites WHERE id = ?",
                 (comite_id,)
             )
-            if not cursor.fetchone():
+            comite_row = cursor.fetchone()
+            if not comite_row:
                 return jsonify({"error": "Comitê não encontrado."}), 404
 
+            comite_date = comite_row.data  # The committee's actual date
+
+            # Fetch rule tipo for building event type label
+            cursor.execute(
+                f"""SELECT cr.tipo FROM {COMITE_SCHEMA_PREFIX}.comites c
+                    JOIN {COMITE_SCHEMA_PREFIX}.comite_rules cr ON c.comite_rule_id = cr.id
+                    WHERE c.id = ?""",
+                (comite_id,)
+            )
+            rule_row = cursor.fetchone()
+            rule_tipo = rule_row.tipo if rule_row else 'investimento'
+            event_type = f"Comitê de {rule_tipo.capitalize()}" if rule_tipo else "Comitê"
+
+            # Mark comitê as completed
             cursor.execute(
                 f"UPDATE {COMITE_SCHEMA_PREFIX}.comites SET status = ?, ata_gerada_em = ? WHERE id = ?",
                 ('concluido', now, comite_id)
             )
+
+            # ── Generate CRM events for items linked to operations ──
+            cursor.execute(
+                f"SELECT * FROM {COMITE_SCHEMA_PREFIX}.comite_itens_pauta WHERE comite_id = ? AND operation_id IS NOT NULL",
+                (comite_id,)
+            )
+            itens_com_operacao = [format_row(r, cursor) for r in cursor.fetchall()]
+
+            events_created = 0
+            for item in itens_com_operacao:
+                op_id = item.get('operation_id')
+                if not op_id:
+                    continue
+
+                # Fetch próximos passos for this item
+                cursor.execute(
+                    f"SELECT descricao, responsavel_nome FROM {COMITE_SCHEMA_PREFIX}.comite_proximos_passos WHERE item_pauta_id = ? ORDER BY created_at",
+                    (item['id'],)
+                )
+                pp_rows = cursor.fetchall()
+                next_steps_parts = []
+                for pp in pp_rows:
+                    pp_data = format_row(pp, cursor)
+                    resp = pp_data.get('responsavel_nome', '')
+                    desc = pp_data.get('descricao', '')
+                    if resp:
+                        next_steps_parts.append(f"• {desc} (Resp: {resp})")
+                    else:
+                        next_steps_parts.append(f"• {desc}")
+                next_steps_text = "\n".join(next_steps_parts) if next_steps_parts else None
+
+                # Create event in crm.events
+                event_id = get_next_unique_id(cursor, 'events')
+                cursor.execute(
+                    """INSERT INTO cri_cra_dev.crm.events
+                    (id, operation_id, date, type, title, description, registered_by, next_steps)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (event_id, op_id, comite_date, event_type,
+                     item.get('titulo', 'Item de Comitê'),
+                     item.get('descricao', ''),
+                     item.get('criador_nome', 'Comitê'),
+                     next_steps_text)
+                )
+                events_created += 1
+
+            current_app.logger.info(
+                "Comitê %s concluído — %d evento(s) CRM gerado(s).",
+                comite_id, events_created
+            )
+
         conn.commit()
 
         # Fetch full detail after commit
@@ -929,7 +1113,12 @@ def completar_comite(comite_id):
 
         # Build ata
         ata = _build_ata(detail)
-        return jsonify({"status": "concluido", "ata": ata, "comite": detail})
+        return jsonify({
+            "status": "concluido",
+            "ata": ata,
+            "comite": detail,
+            "events_created": events_created,
+        })
     except Exception as e:
         current_app.logger.error(f"Error completing comite {comite_id}: {e}", exc_info=True)
         return jsonify({"error": str(e)}), 500

@@ -1589,14 +1589,14 @@ class TestComiteFullLifecycle:
         comite_id = comite['id']
         secao_id = comite['secoes'][0]['id']
 
-        # 3. Item
+        # 3. Item (tipo_caso: geral — no operation needed)
         res = client.post(f'/api/comite/comites/{comite_id}/itens', json={
             'titulo': 'Lifecycle Item',
             'secao_id': secao_id,
             'criador_user_id': 1,
             'criador_nome': 'Lifecycle Test',
             'prioridade': 'alta',
-            'tipo_caso': 'aprovacao',
+            'tipo_caso': 'geral',
         })
         assert res.status_code == 201
         item_id = json.loads(res.data)['id']

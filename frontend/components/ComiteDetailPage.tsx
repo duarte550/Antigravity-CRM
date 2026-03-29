@@ -24,7 +24,7 @@ interface Secao { id: number; comite_id: number; nome: string; ordem: number; is
 interface Comentario { id: number; item_pauta_id: number; user_id?: number; user_nome?: string; texto: string; parent_comment_id?: number; created_at?: string; likes: number }
 interface Voto { id: number; item_pauta_id: number; user_id?: number; user_nome?: string; tipo_voto: string; cargo_voto?: string; comentario?: string; created_at?: string }
 interface VideoAsst { id: number; item_pauta_id: number; user_id?: number; user_nome?: string; assistido?: boolean }
-interface ProxPasso { id: number; item_pauta_id?: number; comite_id?: number; descricao: string; responsavel_user_id?: number; responsavel_nome?: string; status: string; prazo?: string; prioridade?: string; created_at?: string }
+interface ProxPasso { id: number; item_pauta_id?: number; comite_id?: number; descricao: string; responsavel_user_id?: number; responsavel_nome?: string; status: string; prazo?: string; prioridade?: string; task_rule_id?: number; created_at?: string }
 interface Item {
   id: number; comite_id: number; secao_id?: number; titulo: string; descricao?: string;
   criador_user_id?: number; criador_nome?: string; tipo: string; video_url?: string; video_duracao?: string;

@@ -166,7 +166,8 @@ CREATE TABLE IF NOT EXISTS cri_cra_dev.crm.task_rules (
     description STRING,
     priority STRING,
     is_origination BOOLEAN,
-    operation_stage_id BIGINT
+    operation_stage_id BIGINT,
+    assignees STRING
 );
 
 CREATE TABLE IF NOT EXISTS cri_cra_dev.crm.operation_review_notes (
