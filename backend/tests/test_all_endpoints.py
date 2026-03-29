@@ -22,6 +22,18 @@ Cobre:
   - Structuring Operation Stages
   - Economic Groups CRUD
   - Fund Simulator
+  - Comitê Rules CRUD (criar, duplicata bloqueada, update, soft-delete)
+  - Comitê Instâncias (criar, listar, filtrar, detalhe, 404)
+  - Comitê Seções (adicionar customizada)
+  - Comitê Itens de Pauta (presencial, urgente, vídeo, update)
+  - Comitê Comentários (comentar, reply)
+  - Comitê Likes (like/unlike toggle)
+  - Comitê Votos (cast, upsert)
+  - Comitê Vídeo Assistido (marcar, toggle)
+  - Comitê Próximos Passos (criar, atualizar status)
+  - Comitê Completar + Relatório (ata, persistência, 404)
+  - Comitê Config Email (criar, atualizar)
+  - Comitê Full Lifecycle (integração end-to-end)
   - Verificações de compliance: try/except/finally e snake_case (§3.1 e §3.2)
 """
 import json
@@ -1088,3 +1100,544 @@ class TestArchitectureCompliance:
             finally_count = source.count('finally:')
             assert finally_count >= func_count, \
                 f"fund_simulator.py: {func_count} chamadas a get_db_connection mas apenas {finally_count} blocos finally"
+
+    def test_connection_handling_pattern_comite(self):
+        """Verifica try/finally nas rotas de comite.py."""
+        comite_path = os.path.join(os.path.dirname(__file__), '..', 'comite.py')
+        with open(comite_path, 'r', encoding='utf-8') as f:
+            source = f.read()
+
+        if 'get_db_connection' in source:
+            func_count = source.count('get_db_connection()')
+            finally_count = source.count('finally:')
+            assert finally_count >= func_count, \
+                f"comite.py: {func_count} chamadas a get_db_connection mas apenas {finally_count} blocos finally"
+
+    def test_comite_json_responses_use_snake_case(self, client):
+        """Verifica que respostas do módulo comitê usam snake_case."""
+        res = client.get('/api/comite/rules')
+        if res.status_code == 200:
+            data = json.loads(res.data)
+            if data:
+                for key in data[0].keys():
+                    assert not (key[0].isupper() and '_' not in key), \
+                        f"Chave em PascalCase detectada no comitê: '{key}' — viola §3.2"
+
+
+# ============================================================
+# 23. COMITÊ — Regras, Comitês, Itens, Comentários, Votos, etc.
+# ============================================================
+
+class TestComiteRulesEndpoints:
+    """CRUD completo de regras de comitê."""
+
+    def test_get_rules_returns_list(self, client):
+        res = client.get('/api/comite/rules')
+        assert res.status_code == 200
+        data = json.loads(res.data)
+        assert isinstance(data, list)
+
+    def test_create_rule(self, client):
+        res = client.post('/api/comite/rules', json={
+            'tipo': 'investimento',
+            'area': 'ALL_EP_CRI',
+            'dia_da_semana': 'Segunda',
+            'horario': '10:00',
+        })
+        assert res.status_code == 201
+        data = json.loads(res.data)
+        assert data['tipo'] == 'investimento'
+        assert data['area'] == 'ALL_EP_CRI'
+        assert data['ativo'] is True
+        self.__class__._rule_id = data['id']
+
+    def test_duplicate_rule_blocked(self, client):
+        """Não permite 2 regras ativas do mesmo tipo+área."""
+        res = client.post('/api/comite/rules', json={
+            'tipo': 'investimento',
+            'area': 'ALL_EP_CRI',
+            'dia_da_semana': 'Terça',
+            'horario': '11:00',
+        })
+        assert res.status_code == 400
+        data = json.loads(res.data)
+        assert 'Já existe' in data.get('error', '')
+
+    def test_create_monitoramento_same_area(self, client):
+        """Monitoramento pode existir na mesma área que investimento."""
+        res = client.post('/api/comite/rules', json={
+            'tipo': 'monitoramento',
+            'area': 'ALL_EP_CRI',
+            'dia_da_semana': 'Quarta',
+            'horario': '14:00',
+        })
+        assert res.status_code == 201
+        self.__class__._mon_rule_id = json.loads(res.data)['id']
+
+    def test_update_rule(self, client):
+        rule_id = getattr(self.__class__, '_rule_id', 1)
+        res = client.put(f'/api/comite/rules/{rule_id}', json={
+            'dia_da_semana': 'Sexta',
+            'horario': '09:00',
+            'area': 'ALL_EP_CRI',
+        })
+        assert res.status_code == 200
+
+    def test_delete_rule(self, client):
+        # Create a temp rule to delete
+        res = client.post('/api/comite/rules', json={
+            'tipo': 'investimento',
+            'area': 'ALL_EP_CS',
+            'dia_da_semana': 'Quinta',
+            'horario': '15:00',
+        })
+        assert res.status_code == 201
+        temp_id = json.loads(res.data)['id']
+        res = client.delete(f'/api/comite/rules/{temp_id}')
+        assert res.status_code == 200
+
+    def test_list_rules_after_ops(self, client):
+        res = client.get('/api/comite/rules')
+        assert res.status_code == 200
+        data = json.loads(res.data)
+        assert len(data) >= 2
+
+
+class TestComitesEndpoints:
+    """CRUD de instâncias de comitê."""
+
+    def test_create_comite(self, client):
+        # Ensure rule exists
+        rules = json.loads(client.get('/api/comite/rules').data)
+        if not rules:
+            client.post('/api/comite/rules', json={
+                'tipo': 'investimento', 'area': 'CRI',
+                'dia_da_semana': 'Segunda', 'horario': '10:00',
+            })
+            rules = json.loads(client.get('/api/comite/rules').data)
+
+        rule_id = rules[0]['id']
+        res = client.post('/api/comite/comites', json={
+            'comite_rule_id': rule_id,
+            'data': '2026-04-01T10:00:00',
+        })
+        assert res.status_code == 201
+        data = json.loads(res.data)
+        assert data['status'] == 'agendado'
+        assert isinstance(data['secoes'], list)
+        assert len(data['secoes']) > 0  # Default sections
+        self.__class__._comite_id = data['id']
+        self.__class__._first_secao_id = data['secoes'][0]['id']
+
+    def test_create_comite_invalid_rule(self, client):
+        res = client.post('/api/comite/comites', json={
+            'comite_rule_id': 99999,
+            'data': '2026-04-01T10:00:00',
+        })
+        assert res.status_code == 404
+
+    def test_get_comites_list(self, client):
+        res = client.get('/api/comite/comites')
+        assert res.status_code == 200
+        data = json.loads(res.data)
+        assert isinstance(data, list)
+        assert len(data) >= 1
+
+    def test_get_comites_filter_area(self, client):
+        res = client.get('/api/comite/comites?area=CRI')
+        assert res.status_code == 200
+        data = json.loads(res.data)
+        for c in data:
+            if c.get('area') is not None:
+                assert c['area'] == 'CRI'
+
+    def test_get_comite_detail(self, client):
+        comite_id = getattr(self.__class__, '_comite_id', 1)
+        res = client.get(f'/api/comite/comites/{comite_id}')
+        assert res.status_code == 200
+        data = json.loads(res.data)
+        assert data['id'] == comite_id
+        assert 'secoes' in data
+        assert 'itens' in data
+
+    def test_get_comite_not_found(self, client):
+        res = client.get('/api/comite/comites/99999')
+        assert res.status_code == 404
+
+
+class TestComiteSecoesEndpoints:
+    """Seções customizadas dentro de um comitê."""
+
+    def test_add_secao(self, client):
+        comite_id = getattr(TestComitesEndpoints, '_comite_id', 1)
+        res = client.post(f'/api/comite/comites/{comite_id}/secoes', json={
+            'nome': 'Seção Customizada Pytest',
+        })
+        assert res.status_code == 201
+        data = json.loads(res.data)
+        assert data['nome'] == 'Seção Customizada Pytest'
+        assert data['is_default'] is False
+
+
+class TestComiteItensPautaEndpoints:
+    """Itens de pauta: criar, atualizar, diferentes tipos."""
+
+    def test_create_item_presencial(self, client):
+        comite_id = getattr(TestComitesEndpoints, '_comite_id', 1)
+        secao_id = getattr(TestComitesEndpoints, '_first_secao_id', None)
+
+        res = client.post(f'/api/comite/comites/{comite_id}/itens', json={
+            'titulo': 'Item Presencial Pytest',
+            'descricao': 'Criado pelo test_all_endpoints',
+            'secao_id': secao_id,
+            'criador_user_id': 1,
+            'criador_nome': 'Pytest',
+            'tipo': 'presencial',
+            'prioridade': 'normal',
+            'tipo_caso': 'geral',
+        })
+        assert res.status_code == 201
+        data = json.loads(res.data)
+        assert data['titulo'] == 'Item Presencial Pytest'
+        assert data['prioridade'] == 'normal'
+        self.__class__._item_id = data['id']
+
+    def test_create_item_urgente(self, client):
+        comite_id = getattr(TestComitesEndpoints, '_comite_id', 1)
+        secao_id = getattr(TestComitesEndpoints, '_first_secao_id', None)
+
+        res = client.post(f'/api/comite/comites/{comite_id}/itens', json={
+            'titulo': 'Item Urgente Pytest',
+            'secao_id': secao_id,
+            'criador_user_id': 1,
+            'criador_nome': 'Pytest',
+            'prioridade': 'urgente',
+        })
+        assert res.status_code == 201
+        assert json.loads(res.data)['prioridade'] == 'urgente'
+
+    def test_create_item_video(self, client):
+        comite_id = getattr(TestComitesEndpoints, '_comite_id', 1)
+        secao_id = getattr(TestComitesEndpoints, '_first_secao_id', None)
+
+        res = client.post(f'/api/comite/comites/{comite_id}/itens', json={
+            'titulo': 'Apresentação Vídeo Pytest',
+            'secao_id': secao_id,
+            'criador_user_id': 1,
+            'criador_nome': 'Pytest',
+            'tipo': 'video',
+            'video_url': 'https://stream.microsoft.com/video/pytest',
+            'video_duracao': '12:00',
+        })
+        assert res.status_code == 201
+        data = json.loads(res.data)
+        assert data['tipo'] == 'video'
+        assert data['video_url'] == 'https://stream.microsoft.com/video/pytest'
+
+    def test_update_item(self, client):
+        item_id = getattr(self.__class__, '_item_id', 1)
+        res = client.put(f'/api/comite/itens/{item_id}', json={
+            'titulo': 'Item Atualizado Pytest',
+            'descricao': 'Descrição atualizada',
+            'tipo': 'presencial',
+            'prioridade': 'alta',
+        })
+        assert res.status_code == 200
+
+
+class TestComiteComentariosEndpoints:
+    """Comentários em itens de pauta."""
+
+    def test_add_comentario(self, client):
+        item_id = getattr(TestComiteItensPautaEndpoints, '_item_id', 1)
+        res = client.post(f'/api/comite/itens/{item_id}/comentarios', json={
+            'user_id': 1,
+            'user_nome': 'Pytest User',
+            'texto': 'Comentário via test_all_endpoints',
+        })
+        assert res.status_code == 201
+        data = json.loads(res.data)
+        assert data['texto'] == 'Comentário via test_all_endpoints'
+        assert data['likes'] == 0
+        self.__class__._comment_id = data['id']
+
+    def test_add_reply(self, client):
+        item_id = getattr(TestComiteItensPautaEndpoints, '_item_id', 1)
+        comment_id = getattr(self.__class__, '_comment_id', 1)
+        res = client.post(f'/api/comite/itens/{item_id}/comentarios', json={
+            'user_id': 2,
+            'user_nome': 'Analista Reply',
+            'texto': 'Resposta ao comentário',
+            'parent_comment_id': comment_id,
+        })
+        assert res.status_code == 201
+        data = json.loads(res.data)
+        assert data['parent_comment_id'] == comment_id
+
+
+class TestComiteLikesEndpoints:
+    """Toggle de likes em comentários."""
+
+    def test_like_comentario(self, client):
+        comment_id = getattr(TestComiteComentariosEndpoints, '_comment_id', 1)
+        res = client.post(f'/api/comite/comentarios/{comment_id}/like', json={
+            'user_id': 2,
+        })
+        assert res.status_code == 200
+        data = json.loads(res.data)
+        assert data['action'] == 'liked'
+        assert data['likes'] == 1
+
+    def test_unlike_comentario(self, client):
+        comment_id = getattr(TestComiteComentariosEndpoints, '_comment_id', 1)
+        res = client.post(f'/api/comite/comentarios/{comment_id}/like', json={
+            'user_id': 2,
+        })
+        assert res.status_code == 200
+        data = json.loads(res.data)
+        assert data['action'] == 'unliked'
+        assert data['likes'] == 0
+
+
+class TestComiteVotosEndpoints:
+    """Votos em itens de pauta com upsert."""
+
+    def test_cast_voto(self, client):
+        item_id = getattr(TestComiteItensPautaEndpoints, '_item_id', 1)
+        res = client.post(f'/api/comite/itens/{item_id}/votos', json={
+            'user_id': 3,
+            'user_nome': 'Gestor Pytest',
+            'tipo_voto': 'aprovado',
+            'cargo_voto': 'gestao',
+        })
+        assert res.status_code == 201
+        data = json.loads(res.data)
+        assert data['tipo_voto'] == 'aprovado'
+
+    def test_update_voto(self, client):
+        """Mesmo usuário re-vota → atualiza."""
+        item_id = getattr(TestComiteItensPautaEndpoints, '_item_id', 1)
+        res = client.post(f'/api/comite/itens/{item_id}/votos', json={
+            'user_id': 3,
+            'user_nome': 'Gestor Pytest',
+            'tipo_voto': 'reprovado',
+            'cargo_voto': 'gestao',
+            'comentario': 'Mudei de ideia - pytest',
+        })
+        assert res.status_code == 201
+        data = json.loads(res.data)
+        assert data['tipo_voto'] == 'reprovado'
+
+
+class TestComiteVideoAssistidoEndpoints:
+    """Toggle de marcação de vídeo assistido."""
+
+    def test_mark_video_assistido(self, client):
+        item_id = getattr(TestComiteItensPautaEndpoints, '_item_id', 1)
+        res = client.post(f'/api/comite/itens/{item_id}/video-assistido', json={
+            'user_id': 1,
+            'user_nome': 'Pytest User',
+        })
+        assert res.status_code == 200
+        data = json.loads(res.data)
+        assert data['assistido'] is True
+
+    def test_toggle_off_video_assistido(self, client):
+        item_id = getattr(TestComiteItensPautaEndpoints, '_item_id', 1)
+        res = client.post(f'/api/comite/itens/{item_id}/video-assistido', json={
+            'user_id': 1,
+            'user_nome': 'Pytest User',
+        })
+        assert res.status_code == 200
+        data = json.loads(res.data)
+        assert data['assistido'] is False
+
+
+class TestComiteProximosPassosEndpoints:
+    """Próximos passos vinculados a itens."""
+
+    def test_add_proximo_passo(self, client):
+        item_id = getattr(TestComiteItensPautaEndpoints, '_item_id', 1)
+        res = client.post(f'/api/comite/itens/{item_id}/proximos-passos', json={
+            'descricao': 'Enviar relatório - pytest',
+            'responsavel_user_id': 1,
+            'responsavel_nome': 'Analista Pytest',
+        })
+        assert res.status_code == 201
+        data = json.loads(res.data)
+        assert data['status'] == 'pendente'
+        self.__class__._pp_id = data['id']
+
+    def test_update_proximo_passo(self, client):
+        pp_id = getattr(self.__class__, '_pp_id', 1)
+        res = client.put(f'/api/comite/proximos-passos/{pp_id}', json={
+            'status': 'concluido',
+            'descricao': 'Relatório enviado - pytest',
+        })
+        assert res.status_code == 200
+
+
+class TestComiteCompletarRelatorioEndpoints:
+    """Completar comitê e gerar relatório/ata."""
+
+    @pytest.fixture(autouse=True)
+    def _setup_comite(self, client):
+        """Cria um comitê dedicado para testes de completar."""
+        # Create rule
+        res = client.post('/api/comite/rules', json={
+            'tipo': 'investimento',
+            'area': 'COMPLETAR_ALL_EP',
+            'dia_da_semana': 'Segunda',
+            'horario': '10:00',
+        })
+        if res.status_code == 201:
+            rule_id = json.loads(res.data)['id']
+        else:
+            rules = json.loads(client.get('/api/comite/rules').data)
+            rule_id = next(r['id'] for r in rules if r.get('area') == 'COMPLETAR_ALL_EP')
+
+        res = client.post('/api/comite/comites', json={
+            'comite_rule_id': rule_id,
+            'data': '2026-06-15T10:00:00',
+        })
+        assert res.status_code == 201
+        self.comite_id = json.loads(res.data)['id']
+        yield
+
+    def test_get_relatorio(self, client):
+        res = client.get(f'/api/comite/comites/{self.comite_id}/relatorio')
+        assert res.status_code == 200
+        data = json.loads(res.data)
+        assert 'html' in data
+        assert '<html>' in data['html']
+
+    def test_completar_comite(self, client):
+        res = client.post(f'/api/comite/comites/{self.comite_id}/completar')
+        assert res.status_code == 200
+        data = json.loads(res.data)
+        assert data['status'] == 'concluido'
+        assert 'ata' in data
+
+    def test_completar_not_found(self, client):
+        res = client.post('/api/comite/comites/99999/completar')
+        assert res.status_code == 404
+
+    def test_completar_persists(self, client):
+        """Após completar, o status persiste ao re-buscar."""
+        client.post(f'/api/comite/comites/{self.comite_id}/completar')
+        res = client.get(f'/api/comite/comites/{self.comite_id}')
+        data = json.loads(res.data)
+        assert data['status'] == 'concluido'
+        assert data['ata_gerada_em'] is not None
+
+
+class TestComiteConfigEmailEndpoints:
+    """Configuração de email do comitê (upsert)."""
+
+    def test_create_config_email(self, client):
+        rules = json.loads(client.get('/api/comite/rules').data)
+        if not rules:
+            pytest.skip("Nenhuma regra de comitê disponível")
+        rule_id = rules[0]['id']
+
+        res = client.post('/api/comite/config-email', json={
+            'comite_rule_id': rule_id,
+            'horario_envio': '08:00',
+            'habilitado': True,
+        })
+        assert res.status_code == 200
+
+    def test_update_config_email(self, client):
+        rules = json.loads(client.get('/api/comite/rules').data)
+        if not rules:
+            pytest.skip("Nenhuma regra de comitê disponível")
+        rule_id = rules[0]['id']
+
+        res = client.post('/api/comite/config-email', json={
+            'comite_rule_id': rule_id,
+            'horario_envio': '09:00',
+            'habilitado': False,
+        })
+        assert res.status_code == 200
+
+
+class TestComiteFullLifecycle:
+    """Teste de integração: ciclo completo de um comitê."""
+
+    def test_full_lifecycle(self, client):
+        """
+        1. Criar regra → 2. Criar comitê → 3. Adicionar item →
+        4. Comentar → 5. Votar → 6. Próximo passo → 7. Completar
+        """
+        # 1. Rule
+        res = client.post('/api/comite/rules', json={
+            'tipo': 'monitoramento',
+            'area': 'LIFECYCLE_TEST',
+            'dia_da_semana': 'Quarta',
+            'horario': '16:00',
+        })
+        assert res.status_code == 201
+        rule_id = json.loads(res.data)['id']
+
+        # 2. Comitê
+        res = client.post('/api/comite/comites', json={
+            'comite_rule_id': rule_id,
+            'data': '2026-07-01T16:00:00',
+        })
+        assert res.status_code == 201
+        comite = json.loads(res.data)
+        comite_id = comite['id']
+        secao_id = comite['secoes'][0]['id']
+
+        # 3. Item
+        res = client.post(f'/api/comite/comites/{comite_id}/itens', json={
+            'titulo': 'Lifecycle Item',
+            'secao_id': secao_id,
+            'criador_user_id': 1,
+            'criador_nome': 'Lifecycle Test',
+            'prioridade': 'alta',
+            'tipo_caso': 'aprovacao',
+        })
+        assert res.status_code == 201
+        item_id = json.loads(res.data)['id']
+
+        # 4. Comentar
+        res = client.post(f'/api/comite/itens/{item_id}/comentarios', json={
+            'user_id': 1, 'user_nome': 'Lifecycle', 'texto': 'Comentário lifecycle',
+        })
+        assert res.status_code == 201
+        comment_id = json.loads(res.data)['id']
+
+        # 4b. Like
+        res = client.post(f'/api/comite/comentarios/{comment_id}/like', json={'user_id': 2})
+        assert res.status_code == 200
+        assert json.loads(res.data)['likes'] == 1
+
+        # 5. Votar
+        res = client.post(f'/api/comite/itens/{item_id}/votos', json={
+            'user_id': 1, 'user_nome': 'Lifecycle', 'tipo_voto': 'aprovado', 'cargo_voto': 'risco',
+        })
+        assert res.status_code == 201
+
+        # 6. Próximo passo
+        res = client.post(f'/api/comite/itens/{item_id}/proximos-passos', json={
+            'descricao': 'Follow-up lifecycle',
+            'responsavel_user_id': 1, 'responsavel_nome': 'Lifecycle',
+        })
+        assert res.status_code == 201
+
+        # 7. Completar
+        res = client.post(f'/api/comite/comites/{comite_id}/completar')
+        assert res.status_code == 200
+        data = json.loads(res.data)
+        assert data['status'] == 'concluido'
+
+        # Verify detail after completion
+        res = client.get(f'/api/comite/comites/{comite_id}')
+        detail = json.loads(res.data)
+        assert detail['status'] == 'concluido'
+        assert len(detail['itens']) >= 1
+        item = next(i for i in detail['itens'] if i['id'] == item_id)
+        assert len(item['comentarios']) >= 1
+        assert len(item['votos']) >= 1
+        assert len(item['proximos_passos']) >= 1

@@ -29,6 +29,7 @@ import CarteiraCompletaPage from './components/CarteiraCompletaPage';
 import ComitesPage from './components/ComitesPage';
 import ComiteDetailPage from './components/ComiteDetailPage';
 import ComiteVideoPage from './components/ComiteVideoPage';
+import { BGPattern } from './components/ui/bg-pattern';
 import { fetchApi } from './utils/api';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://antigravity-crm-two.vercel.app';
@@ -870,11 +871,27 @@ const App: React.FC = () => {
           apiUrl={API_BASE_URL}
         />;
       case Page.COMITES:
-        return <ComitesPage />;
+        return <ComitesPage
+          apiUrl={API_BASE_URL}
+          showToast={showToast}
+          pushToGenericQueue={pushToGenericQueue}
+          onNavigate={handleNavigate}
+        />;
       case Page.COMITE_DETAIL:
-        return <ComiteDetailPage comiteId={selectedOperationId || 0} />;
+        return <ComiteDetailPage
+          comiteId={selectedOperationId || 0}
+          apiUrl={API_BASE_URL}
+          showToast={showToast}
+          pushToGenericQueue={pushToGenericQueue}
+          onNavigate={handleNavigate}
+        />;
       case Page.COMITE_VIDEO:
-        return <ComiteVideoPage itemPautaId={selectedOperationId || 0} />;
+        return <ComiteVideoPage
+          itemPautaId={selectedOperationId || 0}
+          apiUrl={API_BASE_URL}
+          showToast={showToast}
+          onNavigate={handleNavigate}
+        />;
       default:
         return <OverviewDashboard
           operations={filteredOperations.filter(op => op.operationType !== 'Geral')}
@@ -889,7 +906,10 @@ const App: React.FC = () => {
   }
 
   return (
-    <div className="flex h-screen bg-gray-100 dark:bg-gray-900 font-sans transition-colors duration-200">
+    <div className="flex h-screen bg-gray-50 dark:bg-[#080b12] font-sans transition-colors duration-200 relative z-0">
+      <div className="absolute inset-0 z-[-1] pointer-events-none overflow-hidden">
+        <BGPattern variant="dots" fill="currentColor" className="text-blue-900/15 dark:text-white/15" mask="fade-y" size={32} />
+      </div>
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
       <NewTaskModal
         isOpen={newTaskModalState.isOpen}
@@ -1016,7 +1036,7 @@ const App: React.FC = () => {
           </div>
         </header>
 
-        <main className="flex-1 overflow-x-hidden overflow-y-auto bg-gray-50 dark:bg-gray-900 transition-colors duration-200">
+        <main className="flex-1 overflow-x-hidden overflow-y-auto bg-transparent transition-colors duration-200">
           <div className="container mx-auto p-4 sm:p-6 lg:p-8">
             {renderContent()}
           </div>

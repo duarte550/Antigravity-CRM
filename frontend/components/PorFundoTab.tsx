@@ -11,7 +11,12 @@ interface PorFundoTabProps {
     onCreateOperation?: () => void;
 }
 
-const formatCurrency = (val: number) => `R$ ${(val).toFixed(2)}M`;
+const formatCurrency = (val: number) => {
+  if (val >= 1e9) return `R$ ${(val / 1e9).toFixed(1)}B`;
+  if (val >= 1e6) return `R$ ${(val / 1e6).toFixed(0)}M`;
+  if (val >= 1e3) return `R$ ${(val / 1e3).toFixed(0)}K`;
+  return `R$ ${val.toFixed(2)}`;
+};
 const formatPercent = (val: number) => `${val.toFixed(2)}%`;
 
 const ALL_TEMPERATURES = ['Quente', 'Morno', 'Frio', 'N/D'];

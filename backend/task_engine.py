@@ -75,6 +75,19 @@ def generate_tasks_for_rule(operation, rule, task_exceptions):
         
         status = 'Concluída' if task_id in completed_task_ids else 'Pendente'
         
+        # Deep-copy checklist items for this task instance
+        checklist_items = []
+        for item in rule.get('checklistItems', []):
+            checklist_items.append({
+                'id': item.get('id'),
+                'taskRuleId': rule['id'],
+                'title': item.get('title', ''),
+                'isCompleted': item.get('isCompleted', False),
+                'completedBy': item.get('completedBy'),
+                'completedAt': item.get('completedAt'),
+                'orderIndex': item.get('orderIndex', 0)
+            })
+        
         task_obj = {
             'id': task_id,
             'ruleId': rule['id'],
@@ -82,7 +95,9 @@ def generate_tasks_for_rule(operation, rule, task_exceptions):
             'dueDate': None,
             'status': status,
             'priority': rule.get('priority') or 'Média',
-            'notes': rule.get('description')
+            'notes': rule.get('description'),
+            'checklistItems': checklist_items,
+            'assignees': rule.get('assignees', [])
         }
         if is_struct_op:
             task_obj['structuringOperationId'] = op_id
@@ -111,7 +126,17 @@ def generate_tasks_for_rule(operation, rule, task_exceptions):
             'dueDate': safe_isoformat(due_date) + "T00:00:00" if due_date else None,
             'status': status,
             'priority': rule.get('priority') or 'Média',
-            'notes': rule.get('description')
+            'notes': rule.get('description'),
+            'checklistItems': [{
+                'id': item.get('id'),
+                'taskRuleId': rule['id'],
+                'title': item.get('title', ''),
+                'isCompleted': item.get('isCompleted', False),
+                'completedBy': item.get('completedBy'),
+                'completedAt': item.get('completedAt'),
+                'orderIndex': item.get('orderIndex', 0)
+            } for item in rule.get('checklistItems', [])],
+            'assignees': rule.get('assignees', [])
         }
         if is_struct_op:
             task_obj['structuringOperationId'] = op_id
@@ -198,7 +223,17 @@ def generate_tasks_for_rule(operation, rule, task_exceptions):
                 'dueDate': safe_isoformat(due_date) + "T00:00:00" if due_date else None,
                 'status': status,
                 'priority': rule.get('priority') or 'Média',
-                'notes': rule.get('description')
+                'notes': rule.get('description'),
+                'checklistItems': [{
+                    'id': item.get('id'),
+                    'taskRuleId': rule['id'],
+                    'title': item.get('title', ''),
+                    'isCompleted': item.get('isCompleted', False),
+                    'completedBy': item.get('completedBy'),
+                    'completedAt': item.get('completedAt'),
+                    'orderIndex': item.get('orderIndex', 0)
+                } for item in rule.get('checklistItems', [])],
+                'assignees': rule.get('assignees', [])
             }
             if is_struct_op:
                 task_obj['structuringOperationId'] = op_id

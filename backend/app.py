@@ -14,6 +14,7 @@ import logging
 from master_groups import master_groups_bp
 from economic_groups import economic_groups_bp
 from fund_simulator import fund_simulator_bp
+from comite import comite_bp
 
 # Configurações básicas de logging
 # Serve static files from 'dist' folder in production
@@ -21,6 +22,7 @@ app = Flask(__name__, static_folder='../dist', static_url_path='')
 app.register_blueprint(master_groups_bp)
 app.register_blueprint(economic_groups_bp)
 app.register_blueprint(fund_simulator_bp)
+app.register_blueprint(comite_bp)
 logging.basicConfig(level=logging.INFO)
 
 # Schema is now updated via Docker CMD before gunicorn starts
@@ -176,12 +178,33 @@ def fetch_full_operation(cursor, operation_id):
 
     cursor.execute("SELECT * FROM cri_cra_dev.crm.task_rules WHERE operation_id = ?", (operation_id,))
     db_rules = [format_row(r, cursor) for r in cursor.fetchall()]
+    
+    # Fetch checklist items for all rules in batch
+    rule_ids = [r.get('id') for r in db_rules if r.get('id')]
+    checklist_by_rule = defaultdict(list)
+    if rule_ids:
+        rule_placeholders = ', '.join(['?'] * len(rule_ids))
+        try:
+            cursor.execute(f"SELECT * FROM cri_cra_dev.crm.task_checklist_items WHERE task_rule_id IN ({rule_placeholders}) ORDER BY order_index", rule_ids)
+            for ci_row in cursor.fetchall():
+                ci = format_row(ci_row, cursor)
+                checklist_by_rule[ci['task_rule_id']].append({
+                    'id': ci.get('id'), 'taskRuleId': ci.get('task_rule_id'),
+                    'title': ci.get('title'), 'isCompleted': ci.get('is_completed') or False,
+                    'completedBy': ci.get('completed_by'), 'completedAt': safe_isoformat(ci.get('completed_at')),
+                    'orderIndex': ci.get('order_index') or 0
+                })
+        except Exception as e:
+            app.logger.warning("Checklist items table not found: %s", e)
+    
     operation['taskRules'] = [{
         'id': r.get('id'), 'name': r.get('name'), 'frequency': r.get('frequency'),
         'startDate': safe_isoformat(r.get('start_date')),
         'endDate': safe_isoformat(r.get('end_date')),
         'description': r.get('description'),
-        'priority': r.get('priority')
+        'priority': r.get('priority'),
+        'checklistItems': checklist_by_rule.get(r.get('id'), []),
+        'assignees': json.loads(r.get('assignees') or '[]') if r.get('assignees') else []
     } for r in db_rules]
     
     cursor.execute("SELECT * FROM cri_cra_dev.crm.operation_contacts WHERE operation_id = ?", (operation_id,))
@@ -353,17 +376,39 @@ def manage_operations_collection():
                         operations_map[row.operation_id]['events'].append({ 'id': event_db.get('id'), 'date': safe_isoformat(event_db.get('date')), 'type': event_db.get('type'), 'title': event_db.get('title'), 'description': event_db.get('description'), 'registeredBy': event_db.get('registered_by'), 'nextSteps': event_db.get('next_steps'), 'completedTaskId': event_db.get('completed_task_id'), 'isOrigination': event_db.get('is_origination') or False })
 
                 cursor.execute(f"SELECT * FROM cri_cra_dev.crm.task_rules WHERE operation_id IN ({placeholders})", op_ids)
-                for row in cursor.fetchall():
-                    rule_db = format_row(row, cursor)
-                    if isinstance(operations_map[row.operation_id]['taskRules'], list):
-                        operations_map[row.operation_id]['taskRules'].append({ 
-                            'id': rule_db.get('id'), 
-                            'name': rule_db.get('name'), 
-                            'frequency': rule_db.get('frequency'), 
-                            'startDate': safe_isoformat(rule_db.get('start_date')), 
-                            'endDate': safe_isoformat(rule_db.get('end_date')), 
-                            'description': rule_db.get('description'),
-                            'priority': rule_db.get('priority')
+                all_rules_rows = [format_row(row, cursor) for row in cursor.fetchall()]
+                
+                # Fetch all rule IDs for checklist items batch loading
+                all_rule_ids = [r.get('id') for r in all_rules_rows if r.get('id')]
+                bulk_checklist_by_rule = defaultdict(list)
+                if all_rule_ids:
+                    rule_pl = ', '.join(['?'] * len(all_rule_ids))
+                    try:
+                        cursor.execute(f"SELECT * FROM cri_cra_dev.crm.task_checklist_items WHERE task_rule_id IN ({rule_pl}) ORDER BY order_index", all_rule_ids)
+                        for ci_row in cursor.fetchall():
+                            ci = format_row(ci_row, cursor)
+                            bulk_checklist_by_rule[ci['task_rule_id']].append({
+                                'id': ci.get('id'), 'taskRuleId': ci.get('task_rule_id'),
+                                'title': ci.get('title'), 'isCompleted': ci.get('is_completed') or False,
+                                'completedBy': ci.get('completed_by'), 'completedAt': safe_isoformat(ci.get('completed_at')),
+                                'orderIndex': ci.get('order_index') or 0
+                            })
+                    except Exception as e:
+                        app.logger.warning("Checklist items table not found in bulk load: %s", e)
+                
+                for rule_row in all_rules_rows:
+                    rule_op_id = rule_row.get('operation_id')
+                    if rule_op_id and isinstance(operations_map.get(rule_op_id, {}).get('taskRules'), list):
+                        operations_map[rule_op_id]['taskRules'].append({ 
+                            'id': rule_row.get('id'), 
+                            'name': rule_row.get('name'), 
+                            'frequency': rule_row.get('frequency'), 
+                            'startDate': safe_isoformat(rule_row.get('start_date')), 
+                            'endDate': safe_isoformat(rule_row.get('end_date')), 
+                            'description': rule_row.get('description'),
+                            'priority': rule_row.get('priority'),
+                            'checklistItems': bulk_checklist_by_rule.get(rule_row.get('id'), []),
+                            'assignees': json.loads(rule_row.get('assignees') or '[]') if rule_row.get('assignees') else []
                         })
 
                 cursor.execute(f"SELECT * FROM cri_cra_dev.crm.rating_history WHERE operation_id IN ({placeholders}) ORDER BY date DESC", op_ids)
@@ -563,6 +608,37 @@ def sync_all_operations():
     finally:
         if conn: conn.close()
 
+# Internal helper function for syncing checklist items
+def _sync_checklist_items(cursor, rule_id, checklist_items):
+    """Syncs checklist items for a given task rule."""
+    try:
+        # Get existing items
+        cursor.execute("SELECT id FROM cri_cra_dev.crm.task_checklist_items WHERE task_rule_id = ?", (rule_id,))
+        existing_ids = {row.id for row in cursor.fetchall()}
+        client_ids = {item.get('id') for item in checklist_items if item.get('id') and isinstance(item.get('id'), int)}
+
+        # Delete removed items
+        for del_id in existing_ids - client_ids:
+            cursor.execute("DELETE FROM cri_cra_dev.crm.task_checklist_items WHERE id = ?", (del_id,))
+
+        # Upsert items
+        for idx, item in enumerate(checklist_items):
+            item_id = item.get('id')
+            completed_at = parse_iso_date(item.get('completedAt')) if item.get('completedAt') else None
+            if item_id and item_id in existing_ids:
+                cursor.execute(
+                    "UPDATE cri_cra_dev.crm.task_checklist_items SET title=?, is_completed=?, completed_by=?, completed_at=?, order_index=? WHERE id=?",
+                    (item.get('title'), item.get('isCompleted', False), item.get('completedBy'), completed_at, idx, item_id)
+                )
+            else:
+                new_id = get_next_unique_id(cursor, 'task_checklist_items')
+                cursor.execute(
+                    "INSERT INTO cri_cra_dev.crm.task_checklist_items (id, task_rule_id, title, is_completed, completed_by, completed_at, order_index) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    (new_id, rule_id, item.get('title'), item.get('isCompleted', False), item.get('completedBy'), completed_at, idx)
+                )
+    except Exception as e:
+        app.logger.warning("Error syncing checklist items for rule %s: %s", rule_id, e)
+
 # Internal helper function for updating operation in DB
 def _update_operation_db_internal(cursor, op_id, data):
     cursor.execute("SELECT * FROM cri_cra_dev.crm.operations WHERE id = ?", (op_id,))
@@ -748,12 +824,17 @@ def _update_operation_db_internal(cursor, op_id, data):
 
     for rule in data.get('taskRules', []):
         rule_id = rule.get('id')
+        assignees_json = json.dumps(rule.get('assignees', [])) if rule.get('assignees') else None
         if rule_id and rule_id in db_rules_map:
-            cursor.execute("UPDATE cri_cra_dev.crm.task_rules SET name=?, frequency=?, start_date=?, end_date=?, description=?, priority=? WHERE id=?", (rule.get('name'), rule.get('frequency'), rule.get('startDate'), rule.get('endDate'), rule.get('description'), rule.get('priority') or 'Média', rule_id))
+            cursor.execute("UPDATE cri_cra_dev.crm.task_rules SET name=?, frequency=?, start_date=?, end_date=?, description=?, priority=?, assignees=? WHERE id=?", (rule.get('name'), rule.get('frequency'), rule.get('startDate'), rule.get('endDate'), rule.get('description'), rule.get('priority') or 'Média', assignees_json, rule_id))
+            # Sync checklist items for this rule
+            _sync_checklist_items(cursor, rule_id, rule.get('checklistItems', []))
         elif not rule_id or rule_id not in db_rules_map:
             new_rule_id = get_next_unique_id(cursor, 'task_rules')
-            cursor.execute("INSERT INTO cri_cra_dev.crm.task_rules (id, operation_id, name, frequency, start_date, end_date, description, priority) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", (new_rule_id, op_id, rule.get('name'), rule.get('frequency'), rule.get('startDate'), rule.get('endDate'), rule.get('description'), rule.get('priority') or 'Média'))
+            cursor.execute("INSERT INTO cri_cra_dev.crm.task_rules (id, operation_id, name, frequency, start_date, end_date, description, priority, assignees) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", (new_rule_id, op_id, rule.get('name'), rule.get('frequency'), rule.get('startDate'), rule.get('endDate'), rule.get('description'), rule.get('priority') or 'Média', assignees_json))
             log_action(cursor, data.get('responsibleAnalyst', 'System'), 'CREATE', 'TaskRule', 'new', f"Regra '{rule.get('name')}' adicionada.")
+            # Sync checklist items for this new rule
+            _sync_checklist_items(cursor, new_rule_id, rule.get('checklistItems', []))
     
     if 'taskExceptions' in data:
         cursor.execute("DELETE FROM cri_cra_dev.crm.task_exceptions WHERE operation_id = ?", (op_id,))

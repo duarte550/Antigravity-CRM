@@ -192,13 +192,20 @@ const StructuringOperationDetailsPage: React.FC<StructuringOperationDetailsPageP
       s.id === stage.id ? { ...s, isCompleted: !s.isCompleted } : s
     );
     
+    // Determine the next active stage name from the updated stages
+    const sortedNewStages = [...newStages].sort((a, b) => (a.order_index || 0) - (b.order_index || 0));
+    const firstIncomplete = sortedNewStages.find(s => !s.isCompleted);
+    const nextStageName = firstIncomplete ? firstIncomplete.name : 'Concluído';
+    
     // Optimistic
-    setOperation(prev => prev ? { ...prev, stages: newStages } : null);
+    setOperation(prev => prev ? { ...prev, stages: newStages, stage: nextStageName } : null);
 
     try {
       const payload = { stages: newStages };
       if (pushToGenericQueue) {
           pushToGenericQueue(`${apiUrl}/api/structuring-operations/${operationId}/stages`, 'PUT', payload);
+          // Also update the stage field on the operation
+          pushToGenericQueue(`${apiUrl}/api/structuring-operations/${operationId}`, 'PUT', { stage: nextStageName });
       } else {
           const response = await fetchApi(`${apiUrl}/api/structuring-operations/${operationId}/stages`, {
             method: 'PUT',
@@ -206,6 +213,12 @@ const StructuringOperationDetailsPage: React.FC<StructuringOperationDetailsPageP
             body: JSON.stringify(payload),
           });
           if (!response.ok) throw new Error('Falha ao atualizar etapas');
+          // Also update the stage field on the operation
+          await fetchApi(`${apiUrl}/api/structuring-operations/${operationId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ stage: nextStageName }),
+          });
           await fetchOperation();
       }
 
@@ -213,7 +226,7 @@ const StructuringOperationDetailsPage: React.FC<StructuringOperationDetailsPageP
       if (!stage.isCompleted) {
         const eventPayload = {
           title: `Etapa Concluída: ${stage.name}`,
-          description: `A etapa '${stage.name}' foi marcada como concluída no Kanban.`,
+          description: `A etapa '${stage.name}' foi marcada como concluída. Operação avançou para: ${nextStageName}.`,
           type: 'Atualização de Pipeline',
           date: new Date().toISOString(),
           isOrigination: true
@@ -228,7 +241,9 @@ const StructuringOperationDetailsPage: React.FC<StructuringOperationDetailsPageP
               body: JSON.stringify(eventPayload),
             }).then(() => fetchOperation()).catch(console.error);
         }
-        showToast(`Evento automático gerado: Etapa ${stage.name}`, 'success');
+        showToast(`Etapa ${stage.name} concluída! Avançou para: ${nextStageName}`, 'success');
+      } else {
+        showToast(`Etapa ${stage.name} reaberta. Status: ${nextStageName}`, 'success');
       }
     } catch (e) {
       showToast('Erro ao marcar etapa', 'error');

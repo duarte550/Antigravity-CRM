@@ -18,6 +18,13 @@ interface OriginationPipelinePageProps {
 
 const STAGES = ['Conversa Inicial', 'Term Sheet', 'Due Diligence', 'Aprovação', 'Liquidação'];
 
+const formatVolume = (val: number) => {
+  if (val >= 1e9) return `R$ ${(val / 1e9).toFixed(1)}B`;
+  if (val >= 1e6) return `R$ ${(val / 1e6).toFixed(0)}M`;
+  if (val >= 1e3) return `R$ ${(val / 1e3).toFixed(0)}K`;
+  return `R$ ${val.toFixed(2)}`;
+};
+
 const OriginationPipelinePage: React.FC<OriginationPipelinePageProps> = ({ onNavigate, apiUrl, showToast, pushToGenericQueue }) => {
   const [operations, setOperations] = useState<StructuringOperation[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -610,48 +617,48 @@ const OriginationPipelinePage: React.FC<OriginationPipelinePageProps> = ({ onNav
     <div className="space-y-6 h-full flex flex-col p-6 max-w-[1600px] mx-auto">
       {/* Header */}
       <div className="flex flex-col bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
-        <div className="flex justify-between items-center p-6 pb-4">
-            <div>
+        <div className="flex flex-col xl:flex-row xl:justify-between xl:items-center gap-4 p-6 pb-4">
+            <div className="flex-shrink-0">
                 <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-1">Hub de Originação</h1>
                 <p className="text-gray-500 dark:text-gray-400 text-sm">Dashboard consolidado e acompanhamento de {filteredOperations.length} operações ativas.</p>
             </div>
             
-            <div className="flex gap-4 items-center">
-                <div className="bg-gray-100 dark:bg-gray-700/80 p-1 rounded-lg flex text-sm font-medium border border-gray-200 dark:border-gray-600/50">
+            <div className="flex flex-wrap gap-3 items-center">
+                <div className="bg-gray-100 dark:bg-gray-700/80 p-1 rounded-lg flex flex-wrap text-sm font-medium border border-gray-200 dark:border-gray-600/50">
                     <button 
                       onClick={() => setActiveTab('resumo')}
-                      className={`px-4 py-1.5 rounded-md transition-all ${activeTab === 'resumo' ? 'bg-white dark:bg-gray-800 text-blue-600 dark:text-blue-400 shadow-sm ring-1 ring-gray-900/5 dark:ring-white/10' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}`}
+                      className={`px-3 py-1.5 rounded-md transition-all whitespace-nowrap text-xs sm:text-sm ${activeTab === 'resumo' ? 'bg-white dark:bg-gray-800 text-blue-600 dark:text-blue-400 shadow-sm ring-1 ring-gray-900/5 dark:ring-white/10' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}`}
                     >
                         Resumo
                     </button>
                     <button 
                       onClick={() => setActiveTab('por-fundo')}
-                      className={`px-4 py-1.5 rounded-md transition-all ${activeTab === 'por-fundo' ? 'bg-white dark:bg-gray-800 text-blue-600 dark:text-blue-400 shadow-sm ring-1 ring-gray-900/5 dark:ring-white/10' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}`}
+                      className={`px-3 py-1.5 rounded-md transition-all whitespace-nowrap text-xs sm:text-sm ${activeTab === 'por-fundo' ? 'bg-white dark:bg-gray-800 text-blue-600 dark:text-blue-400 shadow-sm ring-1 ring-gray-900/5 dark:ring-white/10' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}`}
                     >
                         Por Fundo
                     </button>
                     <button 
                       onClick={() => setActiveTab('kanban')}
-                      className={`px-4 py-1.5 rounded-md transition-all ${activeTab === 'kanban' ? 'bg-white dark:bg-gray-800 text-blue-600 dark:text-blue-400 shadow-sm ring-1 ring-gray-900/5 dark:ring-white/10' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}`}
+                      className={`px-3 py-1.5 rounded-md transition-all whitespace-nowrap text-xs sm:text-sm ${activeTab === 'kanban' ? 'bg-white dark:bg-gray-800 text-blue-600 dark:text-blue-400 shadow-sm ring-1 ring-gray-900/5 dark:ring-white/10' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}`}
                     >
                         Kanban
                     </button>
                     <button 
                       onClick={() => setActiveTab('table')}
-                      className={`px-4 py-1.5 rounded-md transition-all ${activeTab === 'table' ? 'bg-white dark:bg-gray-800 text-blue-600 dark:text-blue-400 shadow-sm ring-1 ring-gray-900/5 dark:ring-white/10' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}`}
+                      className={`px-3 py-1.5 rounded-md transition-all whitespace-nowrap text-xs sm:text-sm ${activeTab === 'table' ? 'bg-white dark:bg-gray-800 text-blue-600 dark:text-blue-400 shadow-sm ring-1 ring-gray-900/5 dark:ring-white/10' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}`}
                     >
                         Liquidações
                     </button>
                     <button 
                       onClick={() => setActiveTab('tasks')}
-                      className={`px-4 py-1.5 rounded-md transition-all ${activeTab === 'tasks' ? 'bg-white dark:bg-gray-800 text-blue-600 dark:text-blue-400 shadow-sm ring-1 ring-gray-900/5 dark:ring-white/10' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}`}
+                      className={`px-3 py-1.5 rounded-md transition-all whitespace-nowrap text-xs sm:text-sm ${activeTab === 'tasks' ? 'bg-white dark:bg-gray-800 text-blue-600 dark:text-blue-400 shadow-sm ring-1 ring-gray-900/5 dark:ring-white/10' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}`}
                     >
                         Tarefas
                     </button>
                 </div>
                 <button 
                   onClick={() => { setOperationToEdit(null); setIsFormOpen(true); }}
-                  className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-all text-sm font-medium shadow-sm flex items-center gap-2 border border-transparent hover:border-blue-500"
+                  className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-all text-sm font-medium shadow-sm flex items-center gap-2 border border-transparent hover:border-blue-500 whitespace-nowrap"
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4"/></svg>
                   Nova Operação
@@ -660,17 +667,17 @@ const OriginationPipelinePage: React.FC<OriginationPipelinePageProps> = ({ onNav
         </div>
 
         {/* Filters Bar */}
-        <div className="flex items-center gap-3 px-6 py-3 border-t border-gray-100 dark:border-gray-700/80 bg-gray-50/50 dark:bg-gray-800/30 rounded-b-xl">
+        <div className="flex flex-wrap items-center gap-3 px-6 py-3 border-t border-gray-100 dark:border-gray-700/80 bg-gray-50/50 dark:bg-gray-800/30 rounded-b-xl">
             <div className="flex items-center gap-1.5 text-gray-400 dark:text-gray-500">
                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"/></svg>
                 <span className="text-xs font-semibold uppercase tracking-wider">Filtros</span>
             </div>
             
-            <div className="flex block items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
                 <select
                     value={selectedAnalyst}
                     onChange={(e) => setSelectedAnalyst(e.target.value)}
-                    className="block w-40 pl-3 pr-8 py-1.5 border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 text-xs focus:ring-1 focus:ring-blue-500 focus:border-blue-500 shadow-sm transition-colors hover:border-gray-300 dark:hover:border-gray-500"
+                    className="block min-w-[120px] max-w-[180px] pl-3 pr-8 py-1.5 border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 text-xs focus:ring-1 focus:ring-blue-500 focus:border-blue-500 shadow-sm transition-colors hover:border-gray-300 dark:hover:border-gray-500 truncate"
                 >
                     <option value="">Analista: Todos</option>
                     {analysts.map(a => <option key={a} value={a}>{a}</option>)}
@@ -678,31 +685,31 @@ const OriginationPipelinePage: React.FC<OriginationPipelinePageProps> = ({ onNav
                 <select
                     value={masterGroupFilter}
                     onChange={(e) => setMasterGroupFilter(e.target.value)}
-                    className="block w-48 pl-3 pr-8 py-1.5 border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 text-xs focus:ring-1 focus:ring-blue-500 focus:border-blue-500 shadow-sm transition-colors hover:border-gray-300 dark:hover:border-gray-500"
+                    className="block min-w-[140px] max-w-[200px] pl-3 pr-8 py-1.5 border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 text-xs focus:ring-1 focus:ring-blue-500 focus:border-blue-500 shadow-sm transition-colors hover:border-gray-300 dark:hover:border-gray-500 truncate"
                 >
                     {masterGroupsOpts.map(mg => <option key={mg} value={mg}>{mg === 'All' ? 'Master Group: Todos' : mg}</option>)}
                 </select>
                 <select
                     value={economicGroupFilter}
                     onChange={(e) => setEconomicGroupFilter(e.target.value)}
-                    className="block w-48 pl-3 pr-8 py-1.5 border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 text-xs focus:ring-1 focus:ring-blue-500 focus:border-blue-500 shadow-sm transition-colors hover:border-gray-300 dark:hover:border-gray-500"
+                    className="block min-w-[140px] max-w-[200px] pl-3 pr-8 py-1.5 border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 text-xs focus:ring-1 focus:ring-blue-500 focus:border-blue-500 shadow-sm transition-colors hover:border-gray-300 dark:hover:border-gray-500 truncate"
                 >
                     {economicGroupsOpts.map(eg => <option key={eg} value={eg}>{eg === 'All' ? 'Grupo Econômico: Todos' : eg}</option>)}
                 </select>
                 
                 {/* HY / HG Toggle Filters */}
-                <div className="flex items-center gap-1 ml-2 border-l border-gray-200 dark:border-gray-600 pl-3">
+                <div className="flex items-center gap-1 border-l border-gray-200 dark:border-gray-600 pl-3">
                     <button
                         onClick={() => setShowHighYield(!showHighYield)}
-                        className={`px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider transition-all border ${showHighYield ? 'bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400 border-amber-300 dark:border-amber-700 shadow-sm' : 'bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-500 border-gray-200 dark:border-gray-700 opacity-60'}`}
+                        className={`px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider transition-all border whitespace-nowrap ${showHighYield ? 'bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400 border-amber-300 dark:border-amber-700 shadow-sm' : 'bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-500 border-gray-200 dark:border-gray-700 opacity-60'}`}
                     >
-                        High Yield
+                        HY
                     </button>
                     <button
                         onClick={() => setShowHighGrade(!showHighGrade)}
-                        className={`px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider transition-all border ${showHighGrade ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400 border-blue-300 dark:border-blue-700 shadow-sm' : 'bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-500 border-gray-200 dark:border-gray-700 opacity-60'}`}
+                        className={`px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider transition-all border whitespace-nowrap ${showHighGrade ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400 border-blue-300 dark:border-blue-700 shadow-sm' : 'bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-500 border-gray-200 dark:border-gray-700 opacity-60'}`}
                     >
-                        High Grade
+                        HG
                     </button>
                 </div>
 
@@ -715,7 +722,7 @@ const OriginationPipelinePage: React.FC<OriginationPipelinePageProps> = ({ onNav
                             setShowHighYield(true);
                             setShowHighGrade(true);
                         }}
-                        className="ml-2 text-xs text-gray-400 hover:text-red-500 dark:text-gray-500 dark:hover:text-red-400 transition-colors flex items-center gap-1 font-medium"
+                        className="text-xs text-gray-400 hover:text-red-500 dark:text-gray-500 dark:hover:text-red-400 transition-colors flex items-center gap-1 font-medium whitespace-nowrap"
                     >
                         <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/></svg>
                         Limpar
@@ -732,10 +739,12 @@ const OriginationPipelinePage: React.FC<OriginationPipelinePageProps> = ({ onNav
       ) : (
         <>
             {/* Metricas & Graficos */}
-            <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-                <div className="bg-white dark:bg-gray-800 rounded-xl p-5 shadow-sm border border-gray-100 dark:border-gray-700 flex flex-col justify-center">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="bg-white dark:bg-gray-800 rounded-xl p-5 shadow-sm border border-gray-100 dark:border-gray-700 flex flex-col justify-center min-w-0">
                     <p className="text-gray-500 dark:text-gray-400 text-sm font-medium">Volume Total</p>
-                    <h2 className="text-3xl font-bold text-gray-900 dark:text-white mt-1">R$ {(totalVolume).toFixed(2)}M</h2>
+                    <h2 className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-900 dark:text-white mt-1" title={`R$ ${totalVolume.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}>
+                      R$ {totalVolume >= 1e9 ? (totalVolume / 1e9).toFixed(1) + 'B' : totalVolume >= 1e6 ? (totalVolume / 1e6).toFixed(0) + 'M' : totalVolume >= 1e3 ? (totalVolume / 1e3).toFixed(0) + 'K' : totalVolume.toFixed(2)}
+                    </h2>
                     
                     <div className="mt-4 pt-3 border-t border-gray-100 dark:border-gray-700 flex justify-between text-sm">
                         <div className="text-center">
@@ -749,7 +758,7 @@ const OriginationPipelinePage: React.FC<OriginationPipelinePageProps> = ({ onNav
                     </div>
                 </div>
 
-                <div className="bg-white dark:bg-gray-800 rounded-xl p-5 shadow-sm border border-gray-100 dark:border-gray-700">
+                <div className="bg-white dark:bg-gray-800 rounded-xl p-5 shadow-sm border border-gray-100 dark:border-gray-700 min-w-0">
                     <p className="text-gray-500 dark:text-gray-400 text-sm font-medium mb-3">Funil Térmico</p>
                     <div className="space-y-2.5">
                         <div>
@@ -767,12 +776,12 @@ const OriginationPipelinePage: React.FC<OriginationPipelinePageProps> = ({ onNav
                     </div>
                 </div>
 
-                <div className="bg-white dark:bg-gray-800 rounded-xl p-5 shadow-sm border border-gray-100 dark:border-gray-700">
+                <div className="bg-white dark:bg-gray-800 rounded-xl p-5 shadow-sm border border-gray-100 dark:border-gray-700 min-w-0">
                      <p className="text-gray-500 dark:text-gray-400 text-sm font-medium mb-4">Volume por Data</p>
                      <div className="flex h-20 items-end gap-1.5 px-1 border-b border-gray-200 dark:border-gray-700 pb-1">
                         {chartLabels.length > 0 ? chartLabels.map(l => (
                             <div key={l} className="flex-1 flex flex-col justify-end items-center group relative h-full">
-                                <div className="absolute bottom-full mb-1 opacity-0 group-hover:opacity-100 bg-gray-800 text-white text-[10px] py-0.5 px-1.5 rounded z-10 whitespace-nowrap">{(volumeByMonth[l]).toFixed(2)}M</div>
+                                <div className="absolute bottom-full mb-1 opacity-0 group-hover:opacity-100 bg-gray-800 text-white text-[10px] py-0.5 px-1.5 rounded z-10 whitespace-nowrap">{formatVolume(volumeByMonth[l])}</div>
                                 <div className="bg-blue-500 dark:bg-blue-600 rounded-t-sm w-full transition-all hover:bg-blue-400" style={{ height: `${(volumeByMonth[l]/chartMax)*100}%` }}></div>
                                 <span className="text-[9px] text-gray-400 mt-1 absolute top-full pt-0.5">{l}</span>
                             </div>
@@ -782,7 +791,7 @@ const OriginationPipelinePage: React.FC<OriginationPipelinePageProps> = ({ onNav
                      </div>
                 </div>
 
-                <div className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow-sm border border-gray-100 dark:border-gray-700 overflow-y-auto text-xs">
+                <div className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden min-w-0 text-xs">
                     <p className="text-gray-500 dark:text-gray-400 font-medium mb-2">Taxas Médias (Liq vs Est)</p>
                     <table className="w-full text-left">
                         <thead><tr className="text-gray-400 border-b border-gray-100 dark:border-gray-700"><th className="pb-1">Idx</th><th className="pb-1 text-right">Liq</th><th className="pb-1 text-right">Est</th></tr></thead>
@@ -915,10 +924,10 @@ const OriginationPipelinePage: React.FC<OriginationPipelinePageProps> = ({ onNav
                                                 {op.temperature || 'N/D'}
                                             </span>
                                         </td>
-                                        <td className="px-4 py-3 text-right">R$ {(op._totalVol).toFixed(2)}M</td>
+                                        <td className="px-4 py-3 text-right whitespace-nowrap">{formatVolume(op._totalVol)}</td>
                                         <td className="px-4 py-3 text-center">{op._indexerStr}</td>
                                         <td className="px-4 py-3 text-right">{op._avgRateStr}</td>
-                                        <td className="px-4 py-3 text-sm font-medium">{op.stage}</td>
+                                        <td className="px-4 py-3 text-sm font-medium whitespace-nowrap">{getActiveColumn(op)}</td>
                                         <td className="px-4 py-3 text-xs text-gray-500 dark:text-gray-400 truncate max-w-[150px]" title={op._lastEvent}>{op._lastEvent}</td>
                                         <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
                                             <input 
@@ -1026,7 +1035,7 @@ const OriginationPipelinePage: React.FC<OriginationPipelinePageProps> = ({ onNav
                                             <div className="flex justify-between">
                                                 <span className="text-gray-500">Volume:</span>
                                                 <span className="font-medium text-gray-900 dark:text-white">
-                                                    {op.series && op.series.length > 0 ? `R$ ${(op.series.reduce((acc, s) => acc + (s.volume || 0), 0)).toFixed(2)}M` : '-'}
+                                                    {op.series && op.series.length > 0 ? formatVolume(op.series.reduce((acc, s) => acc + (s.volume || 0), 0)) : '-'}
                                                 </span>
                                             </div>
                                             <div className="flex justify-between">
@@ -1080,8 +1089,8 @@ const OriginationPipelinePage: React.FC<OriginationPipelinePageProps> = ({ onNav
                         {/* Summary by Fund side-by-side config */}
                         <div className="flex gap-4 text-xs">
                              <div className="bg-white dark:bg-gray-800 p-2 rounded shadow-sm border border-gray-200 dark:border-gray-700 flex gap-4">
-                                <div><span className="text-gray-500 mr-2">Vol. Liq:</span><span className="font-semibold text-green-600">R$ {(Object.values(summaries.fundSummary).reduce((a,b)=>a+b.liq,0)).toFixed(2)}M</span></div>
-                                <div><span className="text-gray-500 mr-2">Vol. Est:</span><span className="font-semibold text-blue-600">R$ {(Object.values(summaries.fundSummary).reduce((a,b)=>a+b.est,0)).toFixed(2)}M</span></div>
+                                <div><span className="text-gray-500 mr-2">Vol. Liq:</span><span className="font-semibold text-green-600">{formatVolume(Object.values(summaries.fundSummary).reduce((a,b)=>a+b.liq,0))}</span></div>
+                                <div><span className="text-gray-500 mr-2">Vol. Est:</span><span className="font-semibold text-blue-600">{formatVolume(Object.values(summaries.fundSummary).reduce((a,b)=>a+b.est,0))}</span></div>
                              </div>
                         </div>
                      </div>
@@ -1126,7 +1135,7 @@ const OriginationPipelinePage: React.FC<OriginationPipelinePageProps> = ({ onNav
                                         <td className="px-5 py-3 text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap">{row.analyst}</td>
                                         <td className="px-5 py-3">{row.fund}</td>
                                         <td className="px-5 py-3 text-right font-medium text-gray-900 dark:text-white whitespace-nowrap">
-                                            {row.volume ? `R$ ${(row.volume).toFixed(2)}M` : '-'}
+                                            {row.volume ? formatVolume(row.volume) : '-'}
                                         </td>
                                         <td className="px-5 py-3">
                                             <div className="flex gap-1">

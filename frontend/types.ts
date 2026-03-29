@@ -43,6 +43,16 @@ export interface Event {
 
 export type TaskPriority = 'Baixa' | 'Média' | 'Alta' | 'Urgente';
 
+export interface TaskChecklistItem {
+  id: number;
+  taskRuleId: number;
+  title: string;
+  isCompleted: boolean;
+  completedBy?: string;
+  completedAt?: string; // ISO string
+  orderIndex?: number;
+}
+
 export interface TaskRule {
   id: number;
   name: string;
@@ -52,6 +62,8 @@ export interface TaskRule {
   description: string;
   priority?: TaskPriority;
   structuringOperationStageId?: number;
+  checklistItems?: TaskChecklistItem[];
+  assignees?: string[];
 }
 
 export enum TaskStatus {
@@ -70,6 +82,10 @@ export interface Task {
   status: TaskStatus;
   priority?: TaskPriority;
   notes?: string;
+  checklistItems?: TaskChecklistItem[];
+  assignees?: string[];
+  completedBy?: string;
+  lastEditedBy?: string;
 }
 
 export type Rating = 'A4' | 'Baa1' | 'Baa3' | 'Baa4' | 'Ba1' | 'Ba4' | 'Ba5' | 'Ba6' | 'B1' | 'B2' | 'B3' | 'B4' | 'C1' | 'C2' | 'C3';

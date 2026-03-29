@@ -67,7 +67,9 @@ const NewTaskModal: React.FC<NewTaskModalProps> = ({ isOpen, onClose, operations
                 dueDate: rule.startDate || undefined,
                 status: TaskStatus.PENDING,
                 priority: rule.priority,
-                notes: rule.description
+                notes: rule.description,
+                checklistItems: rule.checklistItems || [],
+                assignees: rule.assignees || []
             };
             updatedTasks = [...updatedTasks, optimisticTask];
         }
@@ -251,6 +253,8 @@ const NewTaskModal: React.FC<NewTaskModalProps> = ({ isOpen, onClose, operations
                         <AdHocTaskForm
                             onClose={onClose}
                             onSave={handleSaveTaskRule}
+                            analysts={uniqueAnalysts}
+                            defaultAnalyst={selectedOperation?.responsibleAnalyst}
                         />
                      )}
                      {formType === 'recorrente' && (

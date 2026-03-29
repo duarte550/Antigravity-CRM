@@ -1,5 +1,5 @@
-import React, { useState, useMemo } from 'react';
-import type { Operation, Task, Event } from '../types';
+import React, { useState, useMemo, useCallback } from 'react';
+import type { Operation, Task, Event, TaskChecklistItem } from '../types';
 import { Page, TaskStatus, TaskPriority } from '../types';
 import { CheckCircleIcon, WarningIcon, CalendarIcon, PencilIcon, TrashIcon, PlusCircleIcon, ViewListIcon, ViewBoardsIcon } from './icons/Icons';
 import EventForm from './EventForm';
@@ -334,15 +334,15 @@ const AnalystHub: React.FC<AnalystHubProps> = ({
 
     return allTasks.filter(task => {
       const op = operations.find(o => o.id === task.operationId);
-      if (op?.responsibleAnalyst !== selectedAnalyst) return false;
+      // Check if this task belongs to the analyst via operation's responsibleAnalyst
+      const isResponsibleAnalyst = op?.responsibleAnalyst === selectedAnalyst;
+      // Check if this task is assigned to the analyst via task assignees
+      const isAssignedViaTask = task.assignees && task.assignees.includes(selectedAnalyst);
+      
+      if (!isResponsibleAnalyst && !isAssignedViaTask) return false;
       
       // Always show overdue tasks
       if (task.status === TaskStatus.OVERDUE) return true;
-      
-      // For completed tasks, maybe we only want recent ones? 
-      // But let's stick to the "pending" request mostly.
-      // If it's completed, it's already "history". 
-      // The user said "não precisa mostrar todas as tarefas pendentes de todo o histórico".
       
       if (task.status === TaskStatus.COMPLETED) {
         // Show completed tasks from the last 30 days for context
@@ -537,6 +537,36 @@ const AnalystHub: React.FC<AnalystHubProps> = ({
     }
   };
 
+  const [expandedTaskChecklist, setExpandedTaskChecklist] = useState<string | null>(null);
+
+  const handleToggleChecklistItem = useCallback(async (task: Task, itemIndex: number) => {
+    const op = operations.find(o => o.id === task.operationId);
+    if (!op) return;
+    
+    const rule = op.taskRules.find(r => r.id === task.ruleId);
+    if (!rule) return;
+    
+    const updatedChecklistItems = [...(rule.checklistItems || [])].map((item, idx) => {
+      if (idx === itemIndex) {
+        const newCompleted = !item.isCompleted;
+        return {
+          ...item,
+          isCompleted: newCompleted,
+          completedBy: newCompleted ? selectedAnalyst : undefined,
+          completedAt: newCompleted ? new Date().toISOString() : undefined
+        };
+      }
+      return item;
+    });
+    
+    const updatedRules = op.taskRules.map(r => 
+      r.id === rule.id ? { ...r, checklistItems: updatedChecklistItems } : r
+    );
+    
+    const updatedOp = { ...op, taskRules: updatedRules };
+    await onUpdateOperation(updatedOp);
+  }, [operations, selectedAnalyst, onUpdateOperation]);
+
   const renderTaskCard = (task: Task, isKanban: boolean = false) => {
     const op = operations.find(o => o.id === task.operationId);
     const isCompleted = task.status === TaskStatus.COMPLETED;
@@ -582,9 +612,65 @@ const AnalystHub: React.FC<AnalystHubProps> = ({
                             dangerouslySetInnerHTML={{ __html: task.notes }} 
                           />
                       )}
+                      {/* Assignees badges */}
+                      {task.assignees && task.assignees.length > 0 && (
+                        <div className="flex items-center gap-1 mt-2 flex-wrap">
+                          <svg className="w-3 h-3 text-gray-400 dark:text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" /></svg>
+                          {task.assignees.map(a => (
+                            <span key={a} className={`px-1.5 py-0.5 rounded text-[9px] font-medium ${
+                              a === selectedAnalyst 
+                                ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' 
+                                : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400'
+                            }`}>{a.split(' ')[0]}</span>
+                          ))}
+                        </div>
+                      )}
                   </div>
               </div>
               
+              {/* Checklist Items */}
+              {task.checklistItems && task.checklistItems.length > 0 && (
+                <div className="border-t border-gray-100/50 dark:border-gray-700/50 pt-2">
+                  <button 
+                    onClick={() => setExpandedTaskChecklist(expandedTaskChecklist === task.id ? null : task.id)}
+                    className="flex items-center gap-1.5 text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider hover:text-blue-600 dark:hover:text-blue-400 transition-colors w-full"
+                  >
+                    <svg className={`w-3 h-3 transition-transform ${expandedTaskChecklist === task.id ? 'rotate-90' : ''}`} fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" /></svg>
+                    Checklist ({task.checklistItems.filter(ci => ci.isCompleted).length}/{task.checklistItems.length})
+                    <div className="flex-1 h-1 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden ml-2">
+                      <div 
+                        className="h-full bg-green-500 dark:bg-green-400 rounded-full transition-all duration-300" 
+                        style={{ width: `${(task.checklistItems.filter(ci => ci.isCompleted).length / task.checklistItems.length) * 100}%` }}
+                      />
+                    </div>
+                  </button>
+                  {expandedTaskChecklist === task.id && (
+                    <div className="mt-2 space-y-1">
+                      {task.checklistItems.map((item, idx) => (
+                        <div key={item.id || idx} className="flex items-center gap-2 group/item">
+                          <button
+                            onClick={() => handleToggleChecklistItem(task, idx)}
+                            className={`flex-shrink-0 w-4 h-4 rounded border-2 flex items-center justify-center transition-all ${
+                              item.isCompleted 
+                                ? 'bg-green-500 border-green-500 text-white' 
+                                : 'border-gray-300 dark:border-gray-600 hover:border-blue-400 dark:hover:border-blue-500'
+                            }`}
+                          >
+                            {item.isCompleted && <svg className="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" /></svg>}
+                          </button>
+                          <span className={`text-xs flex-1 ${item.isCompleted ? 'line-through text-gray-400 dark:text-gray-500' : 'text-gray-700 dark:text-gray-300'}`}>
+                            {item.title}
+                          </span>
+                          {item.isCompleted && item.completedBy && (
+                            <span className="text-[9px] text-gray-400 dark:text-gray-500 italic">{item.completedBy.split(' ')[0]}</span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
               <div className="flex items-center justify-between mt-2 pt-3 border-t border-gray-100/50 dark:border-gray-700/50">
                   <div className="flex items-center gap-1.5 text-xs font-medium text-gray-500 dark:text-gray-400">
                       <CalendarIcon className="w-3.5 h-3.5" />
@@ -612,44 +698,101 @@ const AnalystHub: React.FC<AnalystHubProps> = ({
     }
 
     return (
-      <div key={task.id} className="p-4 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors flex items-start justify-between group">
-        <div className="flex items-start gap-3">
-          <button 
-            onClick={() => handleCompleteTask(task)}
-            className={`mt-1 flex-shrink-0 w-5 h-5 rounded-full border flex items-center justify-center transition-colors ${task.status === 'Concluída' ? 'bg-green-500 border-green-500 text-white' : 'border-gray-300 dark:border-gray-600 hover:border-blue-500 dark:hover:border-blue-400'}`}
-          >
-            {task.status === 'Concluída' && <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" /></svg>}
-          </button>
-          <div>
-            <p className={`font-medium ${task.status === 'Concluída' ? 'text-gray-400 dark:text-gray-500 line-through' : 'text-gray-900 dark:text-gray-100'}`}>{task.ruleName}</p>
-            <div className="flex items-center gap-2 mt-1 text-xs text-gray-500 dark:text-gray-400">
-              <span className="font-medium text-blue-600 dark:text-blue-400 cursor-pointer hover:underline" onClick={() => onNavigate(Page.DETAIL, op?.id)}>{op?.name}</span>
-              <span>•</span>
-              <span className={task.status === 'Atrasada' ? 'text-red-600 dark:text-red-400 font-medium' : ''}>
-                {task.dueDate ? `Vence: ${new Date(task.dueDate).toLocaleDateString('pt-BR')}` : 'Sem Prazo'}
-              </span>
-              {rulePriority && (
-                <>
-                  <span>•</span>
-                  <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${getPriorityColor(rulePriority)}`}>{rulePriority}</span>
-                </>
+      <div key={task.id} className="p-4 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors flex flex-col group">
+        <div className="flex items-start justify-between">
+          <div className="flex items-start gap-3">
+            <button 
+              onClick={() => handleCompleteTask(task)}
+              className={`mt-1 flex-shrink-0 w-5 h-5 rounded-full border flex items-center justify-center transition-colors ${task.status === 'Concluída' ? 'bg-green-500 border-green-500 text-white' : 'border-gray-300 dark:border-gray-600 hover:border-blue-500 dark:hover:border-blue-400'}`}
+            >
+              {task.status === 'Concluída' && <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" /></svg>}
+            </button>
+            <div>
+              <p className={`font-medium ${task.status === 'Concluída' ? 'text-gray-400 dark:text-gray-500 line-through' : 'text-gray-900 dark:text-gray-100'}`}>{task.ruleName}</p>
+              <div className="flex items-center gap-2 mt-1 text-xs text-gray-500 dark:text-gray-400">
+                <span className="font-medium text-blue-600 dark:text-blue-400 cursor-pointer hover:underline" onClick={() => onNavigate(Page.DETAIL, op?.id)}>{op?.name}</span>
+                <span>•</span>
+                <span className={task.status === 'Atrasada' ? 'text-red-600 dark:text-red-400 font-medium' : ''}>
+                  {task.dueDate ? `Vence: ${new Date(task.dueDate).toLocaleDateString('pt-BR')}` : 'Sem Prazo'}
+                </span>
+                {rulePriority && (
+                  <>
+                    <span>•</span>
+                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${getPriorityColor(rulePriority)}`}>{rulePriority}</span>
+                  </>
+                )}
+              </div>
+              {/* Assignees in list view */}
+              {task.assignees && task.assignees.length > 0 && (
+                <div className="flex items-center gap-1 mt-1.5">
+                  <svg className="w-3 h-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" /></svg>
+                  {task.assignees.map(a => (
+                    <span key={a} className={`px-1.5 py-0.5 rounded text-[9px] font-medium ${
+                      a === selectedAnalyst 
+                        ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' 
+                        : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400'
+                    }`}>{a.split(' ')[0]}</span>
+                  ))}
+                </div>
               )}
             </div>
           </div>
-        </div>
-        <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-          {!isCompleted && (
-            <button onClick={() => handleCompleteTaskClick(task)} className="p-1 text-gray-400 hover:text-green-600 dark:hover:text-green-400" title="Concluir">
-              <CheckCircleIcon className="w-4 h-4" />
+          <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+            {!isCompleted && (
+              <button onClick={() => handleCompleteTaskClick(task)} className="p-1 text-gray-400 hover:text-green-600 dark:hover:text-green-400" title="Concluir">
+                <CheckCircleIcon className="w-4 h-4" />
+              </button>
+            )}
+            <button onClick={() => setTaskToEdit(task)} className="p-1 text-gray-400 hover:text-blue-600 dark:hover:text-blue-400" title="Editar">
+              <PencilIcon className="w-4 h-4" />
             </button>
-          )}
-          <button onClick={() => setTaskToEdit(task)} className="p-1 text-gray-400 hover:text-blue-600 dark:hover:text-blue-400" title="Editar">
-            <PencilIcon className="w-4 h-4" />
-          </button>
-          <button onClick={() => setTaskToDelete(task)} className="p-1 text-gray-400 hover:text-red-600 dark:hover:text-red-400" title="Excluir">
-            <TrashIcon className="w-4 h-4" />
-          </button>
+            <button onClick={() => setTaskToDelete(task)} className="p-1 text-gray-400 hover:text-red-600 dark:hover:text-red-400" title="Excluir">
+              <TrashIcon className="w-4 h-4" />
+            </button>
+          </div>
         </div>
+        {/* Inline Checklist for list view */}
+        {task.checklistItems && task.checklistItems.length > 0 && (
+          <div className="ml-8 mt-2">
+            <button 
+              onClick={() => setExpandedTaskChecklist(expandedTaskChecklist === task.id ? null : task.id)}
+              className="flex items-center gap-1.5 text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+            >
+              <svg className={`w-3 h-3 transition-transform ${expandedTaskChecklist === task.id ? 'rotate-90' : ''}`} fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" /></svg>
+              Checklist ({task.checklistItems.filter(ci => ci.isCompleted).length}/{task.checklistItems.length})
+              <div className="h-1 w-16 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden ml-1">
+                <div 
+                  className="h-full bg-green-500 rounded-full transition-all" 
+                  style={{ width: `${(task.checklistItems.filter(ci => ci.isCompleted).length / task.checklistItems.length) * 100}%` }}
+                />
+              </div>
+            </button>
+            {expandedTaskChecklist === task.id && (
+              <div className="mt-1.5 space-y-1">
+                {task.checklistItems.map((item, idx) => (
+                  <div key={item.id || idx} className="flex items-center gap-2">
+                    <button
+                      onClick={() => handleToggleChecklistItem(task, idx)}
+                      className={`flex-shrink-0 w-4 h-4 rounded border-2 flex items-center justify-center transition-all ${
+                        item.isCompleted 
+                          ? 'bg-green-500 border-green-500 text-white' 
+                          : 'border-gray-300 dark:border-gray-600 hover:border-blue-400'
+                      }`}
+                    >
+                      {item.isCompleted && <svg className="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" /></svg>}
+                    </button>
+                    <span className={`text-xs ${item.isCompleted ? 'line-through text-gray-400 dark:text-gray-500' : 'text-gray-700 dark:text-gray-300'}`}>
+                      {item.title}
+                    </span>
+                    {item.isCompleted && item.completedBy && (
+                      <span className="text-[9px] text-gray-400 dark:text-gray-500 italic">— {item.completedBy.split(' ')[0]}</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
     );
   };
@@ -1254,6 +1397,8 @@ const AnalystHub: React.FC<AnalystHubProps> = ({
             onClose={() => setTaskToEdit(null)}
             onSave={handleSaveEditedTask}
             initialTask={taskToEdit}
+            analysts={analysts}
+            defaultAnalyst={operations.find(o => o.id === taskToEdit.operationId)?.responsibleAnalyst}
           />
         </Modal>
       )}

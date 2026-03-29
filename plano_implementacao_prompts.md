@@ -132,7 +132,7 @@ Cada prompt abaixo instrui exaustivamente o Gemini 3.1 referenciando **todas** a
 ## 🏗️ Fase 6: Engine Core e Pauta de Comitês
 
 ### Prompt:
-> "Desenvolva o módulo 'Comitê' usando Tailwind e `UI.tsx` (@[.agents/rules/architecture.md]). Toda escrita via Optimistic Queue. Novas rotas backend com `try/except/finally` e JSON snake_case. Testes para cada endpoint novo (regra IA §4). Tabelas no schema `cri_cra_dev.comite` via `@update_db.py` (regra IA §6).
+> "Desenvolva o módulo 'Comitê' usando Tailwind e aplicando a skill ui-ux-pro-max (@[.agents/rules/architecture.md]). Toda escrita via Optimistic Queue. Novas rotas backend com `try/except/finally` e JSON snake_case. Testes para cada endpoint novo (regra IA §4). Tabelas no schema `cri_cra_dev.comite` via `@update_db.py` (regra IA §6). Gostaria que essa página ficasse em uma rota diferente, exemplo /comites.
 >
 > **1. Página Geral de Comitês (Timeline):**
 > - Exibir **timeline horizontal** de todos os comitês: passados brilham em verde com ícone de conclusão; o próximo comitê ativo (agendado, ainda não realizado) aparece destacado; comitês futuros além do próximo ficam ocultos.
