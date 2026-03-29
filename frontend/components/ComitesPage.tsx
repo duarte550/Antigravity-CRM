@@ -1,11 +1,18 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Page } from '../types';
-import { CheckCircle, Clock, Plus, Calendar, ChevronRight, Users, FileText, Video, AlertCircle, ArrowRight, Loader2, ArrowLeft, ArrowUpRight, Download, Search, X } from 'lucide-react';
+import { CheckCircle, Clock, Plus, Calendar, ChevronRight, Users, FileText, Video, AlertCircle, ArrowRight, Loader2, ArrowLeft, ArrowUpRight, Download, Search, X, MessageCircle, ThumbsUp } from 'lucide-react';
 import { Carousel, CarouselContent, CarouselItem, CarouselPrevious, CarouselNext, CarouselApi } from '@/components/ui/carousel';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://antigravity-crm-two.vercel.app';
+
+interface PautaItem {
+  titulo: string;
+  comments_count: number;
+  likes_count: number;
+  engagement: number;
+}
 
 interface ComiteListItem {
   id: number;
@@ -19,6 +26,7 @@ interface ComiteListItem {
   horario?: string;
   itens_count: number;
   itens_titulos?: string[];
+  itens_pauta?: PautaItem[];
   proximos_passos: { id: number; descricao: string; responsavel_nome?: string; status: string; item_titulo?: string }[];
 }
 
@@ -436,15 +444,32 @@ const ComitesPage: React.FC<ComitesPageProps> = ({ apiUrl, showToast, pushToGene
                           <div className="flex items-center gap-2 mb-2 text-sm font-semibold text-gray-700 dark:text-gray-300">
                             <FileText className="w-4 h-4 text-gray-400" /> Principais Pautas
                           </div>
-                          {(c.itens_titulos && c.itens_titulos.length > 0) ? (
-                            <ul className="list-disc pl-9 text-sm text-gray-600 dark:text-gray-300 space-y-1">
-                              {c.itens_titulos.slice(0, 5).map((titulo, i) => (
-                                <li key={i} className="line-clamp-1 truncate" title={titulo}>{titulo}</li>
+                          {(c.itens_pauta && c.itens_pauta.length > 0) ? (
+                            <div className="space-y-1.5 pl-2">
+                              {c.itens_pauta.slice(0, 5).map((item, i) => (
+                                <div key={i} className="flex items-center gap-2 group">
+                                  <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${item.engagement > 0 ? 'bg-blue-500' : 'bg-gray-300 dark:bg-gray-600'}`} />
+                                  <span className="text-sm text-gray-700 dark:text-gray-300 truncate flex-1" title={item.titulo}>{item.titulo}</span>
+                                  {(item.comments_count > 0 || item.likes_count > 0) && (
+                                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                                      {item.comments_count > 0 && (
+                                        <span className="inline-flex items-center gap-0.5 text-[10px] font-medium text-blue-600 dark:text-blue-400">
+                                          <MessageCircle className="w-3 h-3" />{item.comments_count}
+                                        </span>
+                                      )}
+                                      {item.likes_count > 0 && (
+                                        <span className="inline-flex items-center gap-0.5 text-[10px] font-medium text-amber-600 dark:text-amber-400">
+                                          <ThumbsUp className="w-3 h-3" />{item.likes_count}
+                                        </span>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
                               ))}
-                              {c.itens_titulos.length > 5 && (
-                                <li className="text-xs text-gray-400 italic">+ {c.itens_titulos.length - 5} itens</li>
+                              {c.itens_pauta.length > 5 && (
+                                <p className="text-xs text-gray-400 italic pl-3.5">+ {c.itens_pauta.length - 5} itens</p>
                               )}
-                            </ul>
+                            </div>
                           ) : (
                             <p className="text-sm text-gray-500 dark:text-gray-400 pl-6 italic">Nenhum item na pauta</p>
                           )}

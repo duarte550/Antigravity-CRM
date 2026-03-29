@@ -385,19 +385,62 @@ def get_comites():
                 comite_ids.append(d['id'])
 
             # ── Batch: itens de pauta para TODOS os comitês de uma vez ──
-            itens_by_comite = {}
+            itens_by_comite: dict = {}
             if comite_ids:
                 in_clause = ','.join(['?'] * len(comite_ids))
                 cursor.execute(
-                    f"SELECT comite_id, titulo FROM {COMITE_SCHEMA_PREFIX}.comite_itens_pauta WHERE comite_id IN ({in_clause}) ORDER BY prioridade DESC, created_at",
+                    f"SELECT id, comite_id, titulo FROM {COMITE_SCHEMA_PREFIX}.comite_itens_pauta WHERE comite_id IN ({in_clause}) ORDER BY created_at",
                     comite_ids
                 )
-                for ir in cursor.fetchall():
-                    item = format_row(ir, cursor)
-                    cid = item['comite_id']
+                all_itens = [format_row(r, cursor) for r in cursor.fetchall()]
+                all_item_ids = [it['id'] for it in all_itens]
+
+                # Batch: count comments per item
+                comments_count: dict = {}
+                if all_item_ids:
+                    item_in = ','.join(['?'] * len(all_item_ids))
+                    cursor.execute(
+                        f"SELECT item_pauta_id, COUNT(*) as cnt FROM {COMITE_SCHEMA_PREFIX}.comite_comentarios WHERE item_pauta_id IN ({item_in}) GROUP BY item_pauta_id",
+                        all_item_ids
+                    )
+                    for r in cursor.fetchall():
+                        row = format_row(r, cursor)
+                        comments_count[row['item_pauta_id']] = int(row['cnt'])
+
+                # Batch: count total likes (sum of likes on all comments of each item)
+                likes_count: dict = {}
+                if all_item_ids:
+                    item_in = ','.join(['?'] * len(all_item_ids))
+                    cursor.execute(
+                        f"""SELECT c.item_pauta_id, COUNT(l.id) as cnt
+                        FROM {COMITE_SCHEMA_PREFIX}.comite_comentarios c
+                        JOIN {COMITE_SCHEMA_PREFIX}.comite_likes l ON l.comentario_id = c.id
+                        WHERE c.item_pauta_id IN ({item_in})
+                        GROUP BY c.item_pauta_id""",
+                        all_item_ids
+                    )
+                    for r in cursor.fetchall():
+                        row = format_row(r, cursor)
+                        likes_count[row['item_pauta_id']] = int(row['cnt'])
+
+                # Build items per comite with engagement score, sorted desc
+                for it in all_itens:
+                    cid = it['comite_id']
+                    c_cnt = comments_count.get(it['id'], 0)
+                    l_cnt = likes_count.get(it['id'], 0)
+                    item_obj = {
+                        'titulo': it.get('titulo', ''),
+                        'comments_count': c_cnt,
+                        'likes_count': l_cnt,
+                        'engagement': c_cnt + l_cnt,
+                    }
                     if cid not in itens_by_comite:
                         itens_by_comite[cid] = []
-                    itens_by_comite[cid].append(item.get('titulo', ''))
+                    itens_by_comite[cid].append(item_obj)
+
+                # Sort each comite's items by engagement descending
+                for cid in itens_by_comite:
+                    itens_by_comite[cid].sort(key=lambda x: x['engagement'], reverse=True)
 
             # ── Batch: próximos passos para TODOS os comitês de uma vez ──
             pp_by_comite = {}
@@ -428,7 +471,7 @@ def get_comites():
             comites = []
             for d in comites_raw:
                 cid = d['id']
-                itens_titulos = itens_by_comite.get(cid, [])
+                itens_objs = itens_by_comite.get(cid, [])
                 proximos_passos = pp_by_comite.get(cid, [])
 
                 comites.append({
@@ -441,8 +484,9 @@ def get_comites():
                     'area': d.get('area'),
                     'dia_da_semana': d.get('dia_da_semana'),
                     'horario': d.get('horario'),
-                    'itens_count': len(itens_titulos),
-                    'itens_titulos': itens_titulos,
+                    'itens_count': len(itens_objs),
+                    'itens_titulos': [it['titulo'] for it in itens_objs],
+                    'itens_pauta': itens_objs,
                     'proximos_passos': proximos_passos,
                 })
             return jsonify(comites)
