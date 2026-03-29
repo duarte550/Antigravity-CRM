@@ -71,24 +71,25 @@ def _fetch_comite_detail(cursor, comite_id):
     cursor.execute(f"SELECT * FROM {COMITE_SCHEMA_PREFIX}.comite_secoes WHERE comite_id = ? ORDER BY ordem", (comite_id,))
     secoes = [format_row(r, cursor) for r in cursor.fetchall()]
 
-    # Itens de pauta
+    # Itens de pauta — IMPORTANT: materialize to dicts immediately so that
+    # subsequent cursor.execute() calls don't corrupt cursor.description
     cursor.execute(f"SELECT * FROM {COMITE_SCHEMA_PREFIX}.comite_itens_pauta WHERE comite_id = ? ORDER BY prioridade DESC, created_at", (comite_id,))
-    itens_rows = cursor.fetchall()
+    itens_dicts = [format_row(r, cursor) for r in cursor.fetchall()]
+
     itens = []
-    for item_row in itens_rows:
-        item = format_row(item_row, cursor)
+    for item in itens_dicts:
         item_id = item['id']
 
-        # Comentários do item
+        # Comentários do item — materialize immediately
         cursor.execute(
             f"SELECT * FROM {COMITE_SCHEMA_PREFIX}.comite_comentarios WHERE item_pauta_id = ? ORDER BY created_at",
             (item_id,)
         )
-        comentarios_rows = cursor.fetchall()
+        comentarios_dicts = [format_row(r, cursor) for r in cursor.fetchall()]
+
         comentarios = []
-        for c_row in comentarios_rows:
-            c = format_row(c_row, cursor)
-            # Contar likes
+        for c in comentarios_dicts:
+            # Contar likes (this changes cursor.description, but c is already a dict)
             cursor.execute(
                 f"SELECT COUNT(*) as cnt FROM {COMITE_SCHEMA_PREFIX}.comite_likes WHERE comentario_id = ?",
                 (c['id'],)
@@ -107,20 +108,6 @@ def _fetch_comite_detail(cursor, comite_id):
             })
 
         # Votos do item
-        cursor.execute(
-            f"SELECT * FROM {COMITE_SCHEMA_PREFIX}.comite_votos WHERE item_pauta_id = ? ORDER BY created_at",
-            (item_id,)
-        )
-        votos = [{
-            'id': format_row(v, cursor)['id'],
-            'item_pauta_id': format_row(v, cursor)['item_pauta_id'],
-            'user_id': format_row(v, cursor).get('user_id'),
-            'user_nome': format_row(v, cursor).get('user_nome'),
-            'tipo_voto': format_row(v, cursor).get('tipo_voto'),
-            'cargo_voto': format_row(v, cursor).get('cargo_voto'),
-            'comentario': format_row(v, cursor).get('comentario'),
-            'created_at': safe_isoformat(format_row(v, cursor).get('created_at')),
-        } for v in []]  # Re-fetch properly
         cursor.execute(
             f"SELECT * FROM {COMITE_SCHEMA_PREFIX}.comite_votos WHERE item_pauta_id = ? ORDER BY created_at",
             (item_id,)
@@ -1071,10 +1058,9 @@ def completar_comite(comite_id):
                     f"SELECT descricao, responsavel_nome FROM {COMITE_SCHEMA_PREFIX}.comite_proximos_passos WHERE item_pauta_id = ? ORDER BY created_at",
                     (item['id'],)
                 )
-                pp_rows = cursor.fetchall()
+                pp_rows = [format_row(r, cursor) for r in cursor.fetchall()]
                 next_steps_parts = []
-                for pp in pp_rows:
-                    pp_data = format_row(pp, cursor)
+                for pp_data in pp_rows:
                     resp = pp_data.get('responsavel_nome', '')
                     desc = pp_data.get('descricao', '')
                     if resp:
