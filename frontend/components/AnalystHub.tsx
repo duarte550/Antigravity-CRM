@@ -9,7 +9,7 @@ import Modal from './Modal';
 import ReviewCompletionForm from './ReviewCompletionForm';
 import AnalystCalendar from './AnalystCalendar';
 import type { WatchlistStatus, Rating, Sentiment } from '../types';
-import { fetchApi } from '../utils/api';
+import { fetchApi, autoCreateComiteReviewItem } from '../utils/api';
 
 interface AnalystHubProps {
   operations: Operation[];
@@ -226,7 +226,7 @@ const AnalystHub: React.FC<AnalystHubProps> = ({
     }
   };
 
-  const handleSaveReviewCompletion = async (data: { event: Omit<Event, 'id'>, ratingOp: Rating, ratingGroup: Rating, ratingMasterGroup: Rating, sentiment: Sentiment }) => {
+  const handleSaveReviewCompletion = async (data: { event: Omit<Event, 'id'>, ratingOp: Rating, ratingGroup: Rating, ratingMasterGroup: Rating, sentiment: Sentiment, videoUrl: string }) => {
     if (!selectedOperationForAction || !reviewTaskToComplete) return;
     try {
       const newEventId = Date.now();
@@ -256,6 +256,21 @@ const AnalystHub: React.FC<AnalystHubProps> = ({
       };
 
       await onUpdateOperation(updatedOperation);
+
+      // Auto-criar item de revisão no próximo comitê de investimento
+      autoCreateComiteReviewItem({
+        operationId: selectedOperationForAction.id,
+        operationName: selectedOperationForAction.name,
+        operationArea: selectedOperationForAction.area,
+        reviewTitle: eventToSave.title || `Revisão de crédito - ${selectedOperationForAction.name}`,
+        reviewDescription: data.event.description,
+        analystName: selectedOperationForAction.responsibleAnalyst,
+        videoUrl: data.videoUrl || '',
+        watchlist: selectedOperationForAction.watchlist,
+        ratingOperation: data.ratingOp,
+        sentiment: data.sentiment,
+      });
+
       showToast('Revisão concluída com sucesso!', 'success');
       setIsReviewFormOpen(false);
       setReviewTaskToComplete(null);

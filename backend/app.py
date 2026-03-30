@@ -847,8 +847,8 @@ def _update_operation_db_internal(cursor, op_id, data):
         cursor.execute("DELETE FROM cri_cra_dev.crm.operation_contacts WHERE operation_id = ?", (op_id,))
         for contact in data['contacts']:
             if contact.get('name'):
-                cursor.execute("INSERT INTO cri_cra_dev.crm.operation_contacts (operation_id, name, email, phone, role) VALUES (?, ?, ?, ?, ?)",
-                               (op_id, contact.get('name'), contact.get('email'), contact.get('phone'), contact.get('role')))
+                cursor.execute("INSERT INTO cri_cra_dev.crm.operation_contacts (id, operation_id, name, email, phone, role) VALUES (?, ?, ?, ?, ?, ?)",
+                               (get_next_unique_id(cursor, 'operation_contacts'), op_id, contact.get('name'), contact.get('email'), contact.get('phone'), contact.get('role')))
 
     details = generate_diff_details(old_op_db, data, {'name': 'Nome', 'ratingOperation': 'Rating Op.', 'ratingGroup': 'Rating Grupo', 'watchlist': 'Watchlist'})
     if details: log_action(cursor, data.get('responsibleAnalyst', 'System'), 'UPDATE', 'Operation', op_id, details)
@@ -970,17 +970,19 @@ def sync_operation_rules():
                 
                 for name, freq, desc, *rest in rules:
                     priority = rest[0] if rest else 'Média'
+                    rule_id = get_next_unique_id(cursor, 'task_rules')
                     cursor.execute("""
-                        INSERT INTO cri_cra_dev.crm.task_rules (operation_id, name, frequency, start_date, end_date, description, priority)
-                        VALUES (?, ?, ?, ?, ?, ?, ?)
-                    """, (op_id, name, freq, start_date_base, end_date, desc, priority))
+                        INSERT INTO cri_cra_dev.crm.task_rules (id, operation_id, name, frequency, start_date, end_date, description, priority)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """, (rule_id, op_id, name, freq, start_date_base, end_date, desc, priority))
                 
                 # Se não tinha histórico e usamos datetime.now(), cria o histórico inicial
                 if not last_history:
+                    rh_id = get_next_unique_id(cursor, 'rating_history')
                     cursor.execute("""
-                        INSERT INTO cri_cra_dev.crm.rating_history (operation_id, date, rating_operation, rating_group, watchlist, sentiment, event_id)
-                        VALUES (?, ?, ?, ?, ?, ?, NULL)
-                    """, (op_id, start_date_base, op['rating_operation'], op['rating_group'], op['watchlist'], 'Neutro'))
+                        INSERT INTO cri_cra_dev.crm.rating_history (id, operation_id, date, rating_operation, rating_group, watchlist, sentiment, event_id)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, NULL)
+                    """, (rh_id, op_id, start_date_base, op['rating_operation'], op['rating_group'], op['watchlist'], 'Neutro'))
                 
                 log_action(cursor, 'System', 'UPDATE', 'Operation', op_id, "Regras criadas via sync.")
                 fixed_count += 1
@@ -1040,7 +1042,8 @@ def edit_task():
         with conn.cursor() as cursor:
             cursor.execute("INSERT INTO cri_cra_dev.crm.task_exceptions (task_id, operation_id, deleted_at, deleted_by) VALUES (?, ?, ?, ?)", (data['originalTaskId'], data['operationId'], datetime.now(), data.get('responsibleAnalyst')))
             due_date = updates['dueDate']
-            cursor.execute("INSERT INTO cri_cra_dev.crm.task_rules (operation_id, name, frequency, start_date, end_date, description, priority) VALUES (?, ?, 'Pontual', ?, ?, ?, ?)", (data['operationId'], updates['name'], due_date, due_date, f"Tarefa editada a partir de {data['originalTaskId']}", updates.get('priority') or 'Média'))
+            new_rule_id = get_next_unique_id(cursor, 'task_rules')
+            cursor.execute("INSERT INTO cri_cra_dev.crm.task_rules (id, operation_id, name, frequency, start_date, end_date, description, priority) VALUES (?, ?, ?, 'Pontual', ?, ?, ?, ?)", (new_rule_id, data['operationId'], updates['name'], due_date, due_date, f"Tarefa editada a partir de {data['originalTaskId']}", updates.get('priority') or 'Média'))
             log_action(cursor, data.get('responsibleAnalyst'), 'UPDATE', 'Task', data['originalTaskId'], f"Tarefa editada para ter nome '{updates['name']}' e vencimento em {due_date}.")
         conn.commit()
         with conn.cursor() as cursor:
@@ -1118,16 +1121,11 @@ def manage_change_requests():
             data = request.json
             now = datetime.now()
             with conn.cursor() as cursor:
+                new_id = get_next_unique_id(cursor, 'change_requests')
                 cursor.execute(
-                    "INSERT INTO cri_cra_dev.crm.change_requests (title, description, requester, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
-                    (data['title'], data['description'], data['requester'], 'pending', now, now)
+                    "INSERT INTO cri_cra_dev.crm.change_requests (id, title, description, requester, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    (new_id, data['title'], data['description'], data['requester'], 'pending', now, now)
                 )
-                # Querying by title and requester to get the latest ID
-                cursor.execute(
-                    "SELECT id FROM cri_cra_dev.crm.change_requests WHERE title = ? AND requester = ? ORDER BY id DESC LIMIT 1", 
-                    (data['title'], data['requester'])
-                )
-                new_id = cursor.fetchone().id
             conn.commit()
             return jsonify({'id': new_id, 'status': 'pending', 'createdAt': safe_isoformat(now), 'updatedAt': safe_isoformat(now)}), 201
             
@@ -1209,9 +1207,10 @@ def add_operation_risk(op_id):
         data = request.json
         now = datetime.now()
         with conn.cursor() as cursor:
+            risk_id = get_next_unique_id(cursor, 'operation_risks')
             cursor.execute(
-                "INSERT INTO cri_cra_dev.crm.operation_risks (operation_id, title, description, severity, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
-                (op_id, data['title'], data.get('description'), data.get('severity', 'Média'), now, now)
+                "INSERT INTO cri_cra_dev.crm.operation_risks (id, operation_id, title, description, severity, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (risk_id, op_id, data['title'], data.get('description'), data.get('severity', 'Média'), now, now)
             )
             log_action(cursor, data.get('userName', 'System'), 'CREATE', 'OperationRisk', op_id, f"Risco '{data['title']}' adicionado.")
         conn.commit()
@@ -1261,11 +1260,11 @@ def add_operation_litigation_comment(op_id):
         data = request.json
         now = datetime.now()
         with conn.cursor() as cursor:
+            comment_id = get_next_unique_id(cursor, 'operation_litigation_comments')
             cursor.execute(
-                "INSERT INTO cri_cra_dev.crm.operation_litigation_comments (operation_id, date, description, user_name) VALUES (?, ?, ?, ?)",
-                (op_id, now, data['description'], data.get('userName', 'Analista'))
+                "INSERT INTO cri_cra_dev.crm.operation_litigation_comments (id, operation_id, date, description, user_name) VALUES (?, ?, ?, ?, ?)",
+                (comment_id, op_id, now, data['description'], data.get('userName', 'Analista'))
             )
-            comment_id = cursor.lastrowid
             log_action(cursor, data.get('userName', 'System'), 'CREATE', 'LitigationComment', comment_id or 0, "Comentário de litígio adicionado.")
         conn.commit()
         

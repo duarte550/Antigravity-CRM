@@ -18,7 +18,7 @@ import LitigationCommentsSection from './LitigationCommentsSection';
 import RiskForm from './RiskForm';
 import { X, Edit2, Plus, Trash2, AlertTriangle, Users } from 'lucide-react';
 import RichTextEditor from './RichTextEditor';
-import { fetchApi } from '../utils/api';
+import { fetchApi, autoCreateComiteReviewItem } from '../utils/api';
 
 interface OperationDetailProps {
   operation: Operation;
@@ -437,7 +437,7 @@ ${event.nextSteps ? stripHtml(event.nextSteps) : 'Nenhum'}
         }
     };
     
-    const handleSaveReview = async (data: { event: Omit<Event, 'id'>, ratingOp: Rating, ratingGroup: Rating, ratingMasterGroup: Rating, sentiment: Sentiment }) => {
+    const handleSaveReview = async (data: { event: Omit<Event, 'id'>, ratingOp: Rating, ratingGroup: Rating, ratingMasterGroup: Rating, sentiment: Sentiment, videoUrl: string }) => {
         if (!reviewTaskToComplete) return;
 
         const newEventId = Date.now();
@@ -471,6 +471,21 @@ ${event.nextSteps ? stripHtml(event.nextSteps) : 'Nenhum'}
         };
         
         onUpdateOperation(updatedOperation);
+
+        // Auto-criar item de revisão no próximo comitê de investimento
+        autoCreateComiteReviewItem({
+          operationId: operation.id,
+          operationName: operation.name,
+          operationArea: operation.area,
+          reviewTitle: eventToSave.title || `Revisão de crédito - ${operation.name}`,
+          reviewDescription: data.event.description,
+          analystName: operation.responsibleAnalyst,
+          videoUrl: data.videoUrl || '',
+          watchlist: operation.watchlist,
+          ratingOperation: data.ratingOp,
+          sentiment: data.sentiment,
+        });
+
         setReviewTaskToComplete(null);
         setIsReviewFormOpen(false);
     };

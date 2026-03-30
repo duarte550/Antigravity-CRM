@@ -2,6 +2,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import type { Operation, Area, Task, Event, Rating, Sentiment, RatingHistoryEntry } from '../types';
 import { WatchlistStatus, TaskStatus, Page } from '../types';
+import { autoCreateComiteReviewItem } from '../utils/api';
 import OperationForm from './OperationForm';
 import AnalystCalendar from './AnalystCalendar';
 import EventForm from './EventForm';
@@ -221,7 +222,7 @@ const OverviewDashboard: React.FC<OverviewDashboardProps> = ({ operations, onSel
       setIsEventFormOpen(false);
   };
 
-  const handleSaveReview = async (data: { event: Omit<Event, 'id'>, ratingOp: Rating, ratingGroup: Rating, ratingMasterGroup: Rating, sentiment: Sentiment }) => {
+  const handleSaveReview = async (data: { event: Omit<Event, 'id'>, ratingOp: Rating, ratingGroup: Rating, ratingMasterGroup: Rating, sentiment: Sentiment, videoUrl: string }) => {
     if (!reviewTaskToComplete) return;
     const operationToUpdate = operationsById.get(reviewTaskToComplete.operationId);
     if (!operationToUpdate) return;
@@ -253,6 +254,21 @@ const OverviewDashboard: React.FC<OverviewDashboardProps> = ({ operations, onSel
     };
     
     onUpdateOperation(updatedOperation);
+
+    // Auto-criar item de revisão no próximo comitê de investimento
+    autoCreateComiteReviewItem({
+      operationId: operationToUpdate.id,
+      operationName: operationToUpdate.name,
+      operationArea: operationToUpdate.area,
+      reviewTitle: eventToSave.title || `Revisão de crédito - ${operationToUpdate.name}`,
+      reviewDescription: data.event.description,
+      analystName: operationToUpdate.responsibleAnalyst,
+      videoUrl: data.videoUrl || '',
+      watchlist: operationToUpdate.watchlist,
+      ratingOperation: data.ratingOp,
+      sentiment: data.sentiment,
+    });
+
     setReviewTaskToComplete(null);
     setIsReviewFormOpen(false);
   };

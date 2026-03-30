@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import type { Operation, Task, Event, Rating, Sentiment, RatingHistoryEntry, Area, TaskRule } from '../types';
 import { TaskStatus } from '../types';
+import { autoCreateComiteReviewItem } from '../utils/api';
 import EventForm from './EventForm';
 import ReviewCompletionForm from './ReviewCompletionForm';
 import { CheckCircleIcon, PlusCircleIcon, PencilIcon, TrashIcon, ArrowUpIcon, ArrowDownIcon, CalendarIcon, ViewListIcon, ViewBoardsIcon, FilterIcon } from './icons/Icons';
@@ -205,7 +206,7 @@ const TasksPage: React.FC<TasksPageProps> = ({ operations, allTasks, onUpdateOpe
       setIsEventFormOpen(false);
   };
 
-  const handleSaveReview = async (data: { event: Omit<Event, 'id'>, ratingOp: Rating, ratingGroup: Rating, ratingMasterGroup: Rating, sentiment: Sentiment }) => {
+  const handleSaveReview = async (data: { event: Omit<Event, 'id'>, ratingOp: Rating, ratingGroup: Rating, ratingMasterGroup: Rating, sentiment: Sentiment, videoUrl: string }) => {
     if (!reviewTaskToComplete) return;
     const operationToUpdate = operationsById.get(reviewTaskToComplete.operationId);
     if (!operationToUpdate) return;
@@ -233,6 +234,21 @@ const TasksPage: React.FC<TasksPageProps> = ({ operations, allTasks, onUpdateOpe
         tasks: updatedTasks
     };
     onUpdateOperation(updatedOperation);
+
+    // Auto-criar item de revisão no próximo comitê de investimento
+    autoCreateComiteReviewItem({
+      operationId: operationToUpdate.id,
+      operationName: operationToUpdate.name,
+      operationArea: operationToUpdate.area,
+      reviewTitle: eventToSave.title || `Revisão de crédito - ${operationToUpdate.name}`,
+      reviewDescription: data.event.description,
+      analystName: operationToUpdate.responsibleAnalyst,
+      videoUrl: data.videoUrl || '',
+      watchlist: operationToUpdate.watchlist,
+      ratingOperation: data.ratingOp,
+      sentiment: data.sentiment,
+    });
+
     setReviewTaskToComplete(null);
     setIsReviewFormOpen(false);
   };

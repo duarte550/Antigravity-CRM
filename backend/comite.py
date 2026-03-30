@@ -1903,3 +1903,154 @@ def get_item_full(item_id):
     finally:
         if conn:
             conn.close()
+
+
+# ══════════════════════════════════════════════════════════════
+# ROTA — Auto-criação de item de pauta ao concluir revisão de crédito
+# ══════════════════════════════════════════════════════════════
+
+@comite_bp.route('/api/comite/auto-review-item', methods=['POST'])
+def auto_create_review_item():
+    """Quando uma revisão de crédito (Gerencial ou Política) é concluída,
+    cria automaticamente um item na pauta do próximo comitê de INVESTIMENTO
+    da mesma área da operação.
+
+    Body esperado:
+    {
+        "operation_id": int,
+        "operation_name": str,
+        "operation_area": str,
+        "review_title": str,
+        "review_description": str,  (HTML do resumo)
+        "analyst_name": str,
+        "video_url": str (opcional),
+        "watchlist": str,
+        "rating_operation": str,
+        "sentiment": str
+    }
+    """
+    conn = get_db_connection()
+    try:
+        data = request.get_json(force=True)
+        operation_id = data.get('operation_id')
+        operation_area = data.get('operation_area', '')
+        operation_name = data.get('operation_name', '')
+        review_title = data.get('review_title', f'Revisão de crédito - {operation_name}')
+        review_description = data.get('review_description', '')
+        analyst_name = data.get('analyst_name', 'Sistema')
+        video_url = data.get('video_url', '')
+        watchlist = data.get('watchlist', '')
+        rating_operation = data.get('rating_operation', '')
+        sentiment = data.get('sentiment', '')
+
+        if not operation_id or not operation_area:
+            return jsonify({"error": "operation_id e operation_area são obrigatórios."}), 400
+
+        with conn.cursor() as cursor:
+            # 1. Buscar o próximo comitê agendado de INVESTIMENTO para a área da operação
+            cursor.execute(f"""
+                SELECT c.id, c.data
+                FROM {COMITE_SCHEMA_PREFIX}.comites c
+                JOIN {COMITE_SCHEMA_PREFIX}.comite_rules cr ON c.comite_rule_id = cr.id
+                WHERE cr.tipo = 'investimento'
+                  AND cr.area = ?
+                  AND cr.ativo = TRUE
+                  AND c.status = 'agendado'
+                ORDER BY c.data ASC
+                LIMIT 1
+            """, (operation_area,))
+            comite_row = cursor.fetchone()
+
+            if not comite_row:
+                current_app.logger.info(
+                    f"auto-review-item: Nenhum comitê de investimento agendado para a área '{operation_area}'. Item não criado."
+                )
+                return jsonify({
+                    "status": "skipped",
+                    "message": f"Nenhum comitê de investimento agendado para a área '{operation_area}'."
+                }), 200
+
+            comite_id = comite_row.id
+
+            # 2. Encontrar a seção "Casos de Revisão" nesse comitê
+            cursor.execute(
+                f"SELECT id FROM {COMITE_SCHEMA_PREFIX}.comite_secoes WHERE comite_id = ? AND nome = 'Casos de Revisão' LIMIT 1",
+                (comite_id,)
+            )
+            secao_row = cursor.fetchone()
+
+            if secao_row:
+                secao_id = secao_row.id
+            else:
+                # Criar a seção se não existir
+                cursor.execute(
+                    f"SELECT COALESCE(MAX(ordem), 0) + 1 as next_order FROM {COMITE_SCHEMA_PREFIX}.comite_secoes WHERE comite_id = ?",
+                    (comite_id,)
+                )
+                next_order = cursor.fetchone().next_order
+                secao_id = _get_next_id(cursor, 'comite_secoes')
+                cursor.execute(
+                    f"INSERT INTO {COMITE_SCHEMA_PREFIX}.comite_secoes (id, comite_id, nome, ordem, is_default) VALUES (?, ?, ?, ?, ?)",
+                    (secao_id, comite_id, 'Casos de Revisão', int(next_order), True)
+                )
+
+            # 3. Verificar se já existe um item de revisão para essa operação nesse comitê
+            cursor.execute(
+                f"SELECT id FROM {COMITE_SCHEMA_PREFIX}.comite_itens_pauta WHERE comite_id = ? AND operation_id = ? AND tipo_caso = 'revisao' LIMIT 1",
+                (comite_id, operation_id)
+            )
+            existing_item = cursor.fetchone()
+            if existing_item:
+                current_app.logger.info(
+                    f"auto-review-item: Item de revisão já existe para operação {operation_id} no comitê {comite_id}. Ignorando."
+                )
+                return jsonify({
+                    "status": "skipped",
+                    "message": "Item de revisão já existe nesse comitê para essa operação."
+                }), 200
+
+            # 4. Montar descrição enriquecida com metadata da revisão
+            meta_parts = []
+            if watchlist:
+                meta_parts.append(f"<strong>Watchlist:</strong> {watchlist}")
+            if rating_operation:
+                meta_parts.append(f"<strong>Rating:</strong> {rating_operation}")
+            if sentiment:
+                meta_parts.append(f"<strong>Sentimento:</strong> {sentiment}")
+            meta_html = " | ".join(meta_parts)
+            full_description = f"<p>{meta_html}</p>{review_description}" if meta_html else review_description
+
+            # 5. Criar o item de pauta
+            item_tipo = 'video' if video_url else 'presencial'
+            new_item_id = _get_next_id(cursor, 'comite_itens_pauta')
+            now = datetime.now()
+            cursor.execute(
+                f"""INSERT INTO {COMITE_SCHEMA_PREFIX}.comite_itens_pauta 
+                (id, comite_id, secao_id, titulo, descricao, criador_user_id, criador_nome, 
+                 tipo, video_url, video_duracao, prioridade, operation_id, tipo_caso, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (new_item_id, comite_id, secao_id, review_title,
+                 full_description, None, analyst_name,
+                 item_tipo, video_url if video_url else None, None,
+                 'normal', operation_id, 'revisao', now)
+            )
+
+        conn.commit()
+
+        current_app.logger.info(
+            f"auto-review-item: Item de revisão criado (ID={new_item_id}) para operação {operation_id} no comitê {comite_id}."
+        )
+
+        return jsonify({
+            "status": "created",
+            "item_id": new_item_id,
+            "comite_id": comite_id,
+            "message": f"Item de revisão adicionado ao próximo comitê de investimento ({operation_area})."
+        }), 201
+
+    except Exception as e:
+        current_app.logger.error(f"Error POST /api/comite/auto-review-item: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            conn.close()

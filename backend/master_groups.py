@@ -223,14 +223,16 @@ def add_mg_risk(mg_id):
         data = request.json
         with conn.cursor() as cursor:
             now = datetime.now()
+            risk_id = get_next_unique_id(cursor, 'operation_risks')
             cursor.execute(
-                "INSERT INTO cri_cra_dev.crm.operation_risks (master_group_id, title, description, severity, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
-                (mg_id, data.get('title'), data.get('description'), data.get('severity'), now, now)
+                "INSERT INTO cri_cra_dev.crm.operation_risks (id, master_group_id, title, description, severity, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (risk_id, mg_id, data.get('title'), data.get('description'), data.get('severity'), now, now)
             )
             # Log action
             user_name = data.get('userName', 'Sistema')
-            cursor.execute("INSERT INTO cri_cra_dev.crm.audit_logs (timestamp, user_name, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)",
-                           (now, user_name, 'CREATE', 'MasterGroup', str(mg_id), f"Risco/Ponto de Atenção Adicionado: {data.get('title')}"))
+            audit_id = get_next_unique_id(cursor, 'audit_logs')
+            cursor.execute("INSERT INTO cri_cra_dev.crm.audit_logs (id, timestamp, user_name, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                           (audit_id, now, user_name, 'CREATE', 'MasterGroup', str(mg_id), f"Risco/Ponto de Atenção Adicionado: {data.get('title')}"))
             conn.commit()
             return jsonify(fetch_full_master_group(cursor, mg_id)), 201
     except Exception as e:
@@ -251,15 +253,17 @@ def manage_mg_risk(mg_id, risk_id):
                     "UPDATE cri_cra_dev.crm.operation_risks SET title = ?, description = ?, severity = ?, updated_at = ? WHERE id = ? AND master_group_id = ?",
                     (data.get('title'), data.get('description'), data.get('severity'), now, risk_id, mg_id)
                 )
-                cursor.execute("INSERT INTO cri_cra_dev.crm.audit_logs (timestamp, user_name, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)",
-                               (now, user_name, 'UPDATE', 'MasterGroup', str(mg_id), f"Risco Atualizado: {data.get('title')}"))
+                audit_id = get_next_unique_id(cursor, 'audit_logs')
+                cursor.execute("INSERT INTO cri_cra_dev.crm.audit_logs (id, timestamp, user_name, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                               (audit_id, now, user_name, 'UPDATE', 'MasterGroup', str(mg_id), f"Risco Atualizado: {data.get('title')}"))
                 conn.commit()
                 return jsonify(fetch_full_master_group(cursor, mg_id)), 200
         elif request.method == 'DELETE':
             with conn.cursor() as cursor:
                 cursor.execute("DELETE FROM cri_cra_dev.crm.operation_risks WHERE id = ? AND master_group_id = ?", (risk_id, mg_id))
-                cursor.execute("INSERT INTO cri_cra_dev.crm.audit_logs (timestamp, user_name, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)",
-                               (now, user_name, 'DELETE', 'MasterGroup', str(mg_id), f"Risco Removido ID={risk_id}"))
+                audit_id = get_next_unique_id(cursor, 'audit_logs')
+                cursor.execute("INSERT INTO cri_cra_dev.crm.audit_logs (id, timestamp, user_name, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                               (audit_id, now, user_name, 'DELETE', 'MasterGroup', str(mg_id), f"Risco Removido ID={risk_id}"))
                 conn.commit()
                 return jsonify(fetch_full_master_group(cursor, mg_id)), 200
     except Exception as e:
@@ -567,8 +571,9 @@ def manage_structuring_operation(so_id):
                 
                 if changes:
                     msg = "Alterações detectadas: " + " | ".join(changes)
-                    cursor.execute("INSERT INTO cri_cra_dev.crm.events (operation_id, date, type, title, description, is_origination, registered_by) VALUES (?, ?, 'Atualização Automática', 'Alteração de Atributos', ?, ?, ?)", 
-                                   (so_id, datetime.now(), msg, True, user_name))
+                    event_id = get_next_unique_id(cursor, 'events')
+                    cursor.execute("INSERT INTO cri_cra_dev.crm.events (id, operation_id, date, type, title, description, is_origination, registered_by) VALUES (?, ?, ?, 'Atualização Automática', 'Alteração de Atributos', ?, ?, ?)", 
+                                   (event_id, so_id, datetime.now(), msg, True, user_name))
                                    
                 if 'taskRules' in data:
                     cursor.execute("SELECT id, name FROM cri_cra_dev.crm.task_rules WHERE operation_id = ?", (so_id,))
@@ -584,8 +589,9 @@ def manage_structuring_operation(so_id):
                             cursor.execute("UPDATE cri_cra_dev.crm.task_rules SET name=?, frequency=?, start_date=?, end_date=?, description=?, priority=? WHERE id=?", 
                                            (rule.get('name'), rule.get('frequency'), rule.get('startDate'), rule.get('endDate'), rule.get('description'), rule.get('priority') or 'Média', rule_id))
                         elif not rule_id or rule_id not in db_rules_map:
-                            cursor.execute("INSERT INTO cri_cra_dev.crm.task_rules (operation_id, name, frequency, start_date, end_date, description, priority, is_origination) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", 
-                                           (so_id, rule.get('name'), rule.get('frequency'), rule.get('startDate'), rule.get('endDate'), rule.get('description'), rule.get('priority') or 'Média', True))
+                            new_rule_id = get_next_unique_id(cursor, 'task_rules')
+                            cursor.execute("INSERT INTO cri_cra_dev.crm.task_rules (id, operation_id, name, frequency, start_date, end_date, description, priority, is_origination) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", 
+                                           (new_rule_id, so_id, rule.get('name'), rule.get('frequency'), rule.get('startDate'), rule.get('endDate'), rule.get('description'), rule.get('priority') or 'Média', True))
                                            
                 if 'taskExceptions' in data:
                     cursor.execute("DELETE FROM cri_cra_dev.crm.task_exceptions WHERE operation_id = ?", (so_id,))
@@ -611,8 +617,9 @@ def add_master_group_event(mg_id):
     try:
         data = request.json
         with conn.cursor() as cursor:
-            cursor.execute("INSERT INTO cri_cra_dev.crm.events (master_group_id, date, type, title, description, registered_by, next_steps, is_origination) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                           (mg_id, parse_iso_date(data.get('date')), data.get('type'), data.get('title'), data.get('description'), data.get('registeredBy'), data.get('nextSteps'), data.get('isOrigination', False)))
+            event_id = get_next_unique_id(cursor, 'events')
+            cursor.execute("INSERT INTO cri_cra_dev.crm.events (id, master_group_id, date, type, title, description, registered_by, next_steps, is_origination) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                           (event_id, mg_id, parse_iso_date(data.get('date')), data.get('type'), data.get('title'), data.get('description'), data.get('registeredBy'), data.get('nextSteps'), data.get('isOrigination', False)))
             conn.commit()
             return jsonify({"status": "success"}), 201
     except Exception as e:
@@ -626,10 +633,9 @@ def add_structuring_operation_event(so_id):
     try:
         data = request.json
         with conn.cursor() as cursor:
-            cursor.execute("INSERT INTO cri_cra_dev.crm.events (operation_id, date, type, title, description, registered_by, next_steps, is_origination, operation_stage_id, completed_task_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                           (so_id, parse_iso_date(data.get('date')), data.get('type'), data.get('title'), data.get('description'), data.get('registeredBy'), data.get('nextSteps'), True, data.get('structuringOperationStageId'), data.get('completedTaskId')))
-            cursor.execute("SELECT id FROM cri_cra_dev.crm.events WHERE operation_id = ? ORDER BY id DESC LIMIT 1", (so_id,))
-            new_id = cursor.fetchone().id
+            new_id = get_next_unique_id(cursor, 'events')
+            cursor.execute("INSERT INTO cri_cra_dev.crm.events (id, operation_id, date, type, title, description, registered_by, next_steps, is_origination, operation_stage_id, completed_task_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                           (new_id, so_id, parse_iso_date(data.get('date')), data.get('type'), data.get('title'), data.get('description'), data.get('registeredBy'), data.get('nextSteps'), True, data.get('structuringOperationStageId'), data.get('completedTaskId')))
             conn.commit()
             return jsonify({"status": "success", "id": new_id}), 201
     except Exception as e:

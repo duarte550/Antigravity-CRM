@@ -32,7 +32,7 @@ import ComiteVideoPage from './components/ComiteVideoPage';
 import LoginPage from './components/LoginPage';
 import AdminPanel from './components/AdminPanel';
 import { useAuth } from './contexts/AuthContext';
-import { fetchApi } from './utils/api';
+import { fetchApi, autoCreateComiteReviewItem } from './utils/api';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://antigravity-crm-two.vercel.app';
 
@@ -692,7 +692,7 @@ const App: React.FC = () => {
     setNewTaskModalState({ isOpen: false });
   };
 
-  const handleSaveReview = async (data: { event: Omit<Event, 'id'>, ratingOp: Rating, ratingGroup: Rating, sentiment: Sentiment }) => {
+  const handleSaveReview = async (data: { event: Omit<Event, 'id'>, ratingOp: Rating, ratingGroup: Rating, sentiment: Sentiment, videoUrl?: string }) => {
     const clickedTask = reviewModalState.task;
     if (!clickedTask) return;
 
@@ -745,11 +745,13 @@ const App: React.FC = () => {
       return rule;
     });
 
+    const reviewTitle = `Conclusão: Revisão de crédito - ${operation.name} - ${formattedOriginalDate}`;
+
     const eventToAdd: Event = {
       ...baseEventData,
       id: Date.now() + Math.random(),
       // PONTO 1: Título seguindo o padrão solicitado
-      title: `Conclusão: Revisão de crédito - ${operation.name} - ${formattedOriginalDate}`,
+      title: reviewTitle,
       completedTaskId: clickedTask.id,
     };
 
@@ -778,6 +780,20 @@ const App: React.FC = () => {
     try {
       await handleUpdateOperation(updatedOperation);
       setReviewModalState({ isOpen: false, task: null });
+
+      // PONTO 3: Auto-criação de item na pauta do próximo comitê de investimento
+      autoCreateComiteReviewItem({
+        operationId: operation.id,
+        operationName: operation.name,
+        operationArea: operation.area,
+        reviewTitle: reviewTitle,
+        reviewDescription: data.event.description,
+        analystName: operation.responsibleAnalyst,
+        videoUrl: data.videoUrl || '',
+        watchlist: operation.watchlist,
+        ratingOperation: data.ratingOp,
+        sentiment: data.sentiment,
+      });
     } catch (e) {
       // Erro já tratado pelo toast do handleUpdateOperation
     }

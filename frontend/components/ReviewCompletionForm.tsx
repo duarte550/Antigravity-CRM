@@ -10,7 +10,7 @@ interface ReviewCompletionFormProps {
   task: Task;
   operation: Operation;
   onClose: () => void;
-  onSave: (data: { event: Omit<Event, 'id'>, ratingOp: Rating, ratingGroup: Rating, ratingMasterGroup: Rating, sentiment: Sentiment }) => Promise<void>;
+  onSave: (data: { event: Omit<Event, 'id'>, ratingOp: Rating, ratingGroup: Rating, ratingMasterGroup: Rating, sentiment: Sentiment, videoUrl: string }) => Promise<void>;
 }
 
 const ReviewCompletionForm: React.FC<ReviewCompletionFormProps> = ({ task, operation, onClose, onSave }) => {
@@ -22,6 +22,7 @@ const ReviewCompletionForm: React.FC<ReviewCompletionFormProps> = ({ task, opera
   const [description, setDescription] = useState('');
   const [nextSteps, setNextSteps] = useState('');
   const [attentionPoints, setAttentionPoints] = useState('');
+  const [videoUrl, setVideoUrl] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -41,7 +42,7 @@ const ReviewCompletionForm: React.FC<ReviewCompletionFormProps> = ({ task, opera
 
     try {
         // Aguarda o processo de salvamento (App.tsx gerencia a persistência)
-        await onSave({ event, ratingOp, ratingGroup, ratingMasterGroup, sentiment });
+        await onSave({ event, ratingOp, ratingGroup, ratingMasterGroup, sentiment, videoUrl: videoUrl.trim() });
     } catch (err) {
         setIsSubmitting(false);
     }
@@ -114,6 +115,26 @@ const ReviewCompletionForm: React.FC<ReviewCompletionFormProps> = ({ task, opera
                 onChange={setAttentionPoints} 
                 className="h-32"
             />
+        </div>
+
+        <div>
+            <Label htmlFor="review-video-url">URL do Vídeo da Revisão (Opcional)</Label>
+            <div className="flex items-center gap-2">
+                <svg className="w-5 h-5 text-gray-400 dark:text-gray-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                </svg>
+                <Input
+                    id="review-video-url"
+                    type="url"
+                    value={videoUrl}
+                    onChange={e => setVideoUrl(e.target.value)}
+                    placeholder="https://web.microsoftstream.com/video/..."
+                    disabled={isSubmitting}
+                />
+            </div>
+            <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-1">
+                Se preenchido, o item será criado como vídeo na pauta do comitê.
+            </p>
         </div>
 
         <div className="flex justify-end gap-4 pt-4 border-t dark:border-gray-700">

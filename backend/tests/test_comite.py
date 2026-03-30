@@ -1326,3 +1326,161 @@ class TestItemFullWithOperation:
         assert resp.status_code == 200
         data = resp.get_json()
         assert data['operation'] is None
+
+
+class TestAutoReviewItem:
+    """Testes para POST /api/comite/auto-review-item."""
+
+    @pytest.fixture(autouse=True)
+    def _setup(self, client, mock_connection):
+        """Cria infraestrutura: operação + regra de investimento + comitê agendado."""
+        self.mock_connection = mock_connection
+
+        # Create an operation in CRM
+        with mock_connection.cursor() as c:
+            c.cursor.execute(
+                """INSERT OR IGNORE INTO operations (id, name, area, operation_type, responsible_analyst,
+                   review_frequency, call_frequency, df_frequency, segmento,
+                   rating_operation, watchlist) VALUES
+                   (8888, 'Op AutoReview Test', 'CRI', 'CRI', 'Analista AutoR',
+                    'Mensal', 'Mensal', 'Trimestral', 'Corporate', 'Ba1', 'Verde')"""
+            )
+            mock_connection.conn.commit()
+
+        # Create investimento rule for CRI area (may already exist from prior tests)
+        rule_resp = client.post('/api/comite/rules', json={
+            'tipo': 'investimento',
+            'area': 'CRI_AUTO',
+            'dia_da_semana': 'Segunda',
+            'horario': '10:00',
+        })
+        if rule_resp.status_code == 201:
+            self.rule_id = rule_resp.get_json()['id']
+        else:
+            rules = client.get('/api/comite/rules').get_json()
+            self.rule_id = next(r['id'] for r in rules if r.get('area') == 'CRI_AUTO')
+
+        # Create a scheduled comité
+        comite_resp = client.post('/api/comite/comites', json={
+            'comite_rule_id': self.rule_id,
+            'data': '2026-07-01T10:00:00',
+        })
+        assert comite_resp.status_code == 201
+        self.comite_id = comite_resp.get_json()['id']
+
+        yield
+
+    def test_missing_operation_id(self, client):
+        """Deve retornar 400 quando falta operation_id."""
+        resp = client.post('/api/comite/auto-review-item', json={
+            'operation_area': 'CRI_AUTO',
+            'operation_name': 'Test Op',
+        })
+        assert resp.status_code == 400
+        assert 'obrigatórios' in resp.get_json().get('error', '')
+
+    def test_missing_operation_area(self, client):
+        """Deve retornar 400 quando falta operation_area."""
+        resp = client.post('/api/comite/auto-review-item', json={
+            'operation_id': 8888,
+        })
+        assert resp.status_code == 400
+
+    def test_no_matching_comite(self, client):
+        """Deve retornar skipped quando não existe comitê para a área."""
+        resp = client.post('/api/comite/auto-review-item', json={
+            'operation_id': 8888,
+            'operation_name': 'Op AutoReview Test',
+            'operation_area': 'AREA_INEXISTENTE',
+            'review_title': 'Revisão de teste',
+            'review_description': 'Descrição',
+            'analyst_name': 'Analista',
+        })
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data['status'] == 'skipped'
+
+    def test_auto_review_item_created(self, client):
+        """Deve criar item de revisão no próximo comitê da área."""
+        resp = client.post('/api/comite/auto-review-item', json={
+            'operation_id': 8888,
+            'operation_name': 'Op AutoReview Test',
+            'operation_area': 'CRI_AUTO',
+            'review_title': 'Revisão crédito - Op AutoReview Test - mar/26',
+            'review_description': '<p>Análise detalhada</p>',
+            'analyst_name': 'Analista AutoR',
+            'watchlist': 'Verde',
+            'rating_operation': 'Ba1',
+            'sentiment': 'Neutro',
+        })
+        assert resp.status_code == 201
+        data = resp.get_json()
+        assert data['status'] == 'created'
+        assert data['comite_id'] is not None
+        assert data['item_id'] is not None
+
+        # Verify the item appears in the comitê that was selected
+        target_comite_id = data['comite_id']
+        detail = client.get(f'/api/comite/comites/{target_comite_id}').get_json()
+        item = next((i for i in detail['itens'] if i.get('operation_id') == 8888), None)
+        assert item is not None
+        assert item['tipo_caso'] == 'revisao'
+        assert 'Op AutoReview Test' in item['titulo']
+
+    def test_duplicate_review_item_skipped(self, client):
+        """Deve ignorar (skipped) se já existe item de revisão para a mesma operação no comitê."""
+        # First creation
+        client.post('/api/comite/auto-review-item', json={
+            'operation_id': 8888,
+            'operation_name': 'Op AutoReview Test',
+            'operation_area': 'CRI_AUTO',
+            'review_title': 'Revisão duplicada',
+            'review_description': '',
+            'analyst_name': 'Analista',
+        })
+
+        # Second creation should be skipped
+        resp = client.post('/api/comite/auto-review-item', json={
+            'operation_id': 8888,
+            'operation_name': 'Op AutoReview Test',
+            'operation_area': 'CRI_AUTO',
+            'review_title': 'Revisão duplicada 2',
+            'review_description': '',
+            'analyst_name': 'Analista',
+        })
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data['status'] == 'skipped'
+
+    def test_auto_review_with_video_url(self, client):
+        """Item com video_url deve ser criado como tipo 'video'."""
+        # Create a fresh comité to avoid duplicate skips from prior tests
+        comite_resp = client.post('/api/comite/comites', json={
+            'comite_rule_id': self.rule_id,
+            'data': '2026-08-01T10:00:00',
+        })
+        assert comite_resp.status_code == 201
+        fresh_comite_id = comite_resp.get_json()['id']
+
+        resp = client.post('/api/comite/auto-review-item', json={
+            'operation_id': 7777,
+            'operation_name': 'Op Video Test',
+            'operation_area': 'CRI_AUTO',
+            'review_title': 'Revisão com vídeo',
+            'review_description': '<p>Revisão em vídeo</p>',
+            'analyst_name': 'Analista Video',
+            'video_url': 'https://stream.microsoft.com/video/abc123',
+            'watchlist': 'Amarelo',
+            'rating_operation': 'A4',
+            'sentiment': 'Positivo',
+        })
+        assert resp.status_code == 201
+        data = resp.get_json()
+        assert data['status'] == 'created'
+
+        # Verify the item has video type
+        detail = client.get(f'/api/comite/comites/{data["comite_id"]}').get_json()
+        video_item = next((i for i in detail['itens'] if i.get('operation_id') == 7777), None)
+        assert video_item is not None
+        assert video_item['tipo'] == 'video'
+        assert video_item['video_url'] == 'https://stream.microsoft.com/video/abc123'

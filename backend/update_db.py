@@ -423,13 +423,21 @@ def update_schema():
                 ("ALTER TABLE cri_cra_dev.crm.operation_stages SET TBLPROPERTIES ('delta.columnMapping.mode' = 'name', 'delta.minReaderVersion' = '2', 'delta.minWriterVersion' = '5')", "Enable column mapping on operation_stages"),
                 ("ALTER TABLE cri_cra_dev.crm.events SET TBLPROPERTIES ('delta.columnMapping.mode' = 'name', 'delta.minReaderVersion' = '2', 'delta.minWriterVersion' = '5')", "Enable column mapping on events"),
                 ("ALTER TABLE cri_cra_dev.crm.task_rules SET TBLPROPERTIES ('delta.columnMapping.mode' = 'name', 'delta.minReaderVersion' = '2', 'delta.minWriterVersion' = '5')", "Enable column mapping on task_rules"),
+                ("ALTER TABLE cri_cra_dev.crm.rating_history SET TBLPROPERTIES ('delta.columnMapping.mode' = 'name', 'delta.minReaderVersion' = '2', 'delta.minWriterVersion' = '5')", "Enable column mapping on rating_history"),
                 
                 # Drop legacy columns (zombie columns that blocked mock_data.sql)
                 ("ALTER TABLE cri_cra_dev.crm.operations DROP COLUMN rating_group", "Drop rating_group from operations"),
                 ("ALTER TABLE cri_cra_dev.crm.operation_series DROP COLUMN structuring_operation_id", "Drop zombie col in series"),
                 ("ALTER TABLE cri_cra_dev.crm.operation_stages DROP COLUMN structuring_operation_id", "Drop zombie col in stages"),
                 ("ALTER TABLE cri_cra_dev.crm.events DROP COLUMN structuring_operation_stage_id", "Drop zombie col in events"),
-                ("ALTER TABLE cri_cra_dev.crm.task_rules DROP COLUMN structuring_operation_stage_id", "Drop zombie col in task_rules")
+                ("ALTER TABLE cri_cra_dev.crm.task_rules DROP COLUMN structuring_operation_stage_id", "Drop zombie col in task_rules"),
+
+                # Force-add missing columns in rating_history (auto-sync may have failed before column mapping was enabled)
+                ("ALTER TABLE cri_cra_dev.crm.rating_history ADD COLUMN rating_group STRING", "Add rating_group to rating_history"),
+                ("ALTER TABLE cri_cra_dev.crm.rating_history ADD COLUMN rating_master_group STRING", "Add rating_master_group to rating_history"),
+                ("ALTER TABLE cri_cra_dev.crm.rating_history ADD COLUMN watchlist STRING", "Add watchlist to rating_history"),
+                ("ALTER TABLE cri_cra_dev.crm.rating_history ADD COLUMN sentiment STRING", "Add sentiment to rating_history"),
+                ("ALTER TABLE cri_cra_dev.crm.rating_history ADD COLUMN master_group_id BIGINT", "Add master_group_id to rating_history"),
             ]
             for sql, desc in migrations:
                 try:
@@ -468,6 +476,13 @@ def update_schema():
                 cursor.execute("ALTER TABLE cri_cra_dev.crm.rating_history ALTER COLUMN operation_id DROP NOT NULL")
             except Exception as e:
                 pass
+            
+            # Drop NOT NULL from rating_history columns that may have been created with constraints
+            for rh_col in ['rating_operation', 'rating_group', 'date']:
+                try:
+                    cursor.execute(f"ALTER TABLE cri_cra_dev.crm.rating_history ALTER COLUMN {rh_col} DROP NOT NULL")
+                except Exception:
+                    pass
 
             # Seed Patch notes
             cursor.execute("SELECT COUNT(*) as count FROM cri_cra_dev.crm.patch_notes")
