@@ -30,11 +30,23 @@ logging.basicConfig(level=logging.INFO)
 # start resets globals, so update_schema() would run (30-60 s of Databricks DDL)
 # on almost every request, causing cascading timeouts.
 ##############################################################################################################################
-# Configuração de CORS dinâmica baseada em variável de ambiente.
-allowed_origins_env = os.environ.get('ALLOWED_ORIGINS', 'http://localhost:3000,http://localhost:3001,https://front-crm-cri.azurewebsites.net')
-allowed_origins_list = [origin.strip() for origin in allowed_origins_env.split(',') if origin.strip()]
+# Configuração de CORS dinâmica permitindo requisições na Edge API
+CORS(app, supports_credentials=True, resources={r"/*": {"origins": "*"}})
 
-CORS(app, supports_credentials=True, origins=allowed_origins_list)
+@app.after_request
+def add_cors_headers(response):
+    origin = request.headers.get('Origin')
+    if origin:
+        response.headers['Access-Control-Allow-Origin'] = origin
+        response.headers['Access-Control-Allow-Credentials'] = 'true'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Requested-With'
+        response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
+    return response
+
+@app.route('/', defaults={'path': ''}, methods=['OPTIONS'])
+@app.route('/<path:path>', methods=['OPTIONS'])
+def handle_options(path):
+    return '', 200
 
 
 # Regras de negócio centralizadas
