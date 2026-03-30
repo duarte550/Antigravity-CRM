@@ -1484,3 +1484,47 @@ class TestAutoReviewItem:
         assert video_item is not None
         assert video_item['tipo'] == 'video'
         assert video_item['video_url'] == 'https://stream.microsoft.com/video/abc123'
+
+
+class TestMinhasAprovacoes:
+    """Testes para GET /api/comite/aprovacoes."""
+
+    def test_aprovacoes_requires_user_id(self, client):
+        resp = client.get('/api/comite/aprovacoes')
+        assert resp.status_code == 400
+
+    def test_aprovacoes_returns_list(self, client):
+        resp = client.get('/api/comite/aprovacoes?user_id=1')
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert isinstance(data, list)
+
+    def test_aprovacoes_only_aprovacao_items(self, client):
+        """Deve retornar apenas itens com tipo_caso='aprovacao'."""
+        resp = client.get('/api/comite/aprovacoes?user_id=1')
+        data = resp.get_json()
+        for item in data:
+            assert item['tipo_caso'] == 'aprovacao'
+
+    def test_aprovacoes_has_comite_data(self, client):
+        """Cada item deve ter dados do comitê (data, status, tipo, area)."""
+        resp = client.get('/api/comite/aprovacoes?user_id=1')
+        data = resp.get_json()
+        for item in data:
+            assert 'comite_data' in item
+            assert 'comite_status' in item
+            assert 'comite_tipo' in item
+            assert 'comite_area' in item
+
+    def test_aprovacoes_has_vote_info(self, client):
+        """Cada item deve ter informações de votos."""
+        resp = client.get('/api/comite/aprovacoes?user_id=1')
+        data = resp.get_json()
+        for item in data:
+            assert 'votos' in item
+            assert 'meu_voto' in item
+            assert 'total_votos' in item
+            assert 'votos_aprovado' in item
+            assert 'votos_reprovado' in item
+            assert 'votos_discussao' in item
+

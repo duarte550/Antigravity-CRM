@@ -29,6 +29,7 @@ import CarteiraCompletaPage from './components/CarteiraCompletaPage';
 import ComitesPage from './components/ComitesPage';
 import ComiteDetailPage from './components/ComiteDetailPage';
 import ComiteVideoPage from './components/ComiteVideoPage';
+import MinhasAprovacoesPage from './components/MinhasAprovacoesPage';
 import LoginPage from './components/LoginPage';
 import AdminPanel from './components/AdminPanel';
 import { useAuth } from './contexts/AuthContext';
@@ -60,6 +61,7 @@ const PAGE_TO_PATH: Record<Page, string> = {
   [Page.COMITE_VIDEO]: '/comite-video',
   [Page.COMITE_ITEM_PAUTA]: '/comite-item',
   [Page.COMITE_PROXIMOS_PASSOS]: '/comite-proximos-passos',
+  [Page.MINHAS_APROVACOES]: '/minhas-aprovacoes',
 };
 
 const PATH_TO_PAGE: Record<string, Page> = Object.fromEntries(
@@ -989,6 +991,13 @@ const App: React.FC = () => {
           pushToGenericQueue={pushToGenericQueue}
           onNavigate={handleNavigate}
         />;
+      case Page.MINHAS_APROVACOES:
+        return <MinhasAprovacoesPage
+          apiUrl={API_BASE_URL}
+          showToast={showToast}
+          pushToGenericQueue={pushToGenericQueue}
+          onNavigate={handleNavigate}
+        />;
       default:
         return <OverviewDashboard
           operations={filteredOperations.filter(op => op.operationType !== 'Geral')}
@@ -1146,7 +1155,7 @@ const App: React.FC = () => {
 
                 <button
                   onClick={() => handleNavigate(Page.COMITES)}
-                  className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 border backdrop-blur-sm ${currentPage === Page.COMITES || currentPage === Page.COMITE_DETAIL
+                  className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 border backdrop-blur-sm ${currentPage === Page.COMITES || currentPage === Page.COMITE_DETAIL || currentPage === Page.MINHAS_APROVACOES
                     ? 'bg-white text-blue-900 border-white shadow-md font-bold'
                     : 'bg-white/10 text-white border-white/20 hover:bg-white/20 hover:border-white/40 shadow-sm'
                     }`}

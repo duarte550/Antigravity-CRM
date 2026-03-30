@@ -2054,3 +2054,121 @@ def auto_create_review_item():
     finally:
         if conn:
             conn.close()
+
+
+# ══════════════════════════════════════════════════════════════
+# ROTAS — Minhas Aprovações (painel do usuário)
+# ══════════════════════════════════════════════════════════════
+
+@comite_bp.route('/api/comite/aprovacoes', methods=['GET'])
+def get_aprovacoes():
+    """Retorna todos os itens de pauta com tipo_caso='aprovacao' de comitês de investimento,
+    junto com dados de voto do usuário solicitante e informações do comitê.
+    Query param: user_id (obrigatório).
+    """
+    conn = get_db_connection()
+    try:
+        user_id = request.args.get('user_id', type=int)
+        if not user_id:
+            return jsonify({"error": "user_id é obrigatório"}), 400
+
+        with conn.cursor() as cursor:
+            # Buscar todos os itens de pauta do tipo 'aprovacao'
+            cursor.execute(f"""
+                SELECT ip.id, ip.comite_id, ip.titulo, ip.descricao,
+                       ip.tipo, ip.video_url, ip.video_duracao, ip.prioridade,
+                       ip.operation_id, ip.tipo_caso, ip.criador_nome, ip.created_at,
+                       c.data AS comite_data, c.status AS comite_status,
+                       cr.tipo AS comite_tipo, cr.area AS comite_area,
+                       cr.dia_da_semana AS comite_dia_semana, cr.horario AS comite_horario
+                FROM {COMITE_SCHEMA_PREFIX}.comite_itens_pauta ip
+                JOIN {COMITE_SCHEMA_PREFIX}.comites c ON ip.comite_id = c.id
+                JOIN {COMITE_SCHEMA_PREFIX}.comite_rules cr ON c.comite_rule_id = cr.id
+                WHERE ip.tipo_caso = 'aprovacao'
+                ORDER BY c.data DESC, ip.created_at DESC
+            """)
+            itens_raw = [format_row(r, cursor) for r in cursor.fetchall()]
+
+            if not itens_raw:
+                return jsonify([])
+
+            item_ids = [it['id'] for it in itens_raw]
+
+            # Batch: todos os votos para esses itens
+            votos_by_item = {}
+            in_clause = ','.join(['?'] * len(item_ids))
+            cursor.execute(
+                f"SELECT * FROM {COMITE_SCHEMA_PREFIX}.comite_votos WHERE item_pauta_id IN ({in_clause}) ORDER BY created_at",
+                item_ids
+            )
+            for v_row in cursor.fetchall():
+                v = format_row(v_row, cursor)
+                iid = v['item_pauta_id']
+                if iid not in votos_by_item:
+                    votos_by_item[iid] = []
+                votos_by_item[iid].append({
+                    'id': v['id'],
+                    'item_pauta_id': iid,
+                    'user_id': v.get('user_id'),
+                    'user_nome': v.get('user_nome'),
+                    'tipo_voto': v.get('tipo_voto'),
+                    'cargo_voto': v.get('cargo_voto'),
+                    'comentario': v.get('comentario'),
+                    'created_at': safe_isoformat(v.get('created_at')),
+                })
+
+            # Buscar nomes de operações vinculadas
+            op_ids = list(set(it.get('operation_id') for it in itens_raw if it.get('operation_id')))
+            op_names = {}
+            if op_ids:
+                op_in = ','.join(['?'] * len(op_ids))
+                cursor.execute(
+                    f"SELECT id, name FROM cri_cra_dev.crm.operations WHERE id IN ({op_in})",
+                    op_ids
+                )
+                for r in cursor.fetchall():
+                    row = format_row(r, cursor)
+                    op_names[row['id']] = row.get('name', '')
+
+            # Montar resultado
+            result = []
+            for it in itens_raw:
+                item_id = it['id']
+                votos = votos_by_item.get(item_id, [])
+                my_vote = next((v for v in votos if v.get('user_id') == user_id), None)
+
+                result.append({
+                    'id': item_id,
+                    'comite_id': it.get('comite_id'),
+                    'titulo': it.get('titulo'),
+                    'descricao': it.get('descricao'),
+                    'tipo': it.get('tipo'),
+                    'video_url': it.get('video_url'),
+                    'video_duracao': it.get('video_duracao'),
+                    'prioridade': it.get('prioridade'),
+                    'operation_id': it.get('operation_id'),
+                    'operation_name': op_names.get(it.get('operation_id'), ''),
+                    'tipo_caso': it.get('tipo_caso'),
+                    'criador_nome': it.get('criador_nome'),
+                    'created_at': safe_isoformat(it.get('created_at')),
+                    'comite_data': safe_isoformat(it.get('comite_data')),
+                    'comite_status': it.get('comite_status'),
+                    'comite_tipo': it.get('comite_tipo'),
+                    'comite_area': it.get('comite_area'),
+                    'comite_dia_semana': it.get('comite_dia_semana'),
+                    'comite_horario': it.get('comite_horario'),
+                    'votos': votos,
+                    'meu_voto': my_vote,
+                    'total_votos': len(votos),
+                    'votos_aprovado': len([v for v in votos if v.get('tipo_voto') == 'aprovado']),
+                    'votos_reprovado': len([v for v in votos if v.get('tipo_voto') == 'reprovado']),
+                    'votos_discussao': len([v for v in votos if v.get('tipo_voto') == 'discussao']),
+                })
+
+            return jsonify(result)
+    except Exception as e:
+        current_app.logger.error(f"Error GET /api/comite/aprovacoes: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            conn.close()

@@ -376,6 +376,7 @@ export enum Page {
   // Fase 2 — Sub-páginas de comitê
   COMITE_ITEM_PAUTA = 'comite-item-pauta',
   COMITE_PROXIMOS_PASSOS = 'comite-proximos-passos',
+  MINHAS_APROVACOES = 'minhas-aprovacoes',
 }
 
 export interface Contact {
