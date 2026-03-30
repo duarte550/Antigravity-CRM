@@ -1,5 +1,5 @@
 from flask import Blueprint, jsonify, request
-from db import get_db_connection
+import db
 from utils import safe_isoformat, parse_iso_date, get_next_unique_id
 from datetime import datetime
 import logging
@@ -120,7 +120,7 @@ def fetch_full_economic_group(cursor, eg_id):
 
 @economic_groups_bp.route('/api/economic-groups', methods=['GET', 'POST'])
 def manage_economic_groups():
-    conn = get_db_connection()
+    conn = db.get_db_connection()
     try:
         if request.method == 'GET':
             with conn.cursor() as cursor:
@@ -152,7 +152,7 @@ def manage_economic_groups():
 
 @economic_groups_bp.route('/api/economic-groups/<int:eg_id>', methods=['GET', 'PUT', 'DELETE'])
 def manage_economic_group(eg_id):
-    conn = get_db_connection()
+    conn = db.get_db_connection()
     try:
         if request.method == 'GET':
             with conn.cursor() as cursor:

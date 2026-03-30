@@ -6,7 +6,7 @@ Todas as rotas usam try/except/finally, JSON snake_case, e IDs via get_next_uniq
 """
 
 from flask import Blueprint, jsonify, request, current_app
-from db import get_db_connection
+import db
 from utils import safe_isoformat, parse_iso_date, format_row, get_next_unique_id
 from datetime import datetime, timedelta
 import json
@@ -466,7 +466,7 @@ def _fetch_comite_detail(cursor, comite_id):
 
 @comite_bp.route('/api/comite/rules', methods=['GET'])
 def get_comite_rules():
-    conn = get_db_connection()
+    conn = db.get_db_connection()
     try:
         with conn.cursor() as cursor:
             cursor.execute(f"SELECT * FROM {COMITE_SCHEMA_PREFIX}.comite_rules ORDER BY tipo, area")
@@ -494,7 +494,7 @@ def get_comite_rules():
 
 @comite_bp.route('/api/comite/rules', methods=['POST'])
 def create_comite_rule():
-    conn = get_db_connection()
+    conn = db.get_db_connection()
     try:
         data = request.get_json(force=True)
         tipo = data.get('tipo')
@@ -537,7 +537,7 @@ def create_comite_rule():
 
 @comite_bp.route('/api/comite/rules/<int:rule_id>', methods=['PUT'])
 def update_comite_rule(rule_id):
-    conn = get_db_connection()
+    conn = db.get_db_connection()
     try:
         data = request.get_json(force=True)
         with conn.cursor() as cursor:
@@ -557,7 +557,7 @@ def update_comite_rule(rule_id):
 
 @comite_bp.route('/api/comite/rules/<int:rule_id>', methods=['DELETE'])
 def delete_comite_rule(rule_id):
-    conn = get_db_connection()
+    conn = db.get_db_connection()
     try:
         with conn.cursor() as cursor:
             cursor.execute(
@@ -580,7 +580,7 @@ def delete_comite_rule(rule_id):
 
 @comite_bp.route('/api/comite/comites', methods=['GET'])
 def get_comites():
-    conn = get_db_connection()
+    conn = db.get_db_connection()
     try:
         # ── Auto-complete comitês que já passaram da hora (12h threshold) ──
         _auto_complete_overdue_comites(conn)
@@ -732,7 +732,7 @@ def get_comites():
 @comite_bp.route('/api/comite/comites', methods=['POST'])
 def create_comite():
     """Cria um novo comitê instanciado a partir de uma regra."""
-    conn = get_db_connection()
+    conn = db.get_db_connection()
     try:
         data = request.get_json(force=True)
         rule_id = data.get('comite_rule_id')
@@ -772,7 +772,7 @@ def create_comite():
 
 @comite_bp.route('/api/comite/comites/<int:comite_id>', methods=['GET'])
 def get_comite_detail(comite_id):
-    conn = get_db_connection()
+    conn = db.get_db_connection()
     try:
         with conn.cursor() as cursor:
             detail = _fetch_comite_detail(cursor, comite_id)
@@ -793,7 +793,7 @@ def get_comite_detail(comite_id):
 
 @comite_bp.route('/api/comite/comites/<int:comite_id>/secoes', methods=['POST'])
 def add_comite_secao(comite_id):
-    conn = get_db_connection()
+    conn = db.get_db_connection()
     try:
         data = request.get_json(force=True)
         with conn.cursor() as cursor:
@@ -831,7 +831,7 @@ def add_comite_secao(comite_id):
 
 @comite_bp.route('/api/comite/comites/<int:comite_id>/itens', methods=['POST'])
 def add_item_pauta(comite_id):
-    conn = get_db_connection()
+    conn = db.get_db_connection()
     try:
         data = request.get_json(force=True)
 
@@ -910,7 +910,7 @@ def add_item_pauta(comite_id):
 
 @comite_bp.route('/api/comite/itens/<int:item_id>', methods=['PUT'])
 def update_item_pauta(item_id):
-    conn = get_db_connection()
+    conn = db.get_db_connection()
     try:
         data = request.get_json(force=True)
         with conn.cursor() as cursor:
@@ -941,7 +941,7 @@ def update_item_pauta(item_id):
 
 @comite_bp.route('/api/comite/itens/<int:item_id>/comentarios', methods=['POST'])
 def add_comentario(item_id):
-    conn = get_db_connection()
+    conn = db.get_db_connection()
     try:
         data = request.get_json(force=True)
         with conn.cursor() as cursor:
@@ -975,7 +975,7 @@ def add_comentario(item_id):
 
 @comite_bp.route('/api/comite/comentarios/<int:comentario_id>/like', methods=['POST'])
 def toggle_like(comentario_id):
-    conn = get_db_connection()
+    conn = db.get_db_connection()
     try:
         data = request.get_json(force=True)
         user_id = data.get('user_id')
@@ -1022,7 +1022,7 @@ def toggle_like(comentario_id):
 
 @comite_bp.route('/api/comite/itens/<int:item_id>/votos', methods=['POST'])
 def add_or_update_voto(item_id):
-    conn = get_db_connection()
+    conn = db.get_db_connection()
     try:
         data = request.get_json(force=True)
         user_id = data.get('user_id')
@@ -1092,7 +1092,7 @@ def add_or_update_voto(item_id):
 
 @comite_bp.route('/api/comite/itens/<int:item_id>/video-assistido', methods=['POST'])
 def toggle_video_assistido(item_id):
-    conn = get_db_connection()
+    conn = db.get_db_connection()
     try:
         data = request.get_json(force=True)
         user_id = data.get('user_id')
@@ -1135,7 +1135,7 @@ def toggle_video_assistido(item_id):
 
 @comite_bp.route('/api/comite/itens/<int:item_id>/proximos-passos', methods=['POST'])
 def add_proximo_passo_item(item_id):
-    conn = get_db_connection()
+    conn = db.get_db_connection()
     try:
         data = request.get_json(force=True)
         with conn.cursor() as cursor:
@@ -1206,7 +1206,7 @@ def add_proximo_passo_item(item_id):
 
 @comite_bp.route('/api/comite/proximos-passos/<int:pp_id>', methods=['PUT'])
 def update_proximo_passo(pp_id):
-    conn = get_db_connection()
+    conn = db.get_db_connection()
     try:
         data = request.get_json(force=True)
         new_status = data.get('status', 'pendente')
@@ -1308,7 +1308,7 @@ def update_proximo_passo(pp_id):
 @comite_bp.route('/api/comite/comites/<int:comite_id>/completar', methods=['POST'])
 def completar_comite(comite_id):
     """Marca comitê como concluído, gera ata e cria eventos CRM para itens vinculados a operações."""
-    conn = get_db_connection()
+    conn = db.get_db_connection()
     try:
         now = datetime.now()
         with conn.cursor() as cursor:
@@ -1416,7 +1416,7 @@ def completar_comite(comite_id):
 @comite_bp.route('/api/comite/comites/<int:comite_id>/relatorio', methods=['GET'])
 def get_relatorio(comite_id):
     """Gera relatório HTML formatado para e-mail Outlook."""
-    conn = get_db_connection()
+    conn = db.get_db_connection()
     try:
         with conn.cursor() as cursor:
             detail = _fetch_comite_detail(cursor, comite_id)
@@ -1439,7 +1439,7 @@ def get_operations_for_pauta():
     - ativas: operações ativas (não-estruturação, não-legado)
     - estruturacao: operações em estruturação
     """
-    conn = get_db_connection()
+    conn = db.get_db_connection()
     try:
         with conn.cursor() as cursor:
             # Active operations
@@ -1493,7 +1493,7 @@ def get_operations_for_pauta():
 
 @comite_bp.route('/api/comite/config-email', methods=['POST'])
 def config_email():
-    conn = get_db_connection()
+    conn = db.get_db_connection()
     try:
         data = request.get_json(force=True)
         with conn.cursor() as cursor:
@@ -1630,7 +1630,7 @@ def get_item_full(item_id):
     Includes: item data, committee context, votes grouped by cargo,
     comments with threading, operation risks/ratings, and video status.
     """
-    conn = get_db_connection()
+    conn = db.get_db_connection()
     try:
         with conn.cursor() as cursor:
             # ── 1. Fetch item ──
@@ -1929,7 +1929,7 @@ def auto_create_review_item():
         "sentiment": str
     }
     """
-    conn = get_db_connection()
+    conn = db.get_db_connection()
     try:
         data = request.get_json(force=True)
         operation_id = data.get('operation_id')
@@ -2066,7 +2066,7 @@ def get_aprovacoes():
     junto com dados de voto do usuário solicitante e informações do comitê.
     Query param: user_id (obrigatório).
     """
-    conn = get_db_connection()
+    conn = db.get_db_connection()
     try:
         user_id = request.args.get('user_id', type=int)
         if not user_id:

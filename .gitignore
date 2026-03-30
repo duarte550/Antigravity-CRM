@@ -33,3 +33,4 @@ frontend/dist-ssr
 ./backend/__pycache__/app.cpython-314.pyc
 .gemini/skills/ui-ux-pro-max
 .claude
+.agents

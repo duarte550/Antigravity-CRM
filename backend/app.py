@@ -2,11 +2,12 @@
 import os
 from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
-from db import get_db_connection
+import db
 from task_engine import generate_tasks_for_operation
 ## import update_db  # Schema migration runs at BUILD time only (see vercel.json)
 from datetime import datetime, date, timedelta
 from utils import safe_isoformat, parse_iso_date, get_next_unique_id
+from operations import load_operations, save_operation, create_operation
 from collections import defaultdict
 import json
 import logging
@@ -96,201 +97,11 @@ def generate_diff_details(old_data: dict, new_data: dict, fields_to_compare: dic
     return "; ".join(details)
 
 
-def fetch_full_operation(cursor, operation_id):
-    """ 
-    Busca uma operação completa com todos os seus dados, garantindo que todas as chaves
-    sejam convertidas para camelCase para o frontend.
-    """
-    cursor.execute("""
-        SELECT o.*, mg.name AS master_group_name, eg.name AS economic_group_name,
-        COALESCE(eg.rating, mg.rating) AS rating_group
-        FROM cri_cra_dev.crm.operations o
-        LEFT JOIN cri_cra_dev.crm.master_groups mg ON o.master_group_id = mg.id
-        LEFT JOIN cri_cra_dev.crm.economic_groups eg ON o.economic_group_id = eg.id
-        WHERE o.id = ?
-    """, (operation_id,))
-    op_row = cursor.fetchone()
-    if not op_row:
-        return None
-    
-    # Monta o dicionário base da operação
-    operation_db = format_row(op_row, cursor)
-    operation = {
-        'id': operation_db['id'], 'name': operation_db['name'], 'area': operation_db['area'],
-        'masterGroupId': operation_db.get('master_group_id'),
-        'masterGroupName': operation_db.get('master_group_name'),
-        'economicGroupId': operation_db.get('economic_group_id'),
-        'economicGroupName': operation_db.get('economic_group_name'),
-        'operationType': operation_db['operation_type'],
-        'maturityDate': safe_isoformat(operation_db.get('maturity_date')),
-        'estimatedDate': safe_isoformat(operation_db.get('estimated_date')),
-        'responsibleAnalyst': operation_db['responsible_analyst'], 'structuringAnalyst': operation_db.get('structuring_analyst'), 'reviewFrequency': operation_db['review_frequency'],
-        'callFrequency': operation_db['call_frequency'], 'dfFrequency': operation_db['df_frequency'],
-        'segmento': operation_db['segmento'], 'ratingOperation': operation_db['rating_operation'],
-        'ratingGroup': operation_db['rating_group'], 'watchlist': operation_db['watchlist'],
-        'covenants': {'ltv': operation_db['ltv'], 'dscr': operation_db['dscr']},
-        'defaultMonitoring': {
-            'news': operation_db.get('monitoring_news') or False,
-            'fiiReport': operation_db.get('monitoring_fii_report') or False,
-            'operationalInfo': operation_db.get('monitoring_operational_info') or False,
-            'receivablesPortfolio': operation_db.get('monitoring_receivables_portfolio') or False,
-            'monthlyConstructionReport': operation_db.get('monitoring_construction_report') or False,
-            'monthlyCommercialInfo': operation_db.get('monitoring_commercial_info') or False,
-            'speDfs': operation_db.get('monitoring_spe_dfs') or False
-        },
-        'description': operation_db.get('description'),
-        'status': operation_db.get('status') or 'Ativa',
-        'movedToLegacyDate': safe_isoformat(operation_db.get('moved_to_legacy_date')),
-        'wasStructured': operation_db.get('was_structured') or False,
-        'notes': None # Initialize notes as None
-    }
-
-    # Tenta buscar as notas em uma query separada para evitar erro se a tabela não existir
-    try:
-        cursor.execute("SELECT notes FROM cri_cra_dev.crm.operation_review_notes WHERE operation_id = ?", (operation_id,))
-        notes_row = cursor.fetchone()
-        if notes_row:
-            operation['notes'] = notes_row.notes
-    except Exception as e:
-        if "TABLE_OR_VIEW_NOT_FOUND" in str(e):
-            app.logger.warning("Tabela 'operation_review_notes' não encontrada. Pulando campo de notas para a operação ID %s.", operation_id)
-        else:
-            raise e # Re-lança outros erros de DB inesperados
-
-    # Busca riscos/pontos de atenção
-    try:
-        cursor.execute("SELECT * FROM cri_cra_dev.crm.operation_risks WHERE operation_id = ? ORDER BY created_at DESC", (operation_id,))
-        db_risks = [format_row(r, cursor) for r in cursor.fetchall()]
-        operation['risks'] = [{
-            'id': r.get('id'), 'title': r.get('title'), 'description': r.get('description'),
-            'severity': r.get('severity'), 'createdAt': safe_isoformat(r.get('created_at')),
-            'updatedAt': safe_isoformat(r.get('updated_at'))
-        } for r in db_risks]
-    except Exception as e:
-        app.logger.warning("Erro ao buscar riscos para a operação %s: %s", operation_id, e)
-        operation['risks'] = []
-
-    # Busca dados relacionados em queries separadas
-    cursor.execute("SELECT p.id, p.name FROM cri_cra_dev.crm.projects p JOIN cri_cra_dev.crm.operation_projects op ON p.id = op.project_id WHERE op.operation_id = ?", (operation_id,))
-    operation['projects'] = [{'id': r.id, 'name': r.name} for r in cursor.fetchall()]
-
-    cursor.execute("SELECT g.id, g.name FROM cri_cra_dev.crm.guarantees g JOIN cri_cra_dev.crm.operation_guarantees og ON g.id = og.guarantee_id WHERE og.operation_id = ?", (operation_id,))
-    operation['guarantees'] = [{'id': r.id, 'name': r.name} for r in cursor.fetchall()]
-    
-    cursor.execute("SELECT * FROM cri_cra_dev.crm.events WHERE operation_id = ? ORDER BY date DESC", (operation_id,))
-    db_events = [format_row(r, cursor) for r in cursor.fetchall()]
-    operation['events'] = [{
-        'id': e.get('id'), 'date': safe_isoformat(e.get('date')),
-        'type': e.get('type'), 'title': e.get('title'), 'description': e.get('description'),
-        'registeredBy': e.get('registered_by'), 'nextSteps': e.get('next_steps'),
-        'completedTaskId': e.get('completed_task_id'),
-        'attentionPoints': e.get('attention_points'),
-        'ourAttendees': e.get('our_attendees'),
-        'operationAttendees': e.get('operation_attendees'),
-        'isOrigination': e.get('is_origination') or False
-    } for e in db_events]
-
-    cursor.execute("SELECT * FROM cri_cra_dev.crm.task_rules WHERE operation_id = ?", (operation_id,))
-    db_rules = [format_row(r, cursor) for r in cursor.fetchall()]
-    
-    # Fetch checklist items for all rules in batch
-    rule_ids = [r.get('id') for r in db_rules if r.get('id')]
-    checklist_by_rule = defaultdict(list)
-    if rule_ids:
-        rule_placeholders = ', '.join(['?'] * len(rule_ids))
-        try:
-            cursor.execute(f"SELECT * FROM cri_cra_dev.crm.task_checklist_items WHERE task_rule_id IN ({rule_placeholders}) ORDER BY order_index", rule_ids)
-            for ci_row in cursor.fetchall():
-                ci = format_row(ci_row, cursor)
-                checklist_by_rule[ci['task_rule_id']].append({
-                    'id': ci.get('id'), 'taskRuleId': ci.get('task_rule_id'),
-                    'title': ci.get('title'), 'isCompleted': ci.get('is_completed') or False,
-                    'completedBy': ci.get('completed_by'), 'completedAt': safe_isoformat(ci.get('completed_at')),
-                    'orderIndex': ci.get('order_index') or 0
-                })
-        except Exception as e:
-            app.logger.warning("Checklist items table not found: %s", e)
-    
-    operation['taskRules'] = [{
-        'id': r.get('id'), 'name': r.get('name'), 'frequency': r.get('frequency'),
-        'startDate': safe_isoformat(r.get('start_date')),
-        'endDate': safe_isoformat(r.get('end_date')),
-        'description': r.get('description'),
-        'priority': r.get('priority'),
-        'checklistItems': checklist_by_rule.get(r.get('id'), []),
-        'assignees': json.loads(r.get('assignees') or '[]') if r.get('assignees') else []
-    } for r in db_rules]
-    
-    cursor.execute("SELECT * FROM cri_cra_dev.crm.operation_contacts WHERE operation_id = ?", (operation_id,))
-    try:
-        db_contacts = [format_row(r, cursor) for r in cursor.fetchall()]
-        operation['contacts'] = [{
-            'id': c.get('id'), 'name': c.get('name'), 'email': c.get('email'), 'phone': c.get('phone'), 'role': c.get('role')
-        } for c in db_contacts]
-    except Exception as e:
-        app.logger.warning("Erro ao buscar contatos ou tabela não atualizada: %s", e)
-        operation['contacts'] = []
-
-    cursor.execute("SELECT * FROM cri_cra_dev.crm.operation_litigation_comments WHERE operation_id = ? ORDER BY date DESC", (operation_id,))
-    try:
-        db_litigation = [format_row(r, cursor) for r in cursor.fetchall()]
-        operation['litigationComments'] = [{
-            'id': c.get('id'), 'createdAt': safe_isoformat(c.get('date')), 'description': c.get('description'), 'userName': c.get('user_name')
-        } for c in db_litigation]
-    except Exception as e:
-        app.logger.warning("Erro ao buscar comentarios litigio: %s", e)
-        operation['litigationComments'] = []
-
-    cursor.execute("SELECT * FROM cri_cra_dev.crm.rating_history WHERE operation_id = ? ORDER BY date DESC", (operation_id,))
-    db_rh = [format_row(r, cursor) for r in cursor.fetchall()]
-    operation['ratingHistory'] = [{
-        'id': rh.get('id'), 'date': safe_isoformat(rh.get('date')),
-        'ratingOperation': rh.get('rating_operation'), 'ratingGroup': rh.get('rating_group'),
-        'ratingMasterGroup': rh.get('rating_master_group'),
-        'watchlist': rh.get('watchlist'), 'sentiment': rh.get('sentiment'), 'eventId': rh.get('event_id')
-    } for rh in db_rh]
-
-    # FIX: Ensure review rules always extend to the maturity date before generating tasks.
-    maturity_date_iso = operation.get('maturityDate')
-    if maturity_date_iso:
-        task_rules = operation.get('taskRules') or []
-        for rule in task_rules:
-            if isinstance(rule, dict) and rule.get('name') in ['Revisão Gerencial', 'Revisão Política']:
-                rule['endDate'] = maturity_date_iso
-
-    cursor.execute("SELECT task_id FROM cri_cra_dev.crm.task_exceptions WHERE operation_id = ?", (operation_id,))
-    task_exceptions = {row.task_id for row in cursor.fetchall()}
-    operation['taskExceptions'] = list(task_exceptions)
-
-    tasks = generate_tasks_for_operation(operation, task_exceptions)
-    operation['tasks'] = tasks
-    operation['overdueCount'] = sum(1 for task in tasks if task['status'] == 'Atrasada')
-
-    # FIX: Check if operation has matured. If so, no more reviews are due.
-    maturity_date_obj = parse_iso_date(maturity_date_iso)
-    if hasattr(maturity_date_obj, 'date'):
-        maturity_date_obj = maturity_date_obj.date()
-    if maturity_date_obj and maturity_date_obj < date.today():
-        operation['nextReviewGerencialTask'] = None
-        operation['nextReviewPoliticaTask'] = None
-        operation['nextReviewGerencial'] = None
-        operation['nextReviewPolitica'] = None
-    else:
-        pending_and_overdue_tasks = [t for t in tasks if t['status'] != 'Concluída']
-        gerencial_tasks = sorted([t for t in pending_and_overdue_tasks if t['ruleName'] == 'Revisão Gerencial'], key=lambda t: t['dueDate'])
-        politica_tasks = sorted([t for t in pending_and_overdue_tasks if t['ruleName'] == 'Revisão Política'], key=lambda t: t['dueDate'])
-        
-        operation['nextReviewGerencialTask'] = gerencial_tasks[0] if gerencial_tasks else None
-        operation['nextReviewPoliticaTask'] = politica_tasks[0] if politica_tasks else None
-        operation['nextReviewGerencial'] = gerencial_tasks[0]['dueDate'] if gerencial_tasks else None
-        operation['nextReviewPolitica'] = politica_tasks[0]['dueDate'] if politica_tasks else None
-
-    return operation
 
 # ================== Rotas da API ==================
 @app.route('/api/analysts', methods=['GET'])
 def get_analysts():
-    conn = get_db_connection()
+    conn = db.get_db_connection()
     try:
         with conn.cursor() as cursor:
             cursor.execute("""
@@ -311,161 +122,11 @@ def get_analysts():
 
 @app.route('/api/operations', methods=['GET', 'POST'])
 def manage_operations_collection():
-    conn = get_db_connection()
+    conn = db.get_db_connection()
     if request.method == 'GET':
         try:
             with conn.cursor() as cursor:
-                cursor.execute("""
-                    SELECT o.*, mg.name AS master_group_name, eg.name AS economic_group_name, COALESCE(eg.rating, mg.rating) AS rating_group
-                    FROM cri_cra_dev.crm.operations o
-                    LEFT JOIN cri_cra_dev.crm.master_groups mg ON o.master_group_id = mg.id
-                    LEFT JOIN cri_cra_dev.crm.economic_groups eg ON o.economic_group_id = eg.id
-                    WHERE o.is_structuring IS NULL OR o.is_structuring = FALSE 
-                    ORDER BY o.name
-                """)
-                db_operations = [format_row(row, cursor) for row in cursor.fetchall()]
-                if not db_operations: return jsonify([])
-
-                notes_map = {}
-                try:
-                    cursor.execute("SELECT operation_id, notes FROM cri_cra_dev.crm.operation_review_notes")
-                    for row in cursor.fetchall():
-                        notes_map[row.operation_id] = row.notes
-                except Exception as e:
-                    if "TABLE_OR_VIEW_NOT_FOUND" in str(e):
-                        app.logger.warning("Tabela 'operation_review_notes' não encontrada. Pulando campo de notas para todas as operações.")
-                    else:
-                        raise e
-
-                operations_map = {}
-                for op_db in db_operations:
-                    op_id = op_db['id']
-                    operations_map[op_id] = {
-                        'id': op_id, 'name': op_db['name'], 'area': op_db['area'],
-                        'masterGroupId': op_db.get('master_group_id'),
-                        'masterGroupName': op_db.get('master_group_name'),
-                        'economicGroupId': op_db.get('economic_group_id'),
-                        'economicGroupName': op_db.get('economic_group_name'),
-                        'operationType': op_db['operation_type'],
-                        'maturityDate': safe_isoformat(op_db.get('maturity_date')),
-                        'estimatedDate': safe_isoformat(op_db.get('estimated_date')),
-                        'responsibleAnalyst': op_db['responsible_analyst'], 'structuringAnalyst': op_db.get('structuring_analyst'), 'reviewFrequency': op_db['review_frequency'],
-                        'callFrequency': op_db['call_frequency'], 'dfFrequency': op_db['df_frequency'],
-                        'segmento': op_db['segmento'], 'ratingOperation': op_db['rating_operation'],
-                        'ratingGroup': op_db['rating_group'], 'watchlist': op_db['watchlist'],
-                        'covenants': {'ltv': op_db['ltv'], 'dscr': op_db['dscr']},
-                        'defaultMonitoring': {
-                            'news': op_db.get('monitoring_news') or False,
-                            'fiiReport': op_db.get('monitoring_fii_report') or False,
-                            'operationalInfo': op_db.get('monitoring_operational_info') or False,
-                            'receivablesPortfolio': op_db.get('monitoring_receivables_portfolio') or False,
-                            'monthlyConstructionReport': op_db.get('monitoring_construction_report') or False,
-                            'monthlyCommercialInfo': op_db.get('monitoring_commercial_info') or False,
-                            'speDfs': op_db.get('monitoring_spe_dfs') or False
-                        },
-                        'description': op_db.get('description'),
-                        'status': op_db.get('status') or 'Ativa',
-                        'wasStructured': op_db.get('was_structured') or False,
-                        'projects': [], 'guarantees': [], 'events': [], 'taskRules': [], 'ratingHistory': [], 'tasks': [], 'contacts': [],
-                        'notes': notes_map.get(op_id)
-                    }
-
-                op_ids = list(operations_map.keys())
-                placeholders = ', '.join(['?'] * len(op_ids))
-                
-                cursor.execute(f"SELECT op.operation_id, p.id, p.name FROM cri_cra_dev.crm.projects p JOIN cri_cra_dev.crm.operation_projects op ON p.id = op.project_id WHERE op.operation_id IN ({placeholders})", op_ids)
-                for row in cursor.fetchall(): 
-                    if isinstance(operations_map[row.operation_id]['projects'], list):
-                        operations_map[row.operation_id]['projects'].append({'id': row.id, 'name': row.name})
-
-                cursor.execute(f"SELECT og.operation_id, g.id, g.name FROM cri_cra_dev.crm.guarantees g JOIN cri_cra_dev.crm.operation_guarantees og ON g.id = og.guarantee_id WHERE og.operation_id IN ({placeholders})", op_ids)
-                for row in cursor.fetchall():
-                    if isinstance(operations_map[row.operation_id]['guarantees'], list):
-                        operations_map[row.operation_id]['guarantees'].append({'id': row.id, 'name': row.name})
-
-                cursor.execute(f"SELECT * FROM cri_cra_dev.crm.events WHERE operation_id IN ({placeholders}) ORDER BY date DESC", op_ids)
-                for row in cursor.fetchall():
-                    event_db = format_row(row, cursor)
-                    if isinstance(operations_map[row.operation_id]['events'], list):
-                        operations_map[row.operation_id]['events'].append({ 'id': event_db.get('id'), 'date': safe_isoformat(event_db.get('date')), 'type': event_db.get('type'), 'title': event_db.get('title'), 'description': event_db.get('description'), 'registeredBy': event_db.get('registered_by'), 'nextSteps': event_db.get('next_steps'), 'completedTaskId': event_db.get('completed_task_id'), 'isOrigination': event_db.get('is_origination') or False })
-
-                cursor.execute(f"SELECT * FROM cri_cra_dev.crm.task_rules WHERE operation_id IN ({placeholders})", op_ids)
-                all_rules_rows = [format_row(row, cursor) for row in cursor.fetchall()]
-                
-                # Fetch all rule IDs for checklist items batch loading
-                all_rule_ids = [r.get('id') for r in all_rules_rows if r.get('id')]
-                bulk_checklist_by_rule = defaultdict(list)
-                if all_rule_ids:
-                    rule_pl = ', '.join(['?'] * len(all_rule_ids))
-                    try:
-                        cursor.execute(f"SELECT * FROM cri_cra_dev.crm.task_checklist_items WHERE task_rule_id IN ({rule_pl}) ORDER BY order_index", all_rule_ids)
-                        for ci_row in cursor.fetchall():
-                            ci = format_row(ci_row, cursor)
-                            bulk_checklist_by_rule[ci['task_rule_id']].append({
-                                'id': ci.get('id'), 'taskRuleId': ci.get('task_rule_id'),
-                                'title': ci.get('title'), 'isCompleted': ci.get('is_completed') or False,
-                                'completedBy': ci.get('completed_by'), 'completedAt': safe_isoformat(ci.get('completed_at')),
-                                'orderIndex': ci.get('order_index') or 0
-                            })
-                    except Exception as e:
-                        app.logger.warning("Checklist items table not found in bulk load: %s", e)
-                
-                for rule_row in all_rules_rows:
-                    rule_op_id = rule_row.get('operation_id')
-                    if rule_op_id and isinstance(operations_map.get(rule_op_id, {}).get('taskRules'), list):
-                        operations_map[rule_op_id]['taskRules'].append({ 
-                            'id': rule_row.get('id'), 
-                            'name': rule_row.get('name'), 
-                            'frequency': rule_row.get('frequency'), 
-                            'startDate': safe_isoformat(rule_row.get('start_date')), 
-                            'endDate': safe_isoformat(rule_row.get('end_date')), 
-                            'description': rule_row.get('description'),
-                            'priority': rule_row.get('priority'),
-                            'checklistItems': bulk_checklist_by_rule.get(rule_row.get('id'), []),
-                            'assignees': json.loads(rule_row.get('assignees') or '[]') if rule_row.get('assignees') else []
-                        })
-
-                cursor.execute(f"SELECT * FROM cri_cra_dev.crm.rating_history WHERE operation_id IN ({placeholders}) ORDER BY date DESC", op_ids)
-                for row in cursor.fetchall():
-                    rh_db = format_row(row, cursor)
-                    if isinstance(operations_map[row.operation_id]['ratingHistory'], list):
-                        operations_map[row.operation_id]['ratingHistory'].append({ 'id': rh_db.get('id'), 'date': safe_isoformat(rh_db.get('date')), 'ratingOperation': rh_db.get('rating_operation'), 'ratingGroup': rh_db.get('rating_group'), 'ratingMasterGroup': rh_db.get('rating_master_group'), 'watchlist': rh_db.get('watchlist'), 'sentiment': rh_db.get('sentiment'), 'eventId': rh_db.get('event_id') })
-
-                cursor.execute(f"SELECT operation_id, task_id FROM cri_cra_dev.crm.task_exceptions WHERE operation_id IN ({placeholders})", op_ids)
-                exceptions_by_op = defaultdict(set)
-                for row in cursor.fetchall(): exceptions_by_op[row.operation_id].add(row.task_id)
-
-                for op_id, op in operations_map.items():
-                    maturity_date_iso = op.get('maturityDate')
-                    if maturity_date_iso:
-                        task_rules = op.get('taskRules') or []
-                        for rule in task_rules:
-                            if isinstance(rule, dict) and rule.get('name') in ['Revisão Gerencial', 'Revisão Política']:
-                                rule['endDate'] = maturity_date_iso
-
-                    tasks = generate_tasks_for_operation(op, exceptions_by_op.get(op_id, set()))
-                    op['tasks'] = tasks
-                    op['overdueCount'] = sum(1 for task in tasks if task['status'] == 'Atrasada')
-
-                    maturity_date_obj = parse_iso_date(maturity_date_iso)
-                    if hasattr(maturity_date_obj, 'date'):
-                        maturity_date_obj = maturity_date_obj.date()
-                    if maturity_date_obj and maturity_date_obj < date.today():
-                        op['nextReviewGerencialTask'] = None
-                        op['nextReviewPoliticaTask'] = None
-                        op['nextReviewGerencial'] = None
-                        op['nextReviewPolitica'] = None
-                    else:
-                        pending_and_overdue_tasks = [t for t in tasks if t['status'] != 'Concluída']
-                        gerencial_tasks = sorted([t for t in pending_and_overdue_tasks if t['ruleName'] == 'Revisão Gerencial'], key=lambda t: t['dueDate'])
-                        politica_tasks = sorted([t for t in pending_and_overdue_tasks if t['ruleName'] == 'Revisão Política'], key=lambda t: t['dueDate'])
-                        
-                        op['nextReviewGerencialTask'] = gerencial_tasks[0] if gerencial_tasks else None
-                        op['nextReviewPoliticaTask'] = politica_tasks[0] if politica_tasks else None
-                        op['nextReviewGerencial'] = gerencial_tasks[0]['dueDate'] if gerencial_tasks else None
-                        op['nextReviewPolitica'] = politica_tasks[0]['dueDate'] if politica_tasks else None
-
-            return jsonify(list(operations_map.values()))
+                return jsonify(load_operations(cursor))
         except Exception as e:
             app.logger.error(f"Exception on /api/operations [GET]: {e}", exc_info=True)
             return jsonify({"error": str(e)}), 500
@@ -476,103 +137,9 @@ def manage_operations_collection():
         try:
             data = request.json
             with conn.cursor() as cursor:
-                politica_freq = RATING_TO_POLITICA_FREQUENCY.get(data['ratingGroup'], 'Anual')
-                gerencial_freq = data['reviewFrequency']
-
-                if FREQUENCY_VALUE_MAP.get(gerencial_freq, 999) > FREQUENCY_VALUE_MAP.get(politica_freq, 0):
-                    gerencial_freq = politica_freq
-                
-                # A frequência de revisão da operação (gerencial) é salva no banco.
-                data['reviewFrequency'] = gerencial_freq
-
-                dm = data.get('defaultMonitoring', {})
-                est_date = parse_iso_date(data.get('estimatedDate'))
-                maturity_date = parse_iso_date(data.get('maturityDate'))
-                structuring_op_id = data.get('structuringOperationId')
-                
-                if data.get('economicGroupId') == 'new' and data.get('newEGName'):
-                    new_eg_id = get_next_unique_id(cursor, 'economic_groups')
-                    cursor.execute("INSERT INTO cri_cra_dev.crm.economic_groups (id, name, master_group_id, rating) VALUES (?, ?, ?, ?)",
-                                   (new_eg_id, data.get('newEGName'), data.get('masterGroupId'), data.get('ratingGroup')))
-                    data['economicGroupId'] = new_eg_id
-                elif data.get('economicGroupId') == '':
-                    data['economicGroupId'] = None
-                
-                if structuring_op_id:
-                    cursor.execute("""
-                        UPDATE cri_cra_dev.crm.operations SET 
-                        name=?, area=?, operation_type=?, maturity_date=?, responsible_analyst=?, structuring_analyst=?, review_frequency=?, 
-                        call_frequency=?, df_frequency=?, segmento=?, rating_operation=?, watchlist=?, 
-                        ltv=?, dscr=?, monitoring_news=?, monitoring_fii_report=?, monitoring_operational_info=?, 
-                        monitoring_receivables_portfolio=?, monitoring_construction_report=?, monitoring_commercial_info=?, 
-                        monitoring_spe_dfs=?, estimated_date=?, status=?, description=?, master_group_id=?, economic_group_id=?,
-                        is_structuring=FALSE, is_active=TRUE
-                        WHERE id=?
-                    """, (
-                        data['name'], data['area'], data['operationType'], maturity_date, data['responsibleAnalyst'], data.get('structuringAnalyst'),
-                        data['reviewFrequency'], data['callFrequency'], data['dfFrequency'], data['segmento'], 
-                        data['ratingOperation'], data['watchlist'], 
-                        data.get('covenants', {}).get('ltv'), data.get('covenants', {}).get('dscr'), 
-                        dm.get('news'), dm.get('fiiReport'), dm.get('operationalInfo'), 
-                        dm.get('receivablesPortfolio'), dm.get('monthlyConstructionReport'), 
-                        dm.get('monthlyCommercialInfo'), dm.get('speDfs'), est_date, 
-                        data.get('status', 'Ativa'), data.get('description'), data.get('masterGroupId'), data.get('economicGroupId'),
-                        structuring_op_id
-                    ))
-                    new_op_id = structuring_op_id
-                else:
-                    new_op_id = get_next_unique_id(cursor, 'operations')
-                    cursor.execute( "INSERT INTO cri_cra_dev.crm.operations (id, name, area, operation_type, maturity_date, responsible_analyst, structuring_analyst, review_frequency, call_frequency, df_frequency, segmento, rating_operation, watchlist, ltv, dscr, monitoring_news, monitoring_fii_report, monitoring_operational_info, monitoring_receivables_portfolio, monitoring_construction_report, monitoring_commercial_info, monitoring_spe_dfs, estimated_date, status, description, master_group_id, economic_group_id, is_structuring, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, FALSE, TRUE)", (new_op_id, data['name'], data['area'], data['operationType'], maturity_date, data['responsibleAnalyst'], data.get('structuringAnalyst'), data['reviewFrequency'], data['callFrequency'], data['dfFrequency'], data['segmento'], data['ratingOperation'], data['watchlist'], data.get('covenants', {}).get('ltv'), data.get('covenants', {}).get('dscr'), dm.get('news'), dm.get('fiiReport'), dm.get('operationalInfo'), dm.get('receivablesPortfolio'), dm.get('monthlyConstructionReport'), dm.get('monthlyCommercialInfo'), dm.get('speDfs'), est_date, data.get('status', 'Ativa'), data.get('description'), data.get('masterGroupId'), data.get('economicGroupId')) )
-                
-                # FIX: Handle saving projects and guarantees for new operations
-                for project in data.get('projects', []):
-                    project_name = project.get('name')
-                    if project_name:
-                        cursor.execute("SELECT id FROM cri_cra_dev.crm.projects WHERE name = ?", (project_name,))
-                        proj_row = cursor.fetchone()
-                        if proj_row:
-                            project_id = proj_row.id
-                        else:
-                            project_id = get_next_unique_id(cursor, 'projects')
-                            cursor.execute("INSERT INTO cri_cra_dev.crm.projects (id, name) VALUES (?, ?)", (project_id, project_name))
-                        cursor.execute("INSERT INTO cri_cra_dev.crm.operation_projects (operation_id, project_id) VALUES (?, ?)", (new_op_id, project_id))
-                
-                for guarantee in data.get('guarantees', []):
-                    guarantee_name = guarantee.get('name')
-                    if guarantee_name:
-                        cursor.execute("SELECT id FROM cri_cra_dev.crm.guarantees WHERE name = ?", (guarantee_name,))
-                        guar_row = cursor.fetchone()
-                        if guar_row:
-                            guarantee_id = guar_row.id
-                        else:
-                            guarantee_id = get_next_unique_id(cursor, 'guarantees')
-                            cursor.execute("INSERT INTO cri_cra_dev.crm.guarantees (id, name) VALUES (?, ?)", (guarantee_id, guarantee_name))
-                        cursor.execute("INSERT INTO cri_cra_dev.crm.operation_guarantees (operation_id, guarantee_id) VALUES (?, ?)", (new_op_id, guarantee_id))
-
-                now = datetime.now()
-                end_date = maturity_date
-                rules_to_add = [ {'name': 'Revisão Gerencial', 'frequency': gerencial_freq, 'desc': 'Revisão periódica gerencial.', 'priority': 'Alta'}, {'name': 'Revisão Política', 'frequency': politica_freq, 'desc': 'Revisão de política de crédito anual.', 'priority': 'Alta'}, {'name': 'Call de Acompanhamento', 'frequency': data['callFrequency'], 'desc': 'Call de acompanhamento.', 'priority': 'Média'}, {'name': 'Análise de DFs & Dívida', 'frequency': data['dfFrequency'], 'desc': 'Análise dos DFs.', 'priority': 'Média'} ]
-                if dm.get('news'): rules_to_add.append({'name': 'Monitorar Notícias', 'frequency': 'Semanal', 'desc': 'Acompanhar notícias.', 'priority': 'Baixa'})
-                for rule in rules_to_add:
-                    rule_id = get_next_unique_id(cursor, 'task_rules')
-                    cursor.execute("INSERT INTO cri_cra_dev.crm.task_rules (id, operation_id, name, frequency, start_date, end_date, description, priority) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", (rule_id, new_op_id, rule['name'], rule['frequency'], now, end_date, rule['desc'], rule.get('priority') or 'Média'))
-                
-                rh_id = get_next_unique_id(cursor, 'rating_history')
-                cursor.execute("INSERT INTO cri_cra_dev.crm.rating_history (id, operation_id, date, rating_operation, rating_group, rating_master_group, watchlist, sentiment) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", (rh_id, new_op_id, now, data['ratingOperation'], data['ratingGroup'], data.get('ratingMasterGroup'), data['watchlist'], 'Neutro'))
-                
-                # Save notes if provided
-                if data.get('notes'):
-                    cursor.execute(
-                        "INSERT INTO cri_cra_dev.crm.operation_review_notes (operation_id, notes, updated_at, updated_by) VALUES (?, ?, ?, ?)",
-                        (new_op_id, data['notes'], datetime.now(), data.get('responsibleAnalyst', 'System'))
-                    )
-
-                log_action(cursor, data.get('responsibleAnalyst', 'System'), 'CREATE', 'Operation', new_op_id, f"Operação '{data['name']}' criada na área '{data['area']}'.")
+                new_op_data = create_operation(cursor, data, user_name=data.get('responsibleAnalyst', 'System'))
             conn.commit()
-            
-            with conn.cursor() as cursor:
-                new_operation_full = fetch_full_operation(cursor, new_op_id)
-            return jsonify(new_operation_full), 201
+            return jsonify(new_op_data), 201
         except Exception as e:
             app.logger.error(f"Error in POST /api/operations: {e}", exc_info=True)
             return jsonify({"error": str(e)}), 500
@@ -586,7 +153,7 @@ def sync_all_operations():
     O frontend envia via sendBeacon com Blob application/json, mas como fallback
     defensivo, forçamos o parse do body mesmo que o Content-Type esteja incorreto.
     """
-    conn = get_db_connection()
+    conn = db.get_db_connection()
     try:
         # Tentativa primária: parse normal com tolerância a Content-Type errado
         data = request.get_json(force=True, silent=True)
@@ -622,258 +189,16 @@ def sync_all_operations():
     finally:
         if conn: conn.close()
 
-# Internal helper function for syncing checklist items
-def _sync_checklist_items(cursor, rule_id, checklist_items):
-    """Syncs checklist items for a given task rule."""
-    try:
-        # Get existing items
-        cursor.execute("SELECT id FROM cri_cra_dev.crm.task_checklist_items WHERE task_rule_id = ?", (rule_id,))
-        existing_ids = {row.id for row in cursor.fetchall()}
-        client_ids = {item.get('id') for item in checklist_items if item.get('id') and isinstance(item.get('id'), int)}
-
-        # Delete removed items
-        for del_id in existing_ids - client_ids:
-            cursor.execute("DELETE FROM cri_cra_dev.crm.task_checklist_items WHERE id = ?", (del_id,))
-
-        # Upsert items
-        for idx, item in enumerate(checklist_items):
-            item_id = item.get('id')
-            completed_at = parse_iso_date(item.get('completedAt')) if item.get('completedAt') else None
-            if item_id and item_id in existing_ids:
-                cursor.execute(
-                    "UPDATE cri_cra_dev.crm.task_checklist_items SET title=?, is_completed=?, completed_by=?, completed_at=?, order_index=? WHERE id=?",
-                    (item.get('title'), item.get('isCompleted', False), item.get('completedBy'), completed_at, idx, item_id)
-                )
-            else:
-                new_id = get_next_unique_id(cursor, 'task_checklist_items')
-                cursor.execute(
-                    "INSERT INTO cri_cra_dev.crm.task_checklist_items (id, task_rule_id, title, is_completed, completed_by, completed_at, order_index) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                    (new_id, rule_id, item.get('title'), item.get('isCompleted', False), item.get('completedBy'), completed_at, idx)
-                )
-    except Exception as e:
-        app.logger.warning("Error syncing checklist items for rule %s: %s", rule_id, e)
-
-# Internal helper function for updating operation in DB
-def _update_operation_db_internal(cursor, op_id, data):
-    cursor.execute("SELECT * FROM cri_cra_dev.crm.operations WHERE id = ?", (op_id,))
-    old_op_row = cursor.fetchone()
-    if not old_op_row: raise Exception(f"Operação com id {op_id} não encontrada.")
-    old_op_db = format_row(old_op_row, cursor)
-    
-    cursor.execute("SELECT * FROM cri_cra_dev.crm.events WHERE operation_id = ?", (op_id,))
-    db_events = {row.id: format_row(row, cursor) for row in cursor.fetchall()}
-    db_event_ids = set(db_events.keys())
-    
-    cursor.execute("SELECT id FROM cri_cra_dev.crm.rating_history WHERE operation_id = ?", (op_id,))
-    db_rh_ids = {row.id for row in cursor.fetchall()}
-
-    old_rating_group, new_rating_group = old_op_db.get('rating_group'), data.get('ratingGroup', old_op_db.get('rating_group'))
-    
-    if data.get('economicGroupId') == 'new' and data.get('newEGName'):
-        new_eg_id = get_next_unique_id(cursor, 'economic_groups')
-        cursor.execute("INSERT INTO cri_cra_dev.crm.economic_groups (id, name, master_group_id, rating) VALUES (?, ?, ?, ?)",
-                       (new_eg_id, data.get('newEGName'), data.get('masterGroupId'), new_rating_group))
-        data['economicGroupId'] = new_eg_id
-    elif data.get('economicGroupId') == '':
-        data['economicGroupId'] = None
-    
-    if old_rating_group != new_rating_group:
-        cursor.execute("SELECT name, frequency, start_date FROM cri_cra_dev.crm.task_rules WHERE operation_id = ?", (op_id,))
-        all_rules = {row.name: {'frequency': row.frequency, 'start_date': row.start_date} for row in cursor.fetchall()}
-        cursor.execute("SELECT type, MAX(date) as max_date FROM cri_cra_dev.crm.events WHERE operation_id = ? AND type = 'Revisão Periódica' GROUP BY type", (op_id,))
-        last_review_date_row = cursor.fetchone()
-        last_review_date = last_review_date_row.max_date if last_review_date_row else None
-        
-        new_politica_freq = RATING_TO_POLITICA_FREQUENCY.get(new_rating_group, 'Anual')
-        if 'Revisão Política' in all_rules:
-            start = last_review_date or all_rules['Revisão Política'].get('start_date') or datetime.now()
-            cursor.execute("UPDATE cri_cra_dev.crm.task_rules SET frequency = ?, start_date = ? WHERE operation_id = ? AND name = 'Revisão Política'", (new_politica_freq, start, op_id))
-            log_action(cursor, data.get('responsibleAnalyst', 'System'), 'UPDATE', 'TaskRule', op_id, f"Frequência da Revisão de Política ajustada para {new_politica_freq}.")
-
-        gerencial_rule = all_rules.get('Revisão Gerencial')
-        if gerencial_rule and FREQUENCY_VALUE_MAP.get(gerencial_rule.get('frequency'), 999) > FREQUENCY_VALUE_MAP.get(new_politica_freq, 0):
-            start = last_review_date or gerencial_rule.get('start_date') or datetime.now()
-            cursor.execute("UPDATE cri_cra_dev.crm.task_rules SET frequency = ?, start_date = ? WHERE operation_id = ? AND name = 'Revisão Gerencial'", (new_politica_freq, start, op_id))
-            log_action(cursor, data.get('responsibleAnalyst', 'System'), 'UPDATE', 'TaskRule', op_id, f"Frequência da Revisão Gerencial ajustada para {new_politica_freq}.")
-
-        # Update EconomicGroup rating and cascade to other operations if applicable
-        final_economic_group_id = data.get('economicGroupId', old_op_db.get('economic_group_id'))
-        if final_economic_group_id:
-            cursor.execute("UPDATE cri_cra_dev.crm.economic_groups SET rating = ? WHERE id = ?", (new_rating_group, final_economic_group_id))
-            log_action(cursor, data.get('responsibleAnalyst', 'System'), 'UPDATE', 'EconomicGroup', final_economic_group_id, f"Rating do Grupo Econômico atualizado para {new_rating_group} via operação {op_id}.")
-
-    cov = data.get('covenants', {})
-    
-    est_date_val = data.get('estimatedDate')
-    if est_date_val == "": est_date_val = None
-    final_est_date = parse_iso_date(est_date_val) if 'estimatedDate' in data else old_op_db.get('estimated_date')
-    
-    final_maturity_date = parse_iso_date(data.get('maturityDate')) if 'maturityDate' in data else old_op_db.get('maturity_date')
-    final_description = data.get('description', old_op_db.get('description'))
-    final_status = data.get('status', old_op_db.get('status'))
-    final_moved_to_legacy_date = parse_iso_date(data.get('movedToLegacyDate')) if 'movedToLegacyDate' in data else old_op_db.get('moved_to_legacy_date')
-    final_was_structured = data.get('wasStructured') if 'wasStructured' in data else old_op_db.get('was_structured')
-
-    final_master_group_id = data.get('masterGroupId', old_op_db.get('master_group_id'))
-    final_economic_group_id = data.get('economicGroupId', old_op_db.get('economic_group_id'))
-
-    cursor.execute( "UPDATE cri_cra_dev.crm.operations SET name = ?, area = ?, rating_operation = ?, watchlist = ?, ltv = ?, dscr = ?, estimated_date = ?, maturity_date = ?, responsible_analyst = ?, structuring_analyst = ?, segmento = ?, description = ?, status = ?, moved_to_legacy_date = ?, master_group_id = ?, economic_group_id = ?, was_structured = ? WHERE id = ?", (data.get('name', old_op_db.get('name')), data.get('area', old_op_db.get('area')), data.get('ratingOperation', old_op_db.get('rating_operation')), data.get('watchlist', old_op_db.get('watchlist')), cov.get('ltv', old_op_db.get('ltv')), cov.get('dscr', old_op_db.get('dscr')), final_est_date, final_maturity_date, data.get('responsibleAnalyst', old_op_db.get('responsible_analyst')), data.get('structuringAnalyst', old_op_db.get('structuring_analyst')), data.get('segmento', old_op_db.get('segmento')), final_description, final_status, final_moved_to_legacy_date, final_master_group_id, final_economic_group_id, final_was_structured, op_id) )
-    
-    if 'notes' in data:
-        cursor.execute("SELECT 1 FROM cri_cra_dev.crm.operation_review_notes WHERE operation_id = ?", (op_id,))
-        if cursor.fetchone():
-            cursor.execute(
-                "UPDATE cri_cra_dev.crm.operation_review_notes SET notes = ?, updated_at = ?, updated_by = ? WHERE operation_id = ?",
-                (data['notes'], datetime.now(), data.get('responsibleAnalyst', 'System'), op_id)
-            )
-        else:
-            cursor.execute(
-                "INSERT INTO cri_cra_dev.crm.operation_review_notes (operation_id, notes, updated_at, updated_by) VALUES (?, ?, ?, ?)",
-                (op_id, data['notes'], datetime.now(), data.get('responsibleAnalyst', 'System'))
-            )
-
-    cursor.execute("DELETE FROM cri_cra_dev.crm.operation_projects WHERE operation_id = ?", (op_id,))
-    for project in data.get('projects', []):
-        project_name = project.get('name')
-        if project_name:
-            cursor.execute("SELECT id FROM cri_cra_dev.crm.projects WHERE name = ?", (project_name,))
-            proj_row = cursor.fetchone()
-            project_id = proj_row.id if proj_row else None
-            if not project_id:
-                project_id = get_next_unique_id(cursor, 'projects')
-                cursor.execute("INSERT INTO cri_cra_dev.crm.projects (id, name) VALUES (?, ?)", (project_id, project_name))
-            cursor.execute("INSERT INTO cri_cra_dev.crm.operation_projects (operation_id, project_id) VALUES (?, ?)", (op_id, project_id))
-
-    cursor.execute("DELETE FROM cri_cra_dev.crm.operation_guarantees WHERE operation_id = ?", (op_id,))
-    for guarantee in data.get('guarantees', []):
-        guarantee_name = guarantee.get('name')
-        if guarantee_name:
-            cursor.execute("SELECT id FROM cri_cra_dev.crm.guarantees WHERE name = ?", (guarantee_name,))
-            guar_row = cursor.fetchone()
-            guarantee_id = guar_row.id if guar_row else None
-            if not guarantee_id:
-                guarantee_id = get_next_unique_id(cursor, 'guarantees')
-                cursor.execute("INSERT INTO cri_cra_dev.crm.guarantees (id, name) VALUES (?, ?)", (guarantee_id, guarantee_name))
-            cursor.execute("INSERT INTO cri_cra_dev.crm.operation_guarantees (operation_id, guarantee_id) VALUES (?, ?)", (op_id, guarantee_id))
-
-    client_event_id_to_db_id_map = {}
-    
-    for event in data.get('events', []):
-        event_id = str(event.get('id'))
-        
-        # Explicit deletion
-        if event.get('deleted'):
-            if event_id in db_event_ids:
-                cursor.execute("DELETE FROM cri_cra_dev.crm.events WHERE id = ?", (int(event_id),))
-                log_action(cursor, data.get('responsibleAnalyst', 'System'), 'DELETE', 'Event', event_id, "Evento deletado explicitamente.")
-            continue
-
-        if event_id not in db_event_ids:
-            db_event_id = get_next_unique_id(cursor, 'events')
-            cursor.execute("INSERT INTO cri_cra_dev.crm.events (id, operation_id, date, type, title, description, registered_by, next_steps, completed_task_id, attention_points, our_attendees, operation_attendees) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", (db_event_id, op_id, event.get('date'), event.get('type'), event.get('title'), event.get('description'), event.get('registeredBy'), event.get('nextSteps'), event.get('completedTaskId'), event.get('attentionPoints'), event.get('ourAttendees'), event.get('operationAttendees')))
-            client_event_id_to_db_id_map[event_id] = db_event_id
-            log_action(cursor, event.get('registeredBy'), 'CREATE', 'Event', db_event_id, f"Evento '{event.get('title')}' adicionado.")
-        else:
-            old_event = db_events[int(event_id)]
-            def norm(v): return str(v).strip() if v is not None else ""
-            def norm_date(v): return str(v)[:10] if v is not None else ""
-            
-            changed = (
-                norm_date(event.get('date')) != norm_date(old_event.get('date')) or
-                norm(event.get('type')) != norm(old_event.get('type')) or
-                norm(event.get('title')) != norm(old_event.get('title')) or
-                norm(event.get('description')) != norm(old_event.get('description')) or
-                norm(event.get('registeredBy')) != norm(old_event.get('registered_by')) or
-                norm(event.get('nextSteps')) != norm(old_event.get('next_steps')) or
-                norm(event.get('completedTaskId')) != norm(old_event.get('completed_task_id')) or
-                norm(event.get('attentionPoints')) != norm(old_event.get('attention_points')) or
-                norm(event.get('ourAttendees')) != norm(old_event.get('our_attendees')) or
-                norm(event.get('operationAttendees')) != norm(old_event.get('operation_attendees'))
-            )
-            
-            if changed:
-                cursor.execute(
-                    "UPDATE cri_cra_dev.crm.events SET date=?, type=?, title=?, description=?, registered_by=?, next_steps=?, completed_task_id=?, attention_points=?, our_attendees=?, operation_attendees=? WHERE id=?",
-                    (event.get('date'), event.get('type'), event.get('title'), event.get('description'), event.get('registeredBy'), event.get('nextSteps'), event.get('completedTaskId'), event.get('attentionPoints'), event.get('ourAttendees'), event.get('operationAttendees'), event_id)
-                )
-                log_action(cursor, event.get('registeredBy'), 'UPDATE', 'Event', event_id, f"Evento '{event.get('title')}' atualizado.")
-
-    for rh in data.get('ratingHistory', []):
-        if rh.get('id') not in db_rh_ids:
-            client_event_id = rh.get('eventId')
-            db_event_id_for_rh = client_event_id_to_db_id_map.get(str(client_event_id), client_event_id)
-            rh_id = get_next_unique_id(cursor, 'rating_history')
-            cursor.execute("INSERT INTO cri_cra_dev.crm.rating_history (id, operation_id, date, rating_operation, rating_group, rating_master_group, watchlist, sentiment, event_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", (rh_id, op_id, rh.get('date'), rh.get('ratingOperation'), rh.get('ratingGroup'), rh.get('ratingMasterGroup'), rh.get('watchlist'), rh.get('sentiment'), db_event_id_for_rh))
-
-    old_watchlist = old_op_db.get('watchlist')
-    new_watchlist = data.get('watchlist', old_watchlist)
-    
-    cursor.execute("SELECT COUNT(*) as count FROM cri_cra_dev.crm.operation_litigation_comments WHERE operation_id = ?", (op_id,))
-    litigation_count_row = cursor.fetchone()
-    has_litigation_comments = litigation_count_row[0] > 0 if litigation_count_row else False
-
-    if new_watchlist in ['Rosa', 'Vermelho'] and old_watchlist not in ['Rosa', 'Vermelho'] and not has_litigation_comments:
-        has_litigation_rule = any(r.get('name') == 'Revisão Advogados de Litígio' for r in data.get('taskRules', []))
-        
-        cursor.execute("SELECT 1 FROM cri_cra_dev.crm.task_rules WHERE operation_id = ? AND name = 'Revisão Advogados de Litígio'", (op_id,))
-        db_has_rule = cursor.fetchone()
-        
-        if not has_litigation_rule and not db_has_rule:
-            if 'taskRules' not in data:
-                data['taskRules'] = []
-            data['taskRules'].append({
-                'name': 'Revisão Advogados de Litígio',
-                'frequency': 'Sem Prazo',
-                'description': 'Passar a documentação da operação com os advogados de litígio devido a mudança do farol para Rosa ou Vermelho.',
-                'priority': 'Alta'
-            })
-
-    cursor.execute("SELECT id, name FROM cri_cra_dev.crm.task_rules WHERE operation_id = ?", (op_id,))
-    db_rules_map = {row.id: row.name for row in cursor.fetchall()}
-    client_rule_ids = {r['id'] for r in data.get('taskRules', []) if 'id' in r and isinstance(r['id'], int)}
-
-    for rule_id_to_delete in set(db_rules_map.keys()) - client_rule_ids:
-        cursor.execute("DELETE FROM cri_cra_dev.crm.task_rules WHERE id = ?", (rule_id_to_delete,))
-        log_action(cursor, data.get('responsibleAnalyst', 'System'), 'DELETE', 'TaskRule', rule_id_to_delete, f"Regra '{db_rules_map[rule_id_to_delete]}' deletada.")
-
-    for rule in data.get('taskRules', []):
-        rule_id = rule.get('id')
-        assignees_json = json.dumps(rule.get('assignees', [])) if rule.get('assignees') else None
-        if rule_id and rule_id in db_rules_map:
-            cursor.execute("UPDATE cri_cra_dev.crm.task_rules SET name=?, frequency=?, start_date=?, end_date=?, description=?, priority=?, assignees=? WHERE id=?", (rule.get('name'), rule.get('frequency'), rule.get('startDate'), rule.get('endDate'), rule.get('description'), rule.get('priority') or 'Média', assignees_json, rule_id))
-            # Sync checklist items for this rule
-            _sync_checklist_items(cursor, rule_id, rule.get('checklistItems', []))
-        elif not rule_id or rule_id not in db_rules_map:
-            new_rule_id = get_next_unique_id(cursor, 'task_rules')
-            cursor.execute("INSERT INTO cri_cra_dev.crm.task_rules (id, operation_id, name, frequency, start_date, end_date, description, priority, assignees) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", (new_rule_id, op_id, rule.get('name'), rule.get('frequency'), rule.get('startDate'), rule.get('endDate'), rule.get('description'), rule.get('priority') or 'Média', assignees_json))
-            log_action(cursor, data.get('responsibleAnalyst', 'System'), 'CREATE', 'TaskRule', 'new', f"Regra '{rule.get('name')}' adicionada.")
-            # Sync checklist items for this new rule
-            _sync_checklist_items(cursor, new_rule_id, rule.get('checklistItems', []))
-    
-    if 'taskExceptions' in data:
-        cursor.execute("DELETE FROM cri_cra_dev.crm.task_exceptions WHERE operation_id = ?", (op_id,))
-        for task_id in data['taskExceptions']:
-            cursor.execute("INSERT INTO cri_cra_dev.crm.task_exceptions (operation_id, task_id, deleted_at, deleted_by) VALUES (?, ?, ?, ?)", (op_id, task_id, datetime.now(), data.get('responsibleAnalyst', 'System')))
-            
-    if 'contacts' in data:
-        cursor.execute("DELETE FROM cri_cra_dev.crm.operation_contacts WHERE operation_id = ?", (op_id,))
-        for contact in data['contacts']:
-            if contact.get('name'):
-                cursor.execute("INSERT INTO cri_cra_dev.crm.operation_contacts (id, operation_id, name, email, phone, role) VALUES (?, ?, ?, ?, ?, ?)",
-                               (get_next_unique_id(cursor, 'operation_contacts'), op_id, contact.get('name'), contact.get('email'), contact.get('phone'), contact.get('role')))
-
-    details = generate_diff_details(old_op_db, data, {'name': 'Nome', 'ratingOperation': 'Rating Op.', 'ratingGroup': 'Rating Grupo', 'watchlist': 'Watchlist'})
-    if details: log_action(cursor, data.get('responsibleAnalyst', 'System'), 'UPDATE', 'Operation', op_id, details)
 
 
 
 @app.route('/api/operations/<int:op_id>', methods=['GET', 'PUT', 'DELETE'])
 def manage_operation(op_id):
-    conn = get_db_connection()
+    conn = db.get_db_connection()
     try:
         if request.method == 'GET':
             with conn.cursor() as cursor:
-                operation = fetch_full_operation(cursor, op_id)
+                operation = load_operations(cursor, op_id=op_id)
                 if not operation:
                     return jsonify({"error": "Operação não encontrada"}), 404
                 return jsonify(operation)
@@ -881,9 +206,9 @@ def manage_operation(op_id):
         elif request.method == 'PUT':
             data = request.json
             with conn.cursor() as cursor:
-                _update_operation_db_internal(cursor, op_id, data)
+                save_operation(cursor, op_id, data, user_name=data.get('responsibleAnalyst', 'System'))
                 conn.commit()
-                new_operation_full = fetch_full_operation(cursor, op_id)
+                new_operation_full = load_operations(cursor, op_id=op_id)
             return jsonify(new_operation_full), 200
             
         elif request.method == 'DELETE':
@@ -907,7 +232,7 @@ def manage_operation(op_id):
         if conn: conn.close()
 @app.route('/api/operations/bulk-update', methods=['POST'])
 def bulk_update_operations():
-    conn = get_db_connection()
+    conn = db.get_db_connection()
     try:
         data = request.json
         operations = data.get('operations', [])
@@ -916,7 +241,7 @@ def bulk_update_operations():
         with conn.cursor() as cursor:
             for op_data in operations:
                 try:
-                    _update_operation_db_internal(cursor, op_data['id'], op_data)
+                    save_operation(cursor, op_data['id'], op_data, user_name=op_data.get('responsibleAnalyst', 'System'))
                     results['success'].append(op_data['id'])
                 except Exception as e:
                     app.logger.error(f"Error updating operation {op_data.get('id')}: {e}", exc_info=True)
@@ -937,7 +262,7 @@ def sync_operation_rules():
     tenham suas regras de tarefas e histórico inicial criados.
     Também corrige datas de início de regras baseadas no histórico existente.
     """
-    conn = get_db_connection()
+    conn = db.get_db_connection()
     try:
         with conn.cursor() as cursor:
             fixed_count = 0
@@ -1029,7 +354,7 @@ def sync_operation_rules():
 
 @app.route('/api/tasks/delete', methods=['POST'])
 def delete_task():
-    conn = get_db_connection()
+    conn = db.get_db_connection()
     try:
         data = request.json
         with conn.cursor() as cursor:
@@ -1037,7 +362,7 @@ def delete_task():
             log_action(cursor, data.get('responsibleAnalyst'), 'DELETE', 'Task', data['taskId'], f"Tarefa deletada para a operação ID {data['operationId']}.")
         conn.commit()
         with conn.cursor() as cursor:
-            updated_op = fetch_full_operation(cursor, data['operationId'])
+            updated_op = load_operations(cursor, op_id=data['operationId'])
         return jsonify(updated_op)
     except Exception as e:
         app.logger.error(f"Error deleting task: {e}", exc_info=True)
@@ -1047,7 +372,7 @@ def delete_task():
         
 @app.route('/api/tasks/edit', methods=['PUT'])
 def edit_task():
-    conn = get_db_connection()
+    conn = db.get_db_connection()
     try:
         data = request.json
         updates = data['updates']
@@ -1059,7 +384,7 @@ def edit_task():
             log_action(cursor, data.get('responsibleAnalyst'), 'UPDATE', 'Task', data['originalTaskId'], f"Tarefa editada para ter nome '{updates['name']}' e vencimento em {due_date}.")
         conn.commit()
         with conn.cursor() as cursor:
-            updated_op = fetch_full_operation(cursor, data['operationId'])
+            updated_op = load_operations(cursor, op_id=data['operationId'])
         return jsonify(updated_op)
     except Exception as e:
         app.logger.error(f"Error editing task: {e}", exc_info=True)
@@ -1069,7 +394,7 @@ def edit_task():
 
 @app.route('/api/audit_logs', methods=['GET'])
 def get_audit_logs():
-    conn = get_db_connection()
+    conn = db.get_db_connection()
     try:
         with conn.cursor() as cursor:
             cursor.execute("SELECT * FROM cri_cra_dev.crm.audit_logs ORDER BY timestamp DESC")
@@ -1086,7 +411,7 @@ def get_audit_logs():
 
 @app.route('/api/operation_review_notes', methods=['POST'])
 def manage_operation_review_notes():
-    conn = get_db_connection()
+    conn = db.get_db_connection()
     try:
         data = request.json
         with conn.cursor() as cursor:
@@ -1116,7 +441,7 @@ def manage_operation_review_notes():
 
 @app.route('/api/change-requests', methods=['GET', 'POST'])
 def manage_change_requests():
-    conn = get_db_connection()
+    conn = db.get_db_connection()
     try:
         if request.method == 'GET':
             with conn.cursor() as cursor:
@@ -1149,7 +474,7 @@ def manage_change_requests():
 
 @app.route('/api/change-requests/<int:req_id>', methods=['PUT'])
 def update_change_request(req_id):
-    conn = get_db_connection()
+    conn = db.get_db_connection()
     try:
         data = request.json
         now = datetime.now()
@@ -1168,7 +493,7 @@ def update_change_request(req_id):
 
 @app.route('/api/patch-notes', methods=['GET'])
 def get_patch_notes():
-    conn = get_db_connection()
+    conn = db.get_db_connection()
     try:
         with conn.cursor() as cursor:
             cursor.execute("SELECT * FROM cri_cra_dev.crm.patch_notes ORDER BY date DESC")
@@ -1185,7 +510,7 @@ def get_patch_notes():
 
 @app.route('/api/analyst-notes/<string:analyst_name>', methods=['GET', 'POST'])
 def manage_analyst_notes(analyst_name):
-    conn = get_db_connection()
+    conn = db.get_db_connection()
     try:
         with conn.cursor() as cursor:
             if request.method == 'GET':
@@ -1214,7 +539,7 @@ def manage_analyst_notes(analyst_name):
 # --- Risk Management Endpoints ---
 @app.route('/api/operations/<int:op_id>/risks', methods=['POST'])
 def add_operation_risk(op_id):
-    conn = get_db_connection()
+    conn = db.get_db_connection()
     try:
         data = request.json
         now = datetime.now()
@@ -1227,7 +552,7 @@ def add_operation_risk(op_id):
             log_action(cursor, data.get('userName', 'System'), 'CREATE', 'OperationRisk', op_id, f"Risco '{data['title']}' adicionado.")
         conn.commit()
         with conn.cursor() as cursor:
-            updated_op = fetch_full_operation(cursor, op_id)
+            updated_op = load_operations(cursor, op_id=op_id)
         return jsonify(updated_op), 201
     except Exception as e:
         app.logger.error(f"Error adding risk to operation {op_id}: {e}", exc_info=True)
@@ -1237,7 +562,7 @@ def add_operation_risk(op_id):
 
 @app.route('/api/operations/<int:op_id>/risks/<int:risk_id>', methods=['PUT', 'DELETE'])
 def manage_operation_risk(op_id, risk_id):
-    conn = get_db_connection()
+    conn = db.get_db_connection()
     try:
         if request.method == 'PUT':
             data = request.json
@@ -1257,7 +582,7 @@ def manage_operation_risk(op_id, risk_id):
             conn.commit()
         
         with conn.cursor() as cursor:
-            updated_op = fetch_full_operation(cursor, op_id)
+            updated_op = load_operations(cursor, op_id=op_id)
         return jsonify(updated_op)
     except Exception as e:
         app.logger.error(f"Error managing risk {risk_id} for operation {op_id}: {e}", exc_info=True)
@@ -1267,7 +592,7 @@ def manage_operation_risk(op_id, risk_id):
 
 @app.route('/api/operations/<int:op_id>/litigation-comments', methods=['POST'])
 def add_operation_litigation_comment(op_id):
-    conn = get_db_connection()
+    conn = db.get_db_connection()
     try:
         data = request.json
         now = datetime.now()
@@ -1281,7 +606,7 @@ def add_operation_litigation_comment(op_id):
         conn.commit()
         
         with conn.cursor() as cursor:
-            updated_op = fetch_full_operation(cursor, op_id)
+            updated_op = load_operations(cursor, op_id=op_id)
         return jsonify(updated_op), 201
     except Exception as e:
         app.logger.error(f"Error adding litigation comment to operation {op_id}: {e}", exc_info=True)
@@ -1291,7 +616,7 @@ def add_operation_litigation_comment(op_id):
 
 @app.route('/api/operations/<int:op_id>/litigation-comments/<int:comment_id>', methods=['PUT', 'DELETE'])
 def manage_operation_litigation_comment(op_id, comment_id):
-    conn = get_db_connection()
+    conn = db.get_db_connection()
     try:
         if request.method == 'PUT':
             data = request.json
@@ -1311,7 +636,7 @@ def manage_operation_litigation_comment(op_id, comment_id):
             conn.commit()
         
         with conn.cursor() as cursor:
-            updated_op = fetch_full_operation(cursor, op_id)
+            updated_op = load_operations(cursor, op_id=op_id)
         return jsonify(updated_op)
     except Exception as e:
         app.logger.error(f"Error managing litigation comment {comment_id} for operation {op_id}: {e}", exc_info=True)

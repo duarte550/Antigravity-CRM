@@ -1,5 +1,5 @@
 from flask import Blueprint, jsonify, request
-from db import get_db_connection
+import db
 from utils import safe_isoformat, parse_iso_date, get_next_unique_id
 from datetime import datetime
 import logging
@@ -160,7 +160,7 @@ def fetch_full_master_group(cursor, mg_id):
 
 @master_groups_bp.route('/api/master-groups', methods=['GET', 'POST'])
 def manage_master_groups():
-    conn = get_db_connection()
+    conn = db.get_db_connection()
     try:
         if request.method == 'GET':
             with conn.cursor() as cursor:
@@ -186,7 +186,7 @@ def manage_master_groups():
 
 @master_groups_bp.route('/api/master-groups/<int:mg_id>', methods=['GET', 'PUT', 'DELETE'])
 def manage_master_group(mg_id):
-    conn = get_db_connection()
+    conn = db.get_db_connection()
     try:
         if request.method == 'GET':
             with conn.cursor() as cursor:
@@ -218,7 +218,7 @@ def manage_master_group(mg_id):
 
 @master_groups_bp.route('/api/master-groups/<int:mg_id>/risks', methods=['POST'])
 def add_mg_risk(mg_id):
-    conn = get_db_connection()
+    conn = db.get_db_connection()
     try:
         data = request.json
         with conn.cursor() as cursor:
@@ -242,7 +242,7 @@ def add_mg_risk(mg_id):
 
 @master_groups_bp.route('/api/master-groups/<int:mg_id>/risks/<int:risk_id>', methods=['PUT', 'DELETE'])
 def manage_mg_risk(mg_id, risk_id):
-    conn = get_db_connection()
+    conn = db.get_db_connection()
     try:
         user_name = request.json.get('userName', 'Sistema') if request.json else request.args.get('userName', 'Sistema')
         now = datetime.now()
@@ -273,7 +273,7 @@ def manage_mg_risk(mg_id, risk_id):
 
 @master_groups_bp.route('/api/structuring-operations', methods=['POST'])
 def add_structuring_operation():
-    conn = get_db_connection()
+    conn = db.get_db_connection()
     try:
         data = request.json
         with conn.cursor() as cursor:
@@ -318,7 +318,7 @@ def add_structuring_operation():
 
 @master_groups_bp.route('/api/structuring-operations', methods=['GET'])
 def get_structuring_operations():
-    conn = get_db_connection()
+    conn = db.get_db_connection()
     try:
         include_liquidated = request.args.get('includeLiquidated', 'false').lower() == 'true'
         with conn.cursor() as cursor:
@@ -409,7 +409,7 @@ def get_structuring_operations():
 
 @master_groups_bp.route('/api/structuring-operations/<int:so_id>', methods=['GET', 'PUT', 'DELETE'])
 def manage_structuring_operation(so_id):
-    conn = get_db_connection()
+    conn = db.get_db_connection()
     try:
         if request.method == 'GET':
             with conn.cursor() as cursor:
@@ -613,7 +613,7 @@ def manage_structuring_operation(so_id):
 
 @master_groups_bp.route('/api/master-groups/<int:mg_id>/events', methods=['POST'])
 def add_master_group_event(mg_id):
-    conn = get_db_connection()
+    conn = db.get_db_connection()
     try:
         data = request.json
         with conn.cursor() as cursor:
@@ -629,7 +629,7 @@ def add_master_group_event(mg_id):
 
 @master_groups_bp.route('/api/structuring-operations/<int:so_id>/events', methods=['POST'])
 def add_structuring_operation_event(so_id):
-    conn = get_db_connection()
+    conn = db.get_db_connection()
     try:
         data = request.json
         with conn.cursor() as cursor:
@@ -645,7 +645,7 @@ def add_structuring_operation_event(so_id):
 
 @master_groups_bp.route('/api/structuring-operations/<int:so_id>/events/<int:event_id>', methods=['PUT', 'DELETE'])
 def manage_structuring_operation_event(so_id, event_id):
-    conn = get_db_connection()
+    conn = db.get_db_connection()
     try:
         if request.method == 'DELETE':
             with conn.cursor() as cursor:
@@ -666,7 +666,7 @@ def manage_structuring_operation_event(so_id, event_id):
 
 @master_groups_bp.route('/api/structuring-operations/<int:so_id>/stages', methods=['PUT'])
 def update_structuring_operation_stages(so_id):
-    conn = get_db_connection()
+    conn = db.get_db_connection()
     try:
         stages = request.json.get('stages', [])
         with conn.cursor() as cursor:

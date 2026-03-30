@@ -1,6 +1,6 @@
 import os
 from flask import Blueprint, jsonify, request
-from db import get_db_connection
+import db
 from utils import format_row
 
 fund_simulator_bp = Blueprint('fund_simulator', __name__)
@@ -10,7 +10,7 @@ MIDDLE_TABLE = os.getenv("MIDDLE_TABLE", "middle_dev.fundos.fundos")
 
 @fund_simulator_bp.route('/api/fund-simulator/funds', methods=['GET'])
 def get_funds():
-    conn = get_db_connection()
+    conn = db.get_db_connection()
     try:
         with conn.cursor() as cursor:
             cursor.execute(f"""
@@ -30,7 +30,7 @@ def get_funds():
 
 @fund_simulator_bp.route('/api/fund-simulator/data/<string:fund_name>', methods=['GET'])
 def get_fund_data(fund_name):
-    conn = get_db_connection()
+    conn = db.get_db_connection()
     try:
         with conn.cursor() as cursor:
             # 1. Pull data from Risco query
@@ -86,7 +86,7 @@ def get_fund_data(fund_name):
 
 @fund_simulator_bp.route('/api/fund-simulator/inputs/<string:fund_name>', methods=['POST'])
 def save_fund_inputs(fund_name):
-    conn = get_db_connection()
+    conn = db.get_db_connection()
     try:
         data = request.json
         with conn.cursor() as cursor:

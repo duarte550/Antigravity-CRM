@@ -1,0 +1,62 @@
+============================= test session starts =============================
+platform win32 -- Python 3.14.3, pytest-9.0.2, pluggy-1.6.0 -- C:\Users\duart\AppData\Local\Python\pythoncore-3.14-64\python.exe
+cachedir: .pytest_cache
+rootdir: C:\Users\duart\OneDrive\Desktop\CRM Antigravity controle\CRM Antigravity\Antigravity-CRM\backend
+plugins: mock-3.15.1
+collecting ... collected 179 items
+
+tests/test_all_endpoints.py::TestOperationsGet::test_get_operations_returns_list FAILED [  0%]
+
+================================== FAILURES ===================================
+_____________ TestOperationsGet.test_get_operations_returns_list ______________
+tests\test_all_endpoints.py:50: in test_get_operations_returns_list
+    res = client.get('/api/operations')
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\duart\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\werkzeug\test.py:1162: in get
+    return self.open(*args, **kw)
+           ^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\duart\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\flask\testing.py:235: in open
+    response = super().open(
+C:\Users\duart\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\werkzeug\test.py:1116: in open
+    response_parts = self.run_wsgi_app(request.environ, buffered=buffered)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\duart\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\werkzeug\test.py:988: in run_wsgi_app
+    rv = run_wsgi_app(self.application, environ, buffered=buffered)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\duart\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\werkzeug\test.py:1264: in run_wsgi_app
+    app_rv = app(environ, start_response)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\duart\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\flask\app.py:1536: in __call__
+    return self.wsgi_app(environ, start_response)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\duart\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\flask\app.py:1514: in wsgi_app
+    response = self.handle_exception(e)
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\duart\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\flask_cors\extension.py:176: in wrapped_function
+    return cors_after_request(app.make_response(f(*args, **kwargs)))
+                                                ^^^^^^^^^^^^^^^^^^
+C:\Users\duart\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\flask\app.py:1511: in wsgi_app
+    response = self.full_dispatch_request()
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\duart\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\flask\app.py:919: in full_dispatch_request
+    rv = self.handle_user_exception(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\duart\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\flask_cors\extension.py:176: in wrapped_function
+    return cors_after_request(app.make_response(f(*args, **kwargs)))
+                                                ^^^^^^^^^^^^^^^^^^
+C:\Users\duart\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\flask\app.py:917: in full_dispatch_request
+    rv = self.dispatch_request()
+         ^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\duart\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\flask\app.py:902: in dispatch_request
+    return self.ensure_sync(self.view_functions[rule.endpoint])(**view_args)  # type: ignore[no-any-return]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+app.py:125: in manage_operations_collection
+    conn = get_db_connection()
+           ^^^^^^^^^^^^^^^^^^^
+db.py:15: in get_db_connection
+    raise ValueError("Environment variables for Databricks are missing.")
+E   ValueError: Environment variables for Databricks are missing.
+=========================== short test summary info ===========================
+FAILED tests/test_all_endpoints.py::TestOperationsGet::test_get_operations_returns_list
+!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!
+============================== 1 failed in 0.23s ==============================
