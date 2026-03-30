@@ -1617,8 +1617,8 @@ const ComiteDetailPage: React.FC<ComiteDetailPageProps> = ({ comiteId, apiUrl, s
                     secao_id: secaoId,
                     // Auto-set tipo_caso when selecting a specific section
                     ...(impliedTipoCaso ? { tipo_caso: impliedTipoCaso, operation_id: prev.operation_id } : {}),
-                    // Clear operation if going back to geral
-                    ...(!impliedTipoCaso && prev.tipo_caso !== 'geral' ? { tipo_caso: 'geral', operation_id: null } : {}),
+                    // Changing to general case
+                    ...(!impliedTipoCaso && prev.tipo_caso !== 'geral' ? { tipo_caso: 'geral' } : {}),
                   }));
                 }}
                 className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm"
@@ -1691,7 +1691,6 @@ const ComiteDetailPage: React.FC<ComiteDetailPageProps> = ({ comiteId, apiUrl, s
                           setNewItem(prev => ({
                             ...prev,
                             tipo_caso: val,
-                            operation_id: val === 'geral' ? null : prev.operation_id,
                             // Auto-set section if a matching one exists
                             ...(secaoId ? { secao_id: secaoId } : {}),
                           }));
@@ -1719,13 +1718,13 @@ const ComiteDetailPage: React.FC<ComiteDetailPageProps> = ({ comiteId, apiUrl, s
               </div>
             </div>
 
-            {/* ─── Operation Selector (required for revisão / aprovação) ─── */}
-            {(newItem.tipo_caso === 'revisao' || newItem.tipo_caso === 'aprovacao') && (
+            {/* ─── Operation Selector ─── */}
+            {true && (
               <div className="mb-4">
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Operação Vinculada <span className="text-red-500">*</span>
+                  Operação Vinculada {newItem.tipo_caso !== 'geral' ? <span className="text-red-500">*</span> : <span className="text-xs font-normal text-gray-400 font-semibold">(Opcional)</span>}
                   <span className="text-xs font-normal text-gray-400 ml-1">
-                    ({newItem.tipo_caso === 'revisao' ? 'somente ativas' : 'ativas ou em estruturação'})
+                    ({newItem.tipo_caso === 'revisao' ? 'somente ativas' : newItem.tipo_caso === 'aprovacao' ? 'ativas ou em estruturação' : 'opcional para casos gerais'})
                   </span>
                 </label>
 
@@ -1778,7 +1777,7 @@ const ComiteDetailPage: React.FC<ComiteDetailPageProps> = ({ comiteId, apiUrl, s
                             op.name.toLowerCase().includes(opsSearchQuery.toLowerCase()) ||
                             (op.master_group_name || '').toLowerCase().includes(opsSearchQuery.toLowerCase())
                           );
-                          const filteredEstruturas = newItem.tipo_caso === 'aprovacao'
+                          const filteredEstruturas = (newItem.tipo_caso === 'aprovacao' || newItem.tipo_caso === 'geral')
                             ? filteredPautaOpsEstruturacao.filter(op =>
                                 op.name.toLowerCase().includes(opsSearchQuery.toLowerCase()) ||
                                 (op.master_group_name || '').toLowerCase().includes(opsSearchQuery.toLowerCase())
@@ -1845,7 +1844,7 @@ const ComiteDetailPage: React.FC<ComiteDetailPageProps> = ({ comiteId, apiUrl, s
                     )}
 
                     {/* Create new structuring operation */}
-                    {newItem.tipo_caso === 'aprovacao' && (
+                    {(newItem.tipo_caso === 'aprovacao' || newItem.tipo_caso === 'geral') && (
                       <div className="mt-2">
                         {!showNewStructuringForm ? (
                           <button
@@ -2059,7 +2058,7 @@ const ComiteDetailPage: React.FC<ComiteDetailPageProps> = ({ comiteId, apiUrl, s
                     ...prev,
                     secao_id: secaoId,
                     ...(impliedTipoCaso ? { tipo_caso: impliedTipoCaso } : {}),
-                    ...(!impliedTipoCaso && prev.tipo_caso !== 'geral' ? { tipo_caso: 'geral', operation_id: null } : {}),
+                    ...(!impliedTipoCaso && prev.tipo_caso !== 'geral' ? { tipo_caso: 'geral' } : {}),
                   }) : prev);
                 }}
                 className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm"
@@ -2131,7 +2130,6 @@ const ComiteDetailPage: React.FC<ComiteDetailPageProps> = ({ comiteId, apiUrl, s
                           setEditItem(prev => prev ? ({
                             ...prev,
                             tipo_caso: val,
-                            operation_id: val === 'geral' ? null : prev.operation_id,
                             ...(secaoId ? { secao_id: secaoId } : {}),
                           }) : prev);
                         }}
@@ -2155,11 +2153,11 @@ const ComiteDetailPage: React.FC<ComiteDetailPageProps> = ({ comiteId, apiUrl, s
               </div>
             </div>
 
-            {/* ─── Operation Selector (for revisão / aprovação) ─── */}
-            {(editItem.tipo_caso === 'revisao' || editItem.tipo_caso === 'aprovacao') && (
+            {/* ─── Operation Selector ─── */}
+            {true && (
               <div className="mb-4">
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Operação Vinculada <span className="text-red-500">*</span>
+                  Operação Vinculada {editItem.tipo_caso !== 'geral' ? <span className="text-red-500">*</span> : <span className="text-xs font-normal text-gray-400 font-semibold">(Opcional)</span>}
                 </label>
 
                 {editItem.operation_id && (() => {
@@ -2202,7 +2200,7 @@ const ComiteDetailPage: React.FC<ComiteDetailPageProps> = ({ comiteId, apiUrl, s
                             op.name.toLowerCase().includes(opsSearchQuery.toLowerCase()) ||
                             (op.master_group_name || '').toLowerCase().includes(opsSearchQuery.toLowerCase())
                           );
-                          const filteredEstruturas = editItem.tipo_caso === 'aprovacao'
+                          const filteredEstruturas = (editItem.tipo_caso === 'aprovacao' || editItem.tipo_caso === 'geral')
                             ? filteredPautaOpsEstruturacao.filter(op =>
                                 op.name.toLowerCase().includes(opsSearchQuery.toLowerCase()) ||
                                 (op.master_group_name || '').toLowerCase().includes(opsSearchQuery.toLowerCase())
