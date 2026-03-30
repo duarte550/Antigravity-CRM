@@ -272,14 +272,12 @@ const MinhasAprovacoesPage: React.FC<MinhasAprovacoesPageProps> = ({
                 <ExternalLink className="w-3.5 h-3.5" /> Abrir Comitê
               </button>
               {item.tipo === 'video' && item.video_url && (
-                <a
-                  href={item.video_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
+                <button
+                  onClick={() => onNavigate(Page.COMITE_VIDEO, item.id)}
                   className="inline-flex items-center gap-1.5 text-xs font-medium text-rose-600 dark:text-rose-400 hover:text-rose-700 dark:hover:text-rose-300 bg-rose-50 dark:bg-rose-900/20 hover:bg-rose-100 dark:hover:bg-rose-900/30 px-3 py-1.5 rounded-lg transition-colors border border-rose-200 dark:border-rose-800"
                 >
                   <Video className="w-3.5 h-3.5" /> Assistir Vídeo
-                </a>
+                </button>
               )}
             </div>
 
