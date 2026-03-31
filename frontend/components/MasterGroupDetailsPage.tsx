@@ -342,7 +342,7 @@ const MasterGroupDetailsPage: React.FC<MasterGroupDetailsPageProps> = ({ masterG
                       <span className="text-gray-500 dark:text-gray-400">Volume (Total):</span>
                       <span className="ml-2 font-medium text-gray-900 dark:text-gray-100">
                         {op.series && op.series.length > 0
-                          ? `R$ ${(op.series.reduce((sum, s) => sum + (s.volume || 0), 0)).toFixed(2)}M`
+                          ? `R$ ${(op.series.reduce((sum, s) => sum + (s.volume || 0), 0)).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} mi`
                           : 'N/A'
                         }
                       </span>

@@ -19,10 +19,7 @@ interface OriginationPipelinePageProps {
 const STAGES: string[] = [...PIPELINE_STAGES];
 
 const formatVolume = (val: number) => {
-  if (val >= 1e9) return `R$ ${(val / 1e9).toFixed(1)}B`;
-  if (val >= 1e6) return `R$ ${(val / 1e6).toFixed(0)}M`;
-  if (val >= 1e3) return `R$ ${(val / 1e3).toFixed(0)}K`;
-  return `R$ ${val.toFixed(2)}`;
+  return `R$ ${val.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} mi`;
 };
 
 const OriginationPipelinePage: React.FC<OriginationPipelinePageProps> = ({ onNavigate, apiUrl, showToast, pushToGenericQueue }) => {
@@ -737,8 +734,8 @@ const OriginationPipelinePage: React.FC<OriginationPipelinePageProps> = ({ onNav
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                 <div className="bg-white dark:bg-gray-800 rounded-xl p-5 shadow-sm border border-gray-100 dark:border-gray-700 flex flex-col justify-center min-w-0">
                     <p className="text-gray-500 dark:text-gray-400 text-sm font-medium">Volume Total</p>
-                    <h2 className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-900 dark:text-white mt-1" title={`R$ ${totalVolume.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}>
-                      R$ {totalVolume >= 1e9 ? (totalVolume / 1e9).toFixed(1) + 'B' : totalVolume >= 1e6 ? (totalVolume / 1e6).toFixed(0) + 'M' : totalVolume >= 1e3 ? (totalVolume / 1e3).toFixed(0) + 'K' : totalVolume.toFixed(2)}
+                    <h2 className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-900 dark:text-white mt-1" title={`R$ ${totalVolume.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} mi`}>
+                      R$ {totalVolume.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} mi
                     </h2>
                     
                     <div className="mt-4 pt-3 border-t border-gray-100 dark:border-gray-700 flex justify-between text-sm">
