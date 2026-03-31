@@ -143,19 +143,64 @@ const timeAgo = (d?: string) => {
 
 const buildStreamEmbedUrl = (url?: string): string | null => {
   if (!url) return null;
-  // Microsoft Stream embed
-  if (url.includes('microsoftstream.com') || url.includes('stream.microsoft.com') || url.includes('web.microsoftstream.com')) {
-    if (url.includes('/embed/')) return url;
-    return url.replace('/video/', '/embed/video/');
+
+  try {
+    const parsed = new URL(url);
+    const hostname = parsed.hostname.toLowerCase();
+
+    // Microsoft Stream (classic) — only embed if it's a real embed URL already
+    if (hostname.includes('microsoftstream.com') || hostname.includes('web.microsoftstream.com')) {
+      if (url.includes('/embed/')) return url;
+      // Classic Stream watch URL → embed URL
+      if (url.includes('/video/')) return url.replace('/video/', '/embed/video/');
+      return null; // Can't safely embed other Stream URL patterns
+    }
+
+    // Microsoft Stream on SharePoint (new) — uses sharepoint.com with /_layouts/15/embed.aspx
+    if (hostname.includes('sharepoint.com')) {
+      if (url.includes('/_layouts/15/embed.aspx')) return url;
+      if (url.includes('/stream/video/')) return url; // SharePoint stream player
+      return null; // Generic SharePoint links aren't embeddable
+    }
+
+    // YouTube
+    if (hostname.includes('youtube.com') || hostname.includes('youtu.be')) {
+      const ytId = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([\w-]{11})/);
+      if (ytId) return `https://www.youtube.com/embed/${ytId[1]}`;
+      return null;
+    }
+
+    // Vimeo
+    if (hostname.includes('vimeo.com')) {
+      const vimeoId = url.match(/vimeo\.com\/(?:video\/)?(\d+)/);
+      if (vimeoId) return `https://player.vimeo.com/video/${vimeoId[1]}`;
+      return null;
+    }
+
+    // Loom
+    if (hostname.includes('loom.com')) {
+      if (url.includes('/embed/')) return url;
+      const loomId = url.match(/loom\.com\/share\/([\w]+)/);
+      if (loomId) return `https://www.loom.com/embed/${loomId[1]}`;
+      return null;
+    }
+
+    // Direct video files (mp4, webm, etc.) — these won't work well in iframes
+    if (/\.(mp4|webm|ogg|mov)(\?.*)?$/i.test(url)) {
+      return null; // These are handled by a <video> element, not iframe
+    }
+
+    // URLs that already look like embeds
+    if (url.includes('/embed') || url.includes('iframe')) return url;
+
+    // Unknown URL — don't attempt iframe embed to avoid cross-origin errors
+    return null;
+  } catch {
+    // Invalid URL
+    return null;
   }
-  // SharePoint video embed
-  if (url.includes('sharepoint.com') && url.includes('/videos/')) {
-    return url;
-  }
-  // Direct iframe URLs
-  if (url.includes('/embed') || url.includes('iframe')) return url;
-  return url;
 };
+
 
 // ─── Farol (Traffic Light) Component ───
 const FarolIndicator: React.FC<{
@@ -336,6 +381,7 @@ const ComiteVideoPage: React.FC<ComiteVideoPageProps> = ({
   const [replyText, setReplyText] = useState('');
   const [voteComment, setVoteComment] = useState('');
   const [showVoteCommentFor, setShowVoteCommentFor] = useState<string | null>(null);
+  const [iframeError, setIframeError] = useState(false);
 
   const { user: authUser, canVote, hasRole } = useAuth();
   const mockUserId = authUser.id;
@@ -353,6 +399,7 @@ const ComiteVideoPage: React.FC<ComiteVideoPageProps> = ({
 
   // ─── Fetch enriched data ───
   useEffect(() => {
+    setIframeError(false);
     fetchData();
   }, [itemPautaId]);
 
@@ -634,7 +681,7 @@ const ComiteVideoPage: React.FC<ComiteVideoPageProps> = ({
           {/* Video Player */}
           <div className="bg-black rounded-xl overflow-hidden shadow-2xl">
             {item.tipo === 'video' && item.video_url ? (
-              embedUrl ? (
+              embedUrl && !iframeError ? (
                 <div className="relative" style={{ paddingTop: '56.25%' }}>
                   <iframe
                     src={embedUrl}
@@ -642,7 +689,32 @@ const ComiteVideoPage: React.FC<ComiteVideoPageProps> = ({
                     allowFullScreen
                     allow="autoplay; encrypted-media"
                     title={item.titulo}
-                    onError={() => {}} // handled by fallback below
+                    sandbox="allow-scripts allow-same-origin allow-popups allow-forms allow-presentation"
+                    onError={() => setIframeError(true)}
+                    onLoad={(e) => {
+                      // Detect if the iframe loaded an error page
+                      try {
+                        const frame = e.currentTarget;
+                        // If we can't access contentDocument, it's cross-origin (normal for embeds)
+                        // But if the iframe src changed to about:blank or chrome-error, mark as failed
+                        if (frame.src === 'about:blank' || frame.src.startsWith('chrome-error://')) {
+                          setIframeError(true);
+                        }
+                      } catch {
+                        // Cross-origin frame — this is expected for valid embeds, so no error
+                      }
+                    }}
+                  />
+                </div>
+              ) : /\.(mp4|webm|ogg)(\?.*)?$/i.test(item.video_url) ? (
+                <div className="relative" style={{ paddingTop: '56.25%' }}>
+                  <video
+                    src={item.video_url}
+                    className="absolute inset-0 w-full h-full bg-black"
+                    controls
+                    controlsList="nodownload"
+                    playsInline
+                    title={item.titulo}
                   />
                 </div>
               ) : (
@@ -658,6 +730,7 @@ const ComiteVideoPage: React.FC<ComiteVideoPageProps> = ({
                     <ExternalLink className="w-4 h-4" />
                     Abrir Vídeo
                   </a>
+                  <p className="text-gray-600 text-xs mt-3">O vídeo será aberto no Microsoft Stream ou em uma nova aba</p>
                 </div>
               )
             ) : (
