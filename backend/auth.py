@@ -58,6 +58,7 @@ def check_global_auth():
         
     if os.environ.get('ENABLE_ENTRA_ID_AUTH', 'false').lower() == 'false':
         g.user_roles = ['administrador']
+        g.user_email = os.environ.get('MOCK_USER_EMAIL', 'admin@mock.local')
         return None
 
     auth_header = request.headers.get('Authorization')

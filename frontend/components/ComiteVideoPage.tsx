@@ -9,7 +9,7 @@ import {
   AlertCircle, Star, Users, ExternalLink
 } from 'lucide-react';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://antigravity-crm-two.vercel.app';
+
 
 // ─── Types for enriched data ───
 interface VotoHistorico {

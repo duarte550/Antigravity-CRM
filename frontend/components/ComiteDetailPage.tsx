@@ -9,7 +9,7 @@ import {
   CircleDot, CheckCircle2, Circle, Search, ExternalLink, CornerDownRight, Pencil
 } from 'lucide-react';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://antigravity-crm-two.vercel.app';
+
 
 // ─── Lightweight operation type for pauta selector ───
 interface PautaOperation {

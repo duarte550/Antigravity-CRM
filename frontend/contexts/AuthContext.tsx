@@ -4,6 +4,7 @@ import { useMsal, useIsAuthenticated } from '@azure/msal-react';
 import { InteractionStatus } from '@azure/msal-browser';
 import type { User, Role, CargoVoto } from '../types';
 import { loginRequest } from '../authConfig';
+import { API_BASE } from '../utils/api';
 
 // ─────────────────────────────────────────────────────────
 // Mock user presets (kept for dev/fallback mode)
@@ -150,7 +151,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // Small timeout to ensure index.tsx set active account
       const t = setTimeout(async () => {
         try {
-          const res = await fetch(`${import.meta.env.VITE_API_URL || 'https://antigravity-crm-two.vercel.app'}/api/auth/me`);
+          const headers: Record<string, string> = {};
+          const activeAccount = instance.getActiveAccount() || accounts[0];
+          if (activeAccount) {
+            try {
+              const tokenResponse = await instance.acquireTokenSilent({
+                ...loginRequest,
+                account: activeAccount,
+              });
+              if (tokenResponse.idToken) {
+                headers['Authorization'] = `Bearer ${tokenResponse.idToken}`;
+              }
+            } catch (tokenErr) {
+              console.warn('[Auth] Could not acquire token silently for /api/auth/me:', tokenErr);
+            }
+          }
+          const res = await fetch(`${API_BASE}/api/auth/me`, { headers });
           if (res.ok) {
             const data = await res.json();
             setDbUserRoles(mapTokenRoles(data.roles));
@@ -166,7 +182,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } else {
       setDbUserRoles(null);
     }
-  }, [isEntraIdEnabled, isMsalAuthenticated, accounts]);
+  }, [isEntraIdEnabled, isMsalAuthenticated, accounts, instance]);
 
   // ── Derive current user based on mode ──
   const currentUser = useMemo<User & { roles: Role[] }>(() => {

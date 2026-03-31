@@ -92,6 +92,17 @@ class DatabricksToSqliteMockCursor:
             """
             return insert_query, params[:3]
 
+        # Pattern para user_roles MERGE
+        if 'user_roles' in query:
+            insert_query = """
+                INSERT OR REPLACE INTO user_roles (email, roles, created_at, updated_at)
+                VALUES (?, ?, ?, ?)
+            """
+            # O MERGE recebe 3 params: (email, roles_json, now)
+            # Para INSERT OR REPLACE precisamos: (email, roles, created_at, updated_at)
+            email, roles_json, now = params[0], params[1], params[2]
+            return insert_query, (email, roles_json, now, now)
+
         # Fallback: tenta executar como está (vai falhar se não coberto)
         return query, params
 

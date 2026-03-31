@@ -32,13 +32,13 @@ import LoginPage from './components/LoginPage';
 import AdminPanel from './components/AdminPanel';
 import AppHeader from './components/AppHeader';
 import { useAuth } from './contexts/AuthContext';
-import { fetchApi, autoCreateComiteReviewItem } from './utils/api';
+import { fetchApi, autoCreateComiteReviewItem, API_BASE } from './utils/api';
 import { useSyncQueue } from './hooks/useSyncQueue';
 import { useNavigation } from './hooks/useNavigation';
 import { buildReviewUpdate } from './utils/reviewLogic';
 import type { ReviewSaveData } from './utils/reviewLogic';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://antigravity-crm-two.vercel.app';
+const API_BASE_URL = API_BASE;
 
 const App: React.FC = () => {
   const { isEntraIdEnabled, isMsalAuthenticated, isAuthenticating, isAdmin } = useAuth();

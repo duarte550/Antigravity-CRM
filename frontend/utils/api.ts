@@ -5,7 +5,7 @@ export const fetchApi = (url: RequestInfo | URL, init?: RequestInit): Promise<Re
   });
 };
 
-const API_BASE = import.meta.env.VITE_API_URL || 'https://antigravity-crm-two.vercel.app';
+export const API_BASE = import.meta.env.VITE_API_URL || 'https://antigravity-crm-two.vercel.app';
 
 /**
  * Dispara a criação automática de um item de revisão na pauta do próximo

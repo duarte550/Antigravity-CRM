@@ -1,8 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import { useMsal } from '@azure/msal-react';
+import { loginRequest } from '../authConfig';
 import { Role } from '../types';
 import { Select, Input } from './UI';
 import { UserCog, Loader2, Plus } from 'lucide-react';
+import { API_BASE } from '../utils/api';
 
 const ROLE_LABELS: Record<Role, string> = {
   administrador: 'Administrador',
@@ -23,16 +26,39 @@ interface DbUserRole {
 
 export const UserRolesAdmin: React.FC = () => {
   const { isEntraIdEnabled, isAdmin } = useAuth();
+  const { instance, accounts } = useMsal();
   const [users, setUsers] = useState<DbUserRole[]>([]);
   const [loading, setLoading] = useState(true);
   const [newEmail, setNewEmail] = useState('');
   const [newRole, setNewRole] = useState<Role>('comum');
   const [savingEmail, setSavingEmail] = useState<string | null>(null);
 
-  const fetchUsers = async () => {
+  const getAuthHeaders = useCallback(async (): Promise<Record<string, string>> => {
+    const headers: Record<string, string> = {};
+    const activeAccount = instance.getActiveAccount() || accounts[0];
+    if (activeAccount) {
+      try {
+        const tokenResponse = await instance.acquireTokenSilent({
+          ...loginRequest,
+          account: activeAccount,
+        });
+        if (tokenResponse.idToken) {
+          headers['Authorization'] = `Bearer ${tokenResponse.idToken}`;
+        }
+      } catch (err) {
+        console.warn('[UserRolesAdmin] Could not acquire token silently:', err);
+      }
+    }
+    return headers;
+  }, [instance, accounts]);
+
+  const fetchUsers = useCallback(async () => {
     try {
       setLoading(true);
-      const res = await fetch(`${import.meta.env.VITE_API_URL || 'https://antigravity-crm-two.vercel.app'}/api/user-roles`);
+      const authHeaders = await getAuthHeaders();
+      const res = await fetch(`${API_BASE}/api/user-roles`, {
+        headers: authHeaders,
+      });
       if (res.ok) {
         setUsers(await res.json());
       }
@@ -41,20 +67,21 @@ export const UserRolesAdmin: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [getAuthHeaders]);
 
   useEffect(() => {
     if (isEntraIdEnabled && isAdmin) {
       fetchUsers();
     }
-  }, [isEntraIdEnabled, isAdmin]);
+  }, [isEntraIdEnabled, isAdmin, fetchUsers]);
 
   const handleUpdateRole = async (email: string, roles: Role[]) => {
     try {
       setSavingEmail(email);
-      const res = await fetch(`${import.meta.env.VITE_API_URL || 'https://antigravity-crm-two.vercel.app'}/api/user-roles`, {
+      const authHeaders = await getAuthHeaders();
+      const res = await fetch(`${API_BASE}/api/user-roles`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders },
         body: JSON.stringify({ email, roles })
       });
       if (res.ok) {
