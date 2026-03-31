@@ -7,3 +7,6 @@ pandas==2.1.4
 gunicorn==22.0.0
 pytest==8.2.2
 pytest-mock==3.14.0
+PyJWT==2.8.0
+cryptography==42.0.5
+requests==2.32.3

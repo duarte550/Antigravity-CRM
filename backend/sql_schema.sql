@@ -244,7 +244,17 @@ CREATE TABLE IF NOT EXISTS cri_cra_dev.crm.fund_allocation_inputs (
     emission FLOAT,
     prepayment FLOAT,
     repurchases FLOAT,
-    new_repo FLOAT,
+    updated_at TIMESTAMP
+);
+
+-- ====================================================================
+-- Tabela: user_roles
+-- Armazena o mapeamento de roles (permissões RBAC) por e-mail, substituindo os App Roles da Azure
+-- ====================================================================
+CREATE TABLE IF NOT EXISTS cri_cra_dev.crm.user_roles (
+    email STRING PRIMARY KEY,
+    roles STRING NOT NULL, -- JSON list like '["administrador", "risco"]'
+    created_at TIMESTAMP,
     updated_at TIMESTAMP
 );
 

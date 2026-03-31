@@ -25,6 +25,29 @@ msalInstance.initialize().then(() => {
   msalInstance.handleRedirectPromise().catch(err => {
     console.error('[MSAL] Redirect error:', err);
   });
+
+  // Global Fetch Interceptor to inject MSAL Bearer Token
+  const originalFetch = window.fetch;
+  window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+    const activeAccount = msalInstance.getActiveAccount();
+    if (activeAccount) {
+      try {
+        const tokenResponse = await msalInstance.acquireTokenSilent({
+          scopes: ['openid', 'profile', 'email'],
+          account: activeAccount
+        });
+        
+        const headers = new Headers(init?.headers);
+        // Using idToken because it contains our custom App Roles
+        headers.set('Authorization', `Bearer ${tokenResponse.idToken}`);
+        
+        return originalFetch(input, { ...init, headers });
+      } catch (e) {
+        console.warn('[Fetch Interceptor] Token acquisition failed', e);
+      }
+    }
+    return originalFetch(input, init);
+  };
 });
 
 const rootElement = document.getElementById('root');

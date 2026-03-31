@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import { useAuth, MOCK_USERS } from '../contexts/AuthContext';
 import type { Role } from '../types';
 import { Select } from './UI';
+import { UserRolesAdmin } from './UserRolesAdmin';
 import { X, Shield, Users, ToggleLeft, ToggleRight, LogOut, Info, ChevronDown, ChevronUp } from 'lucide-react';
 
 // ─────────────────────────────────────────────────────────
@@ -172,6 +173,11 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
               </button>
             )}
           </div>
+
+          {/* ── Section 2.5: Databricks Role Management (only Entra ID + Admin) ── */}
+          {isEntraIdEnabled && isAdmin && (
+            <UserRolesAdmin />
+          )}
 
           {/* ── Section 3: Mock Mode Controls (collapsible, only when Mock is active) ── */}
           <div className="rounded-xl bg-gray-800/50 border border-gray-700/40 overflow-hidden">

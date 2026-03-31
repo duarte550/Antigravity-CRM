@@ -16,10 +16,16 @@ from master_groups import master_groups_bp
 from economic_groups import economic_groups_bp
 from fund_simulator import fund_simulator_bp
 from comite import comite_bp
+from auth import check_global_auth
 
 # Configurações básicas de logging
 # Serve static files from 'dist' folder in production
 app = Flask(__name__, static_folder='../dist', static_url_path='')
+
+@app.before_request
+def enforce_global_api_auth():
+    return check_global_auth()
+
 app.register_blueprint(master_groups_bp)
 app.register_blueprint(economic_groups_bp)
 app.register_blueprint(fund_simulator_bp)
@@ -99,6 +105,69 @@ def generate_diff_details(old_data: dict, new_data: dict, fields_to_compare: dic
 
 
 # ================== Rotas da API ==================
+# ================== Auth / RBAC Endpoints ==================
+@app.route('/api/auth/me', methods=['GET'])
+def get_current_user_roles():
+    """Retorna os papéis do usuário logado baseando-se no contexto injetado pelo before_request."""
+    import flask
+    user_roles = getattr(flask.g, 'user_roles', ['comum'])
+    user_email = getattr(flask.g, 'user_email', 'unknown')
+    return jsonify({
+        'email': user_email,
+        'roles': user_roles
+    })
+
+@app.route('/api/user-roles', methods=['GET', 'POST', 'PUT'])
+def manage_user_roles():
+    """Gerencia as permissões dos usuários via banco de dados. Apenas admins."""
+    import flask
+    user_roles = getattr(flask.g, 'user_roles', [])
+    if 'administrador' not in user_roles:
+        return jsonify({'error': 'Forbidden: Admin access required'}), 403
+
+    conn = db.get_db_connection()
+    try:
+        with conn.cursor() as cursor:
+            if request.method == 'GET':
+                cursor.execute("SELECT email, roles, updated_at FROM cri_cra_dev.crm.user_roles ORDER BY email")
+                users = []
+                for row in cursor.fetchall():
+                    users.append({
+                        "email": row.email,
+                        "roles": json.loads(row.roles),
+                        "updated_at": safe_isoformat(getattr(row, 'updated_at', None))
+                    })
+                return jsonify(users)
+
+            elif request.method in ['POST', 'PUT']:
+                data = request.json
+                email = data.get('email', '').strip().lower()
+                roles = data.get('roles', ['comum'])
+                
+                if not email:
+                    return jsonify({'error': 'Email is required'}), 400
+
+                now = datetime.now()
+                # Upsert using MERGE
+                cursor.execute("""
+                    MERGE INTO cri_cra_dev.crm.user_roles AS target
+                    USING (SELECT ? AS email, ? AS roles, ? AS updated_at) AS source
+                    ON target.email = source.email
+                    WHEN MATCHED THEN UPDATE SET roles = source.roles, updated_at = source.updated_at
+                    WHEN NOT MATCHED THEN INSERT (email, roles, created_at, updated_at) VALUES (source.email, source.roles, source.updated_at, source.updated_at)
+                """, (email, json.dumps(roles), now))
+                
+                admin_email = getattr(flask.g, 'user_email', 'System')
+                log_action(cursor, admin_email, 'UPDATE_ROLES', 'UserRole', email, f"Roles de {email} atualizados para {roles}.")
+                
+                conn.commit()
+                return jsonify({'status': 'success', 'email': email, 'roles': roles})
+    except Exception as e:
+        app.logger.error(f"Error managing user roles: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if conn: conn.close()
+
 @app.route('/api/analysts', methods=['GET'])
 def get_analysts():
     conn = db.get_db_connection()

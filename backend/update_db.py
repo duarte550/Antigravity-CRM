@@ -252,6 +252,12 @@ SCHEMA = {
         "new_repo FLOAT",
         "simulated_ops_overrides STRING",
         "updated_at TIMESTAMP"
+    ],
+    "cri_cra_dev.crm.user_roles": [
+        "email STRING PRIMARY KEY",
+        "roles STRING NOT NULL",
+        "created_at TIMESTAMP",
+        "updated_at TIMESTAMP"
     ]
 }
 

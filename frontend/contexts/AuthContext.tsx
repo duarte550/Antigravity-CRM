@@ -130,7 +130,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!import.meta.env.VITE_ENTRA_CLIENT_ID) return false;
     const saved = localStorage.getItem('entra_id_enabled');
     if (saved !== null) return JSON.parse(saved);
-    return false; // Default to Mock mode — admin enables Entra ID explicitly
+    return true; // Default to Entra ID mode if configured
   });
 
   // ── Mock state (for when Entra ID is disabled) ──
@@ -142,6 +142,32 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return { ...MOCK_USERS.administrador };
   });
 
+  // ── Fetch internal DB Roles ──
+  const [dbUserRoles, setDbUserRoles] = useState<Role[] | null>(null);
+
+  useEffect(() => {
+    if (isEntraIdEnabled && isMsalAuthenticated && accounts.length > 0) {
+      // Small timeout to ensure index.tsx set active account
+      const t = setTimeout(async () => {
+        try {
+          const res = await fetch(`${import.meta.env.VITE_API_URL || 'https://antigravity-crm-two.vercel.app'}/api/auth/me`);
+          if (res.ok) {
+            const data = await res.json();
+            setDbUserRoles(mapTokenRoles(data.roles));
+          } else {
+            setDbUserRoles(['comum']);
+          }
+        } catch (err) {
+          console.error('[Auth] Failed to fetch DB roles:', err);
+          setDbUserRoles(['comum']);
+        }
+      }, 50);
+      return () => clearTimeout(t);
+    } else {
+      setDbUserRoles(null);
+    }
+  }, [isEntraIdEnabled, isMsalAuthenticated, accounts]);
+
   // ── Derive current user based on mode ──
   const currentUser = useMemo<User & { roles: Role[] }>(() => {
     if (!isEntraIdEnabled) {
@@ -151,15 +177,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // Entra ID mode: extract user from MSAL account
     if (isMsalAuthenticated && accounts.length > 0) {
       const account = accounts[0];
-      const claims = account.idTokenClaims as Record<string, any> | undefined;
-      const tokenRoles = claims?.roles as string[] | undefined;
-      const roles = mapTokenRoles(tokenRoles);
-
       return {
         id: account.localAccountId ? parseInt(account.localAccountId.replace(/\D/g, '').slice(0, 8) || '0', 10) : 0,
         nome: account.name || account.username || 'Usuário Microsoft',
         email: account.username || '',
-        roles,
+        roles: dbUserRoles || ['comum'],
       };
     }
 
@@ -170,7 +192,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       email: '',
       roles: ['comum'],
     };
-  }, [isEntraIdEnabled, mockUser, isMsalAuthenticated, accounts]);
+  }, [isEntraIdEnabled, mockUser, isMsalAuthenticated, accounts, dbUserRoles]);
 
   // ── Mock profile management ──
   const setActiveProfile = useCallback((profileKey: string) => {
@@ -221,7 +243,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return currentUser.roles.length === 1 && currentUser.roles[0] === 'comum';
   }, [currentUser.roles, isAdmin]);
 
-  const isAuthenticating = inProgress !== InteractionStatus.None;
+  const isAuthenticating = inProgress !== InteractionStatus.None || (isEntraIdEnabled && isMsalAuthenticated && dbUserRoles === null);
 
   // ── Login / Logout ──
   const login = useCallback(() => {
