@@ -53,10 +53,21 @@ const App: React.FC = () => {
     'risks', 'litigationComments', 'taskExceptions',
   ]);
 
+  // Campos de array que são removidos na serialização slim.
+  // Ao carregar, precisam ser restaurados como [] para evitar
+  // TypeError nas páginas que fazem op.tasks.forEach(...) etc.
+  const SLIM_ARRAY_DEFAULTS: Record<string, any[]> = {
+    events: [], taskRules: [], ratingHistory: [], contacts: [],
+    tasks: [], risks: [], litigationComments: [], taskExceptions: [],
+  };
+
   const loadSlimCache = (): Operation[] => {
     try {
       const raw = localStorage.getItem(SLIM_CACHE_KEY);
-      return raw ? JSON.parse(raw) : [];
+      if (!raw) return [];
+      const parsed: any[] = JSON.parse(raw);
+      // Restaura os campos de array excluídos como [] para compatibilidade com componentes
+      return parsed.map(op => ({ ...SLIM_ARRAY_DEFAULTS, ...op })) as Operation[];
     } catch { return []; }
   };
 
