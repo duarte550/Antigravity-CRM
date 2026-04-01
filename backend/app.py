@@ -450,6 +450,112 @@ def watchlist_update_operation(op_id):
         if conn: conn.close()
 
 
+@app.route('/api/operations/<int:op_id>/sync-events', methods=['POST'])
+def sync_operation_events(op_id):
+    """
+    Endpoint dedicado para sincronizar APENAS os eventos de uma operação.
+    Executa 2-3 queries no Databricks ao invés das 20+ do bulk-update,
+    evitando timeout em eventos com texto longo (descrição, próximos passos, etc).
+    """
+    conn = db.get_db_connection()
+    try:
+        data = request.get_json(force=True, silent=True) or {}
+        events_payload = data.get('events', [])
+        user_name = data.get('responsibleAnalyst', 'System')
+
+        with conn.cursor() as cursor:
+            # 1. Carrega os eventos atuais do banco para esta operação
+            cursor.execute(
+                "SELECT * FROM cri_cra_dev.crm.events WHERE operation_id = ?", (op_id,)
+            )
+            db_events = {row.id: format_row(row, cursor) for row in cursor.fetchall()}
+            db_event_ids = set(db_events.keys())
+
+            created, updated, deleted = 0, 0, 0
+
+            for event in events_payload:
+                event_id_str = str(event.get('id', ''))
+                is_existing = event_id_str.isdigit() and int(event_id_str) in db_event_ids
+
+                # Deleção explícita
+                if event.get('deleted'):
+                    if is_existing:
+                        cursor.execute(
+                            "DELETE FROM cri_cra_dev.crm.events WHERE id = ?",
+                            (int(event_id_str),)
+                        )
+                        log_action(cursor, user_name, 'DELETE', 'Event', event_id_str,
+                                   f"Evento '{event.get('title')}' deletado via sync-events.")
+                        deleted += 1
+                    continue
+
+                if not is_existing:
+                    # Novo evento
+                    new_id = get_next_unique_id(cursor, 'events')
+                    cursor.execute(
+                        """INSERT INTO cri_cra_dev.crm.events
+                           (id, operation_id, date, type, title, description, registered_by,
+                            next_steps, completed_task_id, attention_points,
+                            our_attendees, operation_attendees)
+                           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                        (
+                            new_id, op_id,
+                            event.get('date'), event.get('type'), event.get('title'),
+                            event.get('description'), event.get('registeredBy'),
+                            event.get('nextSteps'), event.get('completedTaskId'),
+                            event.get('attentionPoints'), event.get('ourAttendees'),
+                            event.get('operationAttendees'),
+                        )
+                    )
+                    log_action(cursor, event.get('registeredBy', user_name), 'CREATE', 'Event',
+                               new_id, f"Evento '{event.get('title')}' criado via sync-events.")
+                    created += 1
+                else:
+                    # Evento existente — atualiza apenas se mudou
+                    old = db_events[int(event_id_str)]
+                    def norm(v): return str(v).strip() if v is not None else ""
+                    def norm_date(v): return str(v)[:10] if v is not None else ""
+
+                    changed = (
+                        norm_date(event.get('date')) != norm_date(old.get('date')) or
+                        norm(event.get('type'))        != norm(old.get('type')) or
+                        norm(event.get('title'))       != norm(old.get('title')) or
+                        norm(event.get('description')) != norm(old.get('description')) or
+                        norm(event.get('nextSteps'))   != norm(old.get('next_steps')) or
+                        norm(event.get('attentionPoints')) != norm(old.get('attention_points')) or
+                        norm(event.get('ourAttendees'))    != norm(old.get('our_attendees')) or
+                        norm(event.get('operationAttendees')) != norm(old.get('operation_attendees'))
+                    )
+                    if changed:
+                        cursor.execute(
+                            """UPDATE cri_cra_dev.crm.events
+                               SET date=?, type=?, title=?, description=?, registered_by=?,
+                                   next_steps=?, completed_task_id=?, attention_points=?,
+                                   our_attendees=?, operation_attendees=?
+                               WHERE id=?""",
+                            (
+                                event.get('date'), event.get('type'), event.get('title'),
+                                event.get('description'), event.get('registeredBy'),
+                                event.get('nextSteps'), event.get('completedTaskId'),
+                                event.get('attentionPoints'), event.get('ourAttendees'),
+                                event.get('operationAttendees'), int(event_id_str),
+                            )
+                        )
+                        log_action(cursor, event.get('registeredBy', user_name), 'UPDATE', 'Event',
+                                   event_id_str, f"Evento '{event.get('title')}' atualizado via sync-events.")
+                        updated += 1
+
+        conn.commit()
+        app.logger.info(f"[sync-events] op {op_id}: +{created} criados, ~{updated} atualizados, -{deleted} deletados.")
+        return jsonify({'status': 'ok', 'created': created, 'updated': updated, 'deleted': deleted}), 200
+
+    except Exception as e:
+        app.logger.error(f"Error in sync-events for op {op_id}: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if conn: conn.close()
+
+
 @app.route('/api/operations/bulk-update', methods=['POST'])
 def bulk_update_operations():
     conn = db.get_db_connection()

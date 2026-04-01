@@ -13,7 +13,7 @@ const MAX_RETRIES_PER_OP = 4;
 const DEBOUNCE_MS = 1500;
 
 /** Per-request network timeout. Protects against slow Databricks queries. */
-const REQUEST_TIMEOUT_MS = 25_000;
+const REQUEST_TIMEOUT_MS = 60_000;
 
 /** Exponential backoff base: attempt 0 → 5s, 1 → 15s, 2 → 45s, 3 → 135s */
 const BACKOFF_BASE_MS = 5_000;
@@ -91,15 +91,45 @@ function requiresFullSync(op: Operation): boolean {
   const raw = localStorage.getItem(`op_snapshot_${op.id}`);
   if (!raw) return true;
   try {
-    const snapshot = JSON.parse(raw) as Operation;
+    const snapshot = JSON.parse(raw) as Record<string, any>;
     for (const field of FULL_SYNC_FIELDS) {
-      if (JSON.stringify((snapshot as any)[field] ?? null) !== JSON.stringify((op as any)[field] ?? null))
+      if (JSON.stringify(snapshot[field] ?? null) !== JSON.stringify((op as any)[field] ?? null))
         return true;
     }
     return false;
   } catch {
     return true;
   }
+}
+
+/**
+ * Retorna true se APENAS os eventos mudaram (outros full-sync fields intactos).
+ * Nesses casos, usa /sync-events ao invés do bulk-update completo.
+ */
+function requiresEventsOnlySync(op: Operation): boolean {
+  const raw = localStorage.getItem(`op_snapshot_${op.id}`);
+  if (!raw) return false;
+  try {
+    const snapshot = JSON.parse(raw) as Record<string, any>;
+    const eventsChanged =
+      JSON.stringify(snapshot['events'] ?? null) !== JSON.stringify((op as any)['events'] ?? null);
+    if (!eventsChanged) return false;
+    // Verifica se algum outro campo full-sync mudou além de events
+    const otherFullSyncFields = FULL_SYNC_FIELDS.filter(f => f !== 'events');
+    const otherChanged = otherFullSyncFields.some(
+      field => JSON.stringify(snapshot[field] ?? null) !== JSON.stringify((op as any)[field] ?? null)
+    );
+    return !otherChanged;
+  } catch {
+    return false;
+  }
+}
+
+function buildEventsPayload(op: Operation): Record<string, any> {
+  return {
+    responsibleAnalyst: op.responsibleAnalyst,
+    events: (op as any).events ?? [],
+  };
 }
 
 function buildPatchPayload(op: Operation): Record<string, any> {
@@ -287,18 +317,30 @@ export function useSyncQueue(
       for (const op of operationsToSync) {
         const retries = retryCounts.current.get(op.id) ?? 0;
 
-        const useFullSync = requiresFullSync(op);
-        const url = useFullSync
-          ? `${apiBaseUrl}/api/operations/bulk-update`
-          : `${apiBaseUrl}/api/operations/${op.id}/patch`;
+        const eventsOnly = requiresEventsOnlySync(op);
+        const useFullSync = !eventsOnly && requiresFullSync(op);
 
-        console.log(`[SyncQueue] Op ${op.id} (attempt ${retries + 1}/${MAX_RETRIES_PER_OP}): ${useFullSync ? 'full' : 'patch'}`);
+        let url: string;
+        let body: string;
+
+        if (eventsOnly) {
+          // Caminho rápido: só eventos mudaram → 2-3 queries no Databricks
+          url = `${apiBaseUrl}/api/operations/${op.id}/sync-events`;
+          body = JSON.stringify(buildEventsPayload(op));
+          console.log(`[SyncQueue] Op ${op.id} (attempt ${retries + 1}/${MAX_RETRIES_PER_OP}): events-only`);
+        } else if (useFullSync) {
+          // Caminho completo: múltiplos campos mudaram
+          url = `${apiBaseUrl}/api/operations/bulk-update`;
+          body = JSON.stringify({ operations: [op] });
+          console.log(`[SyncQueue] Op ${op.id} (attempt ${retries + 1}/${MAX_RETRIES_PER_OP}): full`);
+        } else {
+          // Caminho leve: só campos escalares mudaram
+          url = `${apiBaseUrl}/api/operations/${op.id}/patch`;
+          body = JSON.stringify(buildPatchPayload(op));
+          console.log(`[SyncQueue] Op ${op.id} (attempt ${retries + 1}/${MAX_RETRIES_PER_OP}): patch`);
+        }
 
         try {
-          const body = useFullSync
-            ? JSON.stringify({ operations: [op] })
-            : JSON.stringify(buildPatchPayload(op));
-
           const response = await fetchWithTimeout(url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },

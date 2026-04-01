@@ -308,6 +308,251 @@ class TestBulkUpdate:
 
 
 # ============================================================
+# 3b. SYNC-EVENTS  (endpoint dedicado para sincronização de eventos)
+# ============================================================
+
+class TestSyncEvents:
+    """Testa o endpoint /api/operations/<id>/sync-events."""
+
+    _OP_BASE = {
+        'area': 'CRI', 'operationType': 'CRI', 'maturityDate': '2030-01-01',
+        'responsibleAnalyst': 'System', 'reviewFrequency': 'Mensal',
+        'callFrequency': 'Mensal', 'dfFrequency': 'Mensal',
+        'segmento': 'Teste', 'ratingOperation': 'A4',
+        'ratingGroup': 'A4', 'watchlist': 'Verde',
+        'covenants': {}, 'defaultMonitoring': {},
+    }
+
+    @pytest.fixture(autouse=True)
+    def _setup(self, client):
+        res = client.post('/api/master-groups', json={
+            'name': 'MG_SYNC_EVT', 'sector': 'Teste', 'rating': 'A4'
+        })
+        self.mg = json.loads(res.data)
+        res = client.post('/api/operations', json={
+            'name': 'OP_SYNC_EVT', **self._OP_BASE,
+            'masterGroupId': self.mg['id'],
+        })
+        self.op = json.loads(res.data)
+        self.op_id = self.op['id']
+        yield
+        try:
+            client.delete(f"/api/operations/{self.op_id}")
+        except Exception:
+            pass
+        client.delete(f"/api/master-groups/{self.mg['id']}")
+
+    def test_create_event_via_sync_events(self, client):
+        """Criar um novo evento via sync-events retorna 200 com created=1."""
+        res = client.post(f'/api/operations/{self.op_id}/sync-events', json={
+            'responsibleAnalyst': 'Analista',
+            'events': [{
+                'id': 'temp-999',
+                'date': '2025-06-01',
+                'type': 'Reunião',
+                'title': 'Evento sync-events teste',
+                'description': 'Descrição do evento via sync-events.',
+                'registeredBy': 'Analista',
+                'nextSteps': 'Acompanhar',
+            }]
+        })
+        assert res.status_code == 200, f"sync-events falhou: {res.data}"
+        data = json.loads(res.data)
+        assert data['status'] == 'ok'
+        assert data['created'] == 1
+        assert data['updated'] == 0
+        assert data['deleted'] == 0
+
+    def test_create_event_with_long_text(self, client):
+        """Evento com descrição e próximos passos longos (duas páginas ~4000 chars) deve ser aceito."""
+        long_description = "A" * 3000
+        long_next_steps = "B" * 1500
+        res = client.post(f'/api/operations/{self.op_id}/sync-events', json={
+            'responsibleAnalyst': 'Analista',
+            'events': [{
+                'id': 'temp-long-1',
+                'date': '2025-07-15',
+                'type': 'Revisão Periódica',
+                'title': 'Evento com texto longo',
+                'description': long_description,
+                'registeredBy': 'Analista',
+                'nextSteps': long_next_steps,
+            }]
+        })
+        assert res.status_code == 200, f"Evento com texto longo falhou: {res.data}"
+        data = json.loads(res.data)
+        assert data['created'] == 1
+
+    def test_update_existing_event(self, client):
+        """Atualizar um evento existente detecta a mudança e retorna updated=1."""
+        # Primeiro cria via sync-events
+        res = client.post(f'/api/operations/{self.op_id}/sync-events', json={
+            'responsibleAnalyst': 'Analista',
+            'events': [{
+                'id': 'temp-upd',
+                'date': '2025-08-01',
+                'type': 'Call',
+                'title': 'Evento para atualizar',
+                'description': 'Texto original',
+                'registeredBy': 'Analista',
+            }]
+        })
+        assert res.status_code == 200
+        # Busca o id real do evento criado
+        op_data = json.loads(client.get(f'/api/operations/{self.op_id}').data)
+        events = op_data.get('events', [])
+        created_event = next((e for e in events if e['title'] == 'Evento para atualizar'), None)
+        assert created_event is not None, "Evento criado não encontrado na operação"
+
+        # Agora atualiza com texto diferente
+        res = client.post(f'/api/operations/{self.op_id}/sync-events', json={
+            'responsibleAnalyst': 'Analista',
+            'events': [{
+                'id': created_event['id'],
+                'date': '2025-08-01',
+                'type': 'Call',
+                'title': 'Evento para atualizar',
+                'description': 'Texto ALTERADO',
+                'registeredBy': 'Analista',
+            }]
+        })
+        assert res.status_code == 200
+        data = json.loads(res.data)
+        assert data['updated'] == 1
+        assert data['created'] == 0
+
+    def test_no_change_event_not_counted_as_updated(self, client):
+        """Reenviando mesmo evento sem mudanças, updated deve ser 0."""
+        # Cria o evento
+        client.post(f'/api/operations/{self.op_id}/sync-events', json={
+            'responsibleAnalyst': 'Analista',
+            'events': [{'id': 'temp-nochange', 'date': '2025-09-01', 'type': 'Call',
+                        'title': 'Sem Mudança', 'description': 'Igual', 'registeredBy': 'Analista'}]
+        })
+        op_data = json.loads(client.get(f'/api/operations/{self.op_id}').data)
+        evt = next((e for e in op_data.get('events', []) if e['title'] == 'Sem Mudança'), None)
+        assert evt is not None
+
+        # Re-envia idêntico
+        res = client.post(f'/api/operations/{self.op_id}/sync-events', json={
+            'responsibleAnalyst': 'Analista',
+            'events': [{'id': evt['id'], 'date': '2025-09-01', 'type': 'Call',
+                        'title': 'Sem Mudança', 'description': 'Igual', 'registeredBy': 'Analista'}]
+        })
+        assert res.status_code == 200
+        data = json.loads(res.data)
+        assert data['updated'] == 0
+
+    def test_delete_event_via_sync_events(self, client):
+        """Evento marcado com deleted=True deve ser removido do banco."""
+        # Cria
+        client.post(f'/api/operations/{self.op_id}/sync-events', json={
+            'responsibleAnalyst': 'Analista',
+            'events': [{'id': 'temp-del', 'date': '2025-10-01', 'type': 'Reunião',
+                        'title': 'Evento para deletar', 'description': 'X', 'registeredBy': 'Analista'}]
+        })
+        op_data = json.loads(client.get(f'/api/operations/{self.op_id}').data)
+        evt = next((e for e in op_data.get('events', []) if e['title'] == 'Evento para deletar'), None)
+        assert evt is not None
+
+        # Deleta
+        res = client.post(f'/api/operations/{self.op_id}/sync-events', json={
+            'responsibleAnalyst': 'Analista',
+            'events': [{'id': evt['id'], 'deleted': True, 'title': 'Evento para deletar'}]
+        })
+        assert res.status_code == 200
+        data = json.loads(res.data)
+        assert data['deleted'] == 1
+
+        # Verifica que sumiu
+        op_data = json.loads(client.get(f'/api/operations/{self.op_id}').data)
+        remaining = [e for e in op_data.get('events', []) if e['title'] == 'Evento para deletar']
+        assert len(remaining) == 0
+
+    def test_sync_events_empty_payload(self, client):
+        """Payload de events vazio é aceito com zero criados/atualizados/deletados."""
+        res = client.post(f'/api/operations/{self.op_id}/sync-events', json={
+            'responsibleAnalyst': 'Analista', 'events': []
+        })
+        assert res.status_code == 200
+        data = json.loads(res.data)
+        assert data['created'] == 0
+        assert data['updated'] == 0
+        assert data['deleted'] == 0
+
+
+# ============================================================
+# 3c. PATCH OPERATION (campo-a-campo sem pipeline completo)
+# ============================================================
+
+class TestPatchOperation:
+    """Testa o endpoint /api/operations/<id>/patch."""
+
+    @pytest.fixture(autouse=True)
+    def _setup(self, client):
+        res = client.post('/api/master-groups', json={
+            'name': 'MG_PATCH', 'sector': 'Teste', 'rating': 'A4'
+        })
+        self.mg = json.loads(res.data)
+        res = client.post('/api/operations', json={
+            'name': 'OP_PATCH', 'area': 'CRI', 'operationType': 'CRI',
+            'maturityDate': '2030-01-01', 'responsibleAnalyst': 'System',
+            'reviewFrequency': 'Mensal', 'callFrequency': 'Mensal', 'dfFrequency': 'Mensal',
+            'segmento': 'Teste', 'ratingOperation': 'A4', 'ratingGroup': 'A4',
+            'watchlist': 'Verde', 'covenants': {}, 'defaultMonitoring': {},
+            'masterGroupId': self.mg['id'],
+        })
+        self.op = json.loads(res.data)
+        self.op_id = self.op['id']
+        yield
+        try:
+            client.delete(f"/api/operations/{self.op_id}")
+        except Exception:
+            pass
+        client.delete(f"/api/master-groups/{self.mg['id']}")
+
+    def test_patch_watchlist(self, client):
+        res = client.post(f'/api/operations/{self.op_id}/patch', json={
+            'watchlist': 'Amarelo', 'responsibleAnalyst': 'Analista'
+        })
+        assert res.status_code == 200
+        data = json.loads(res.data)
+        assert data['status'] == 'ok'
+        assert 'watchlist' in data['updated']
+
+    def test_patch_status(self, client):
+        res = client.post(f'/api/operations/{self.op_id}/patch', json={
+            'status': 'Legado', 'responsibleAnalyst': 'System'
+        })
+        assert res.status_code == 200
+        data = json.loads(res.data)
+        assert 'status' in data['updated']
+
+    def test_patch_multiple_fields(self, client):
+        res = client.post(f'/api/operations/{self.op_id}/patch', json={
+            'watchlist': 'Verde',
+            'ratingOperation': 'B1',
+            'responsibleAnalyst': 'Analista Novo',
+        })
+        assert res.status_code == 200
+        data = json.loads(res.data)
+        assert 'watchlist' in data['updated']
+        assert 'rating_operation' in data['updated']
+
+    def test_patch_empty_body_returns_400(self, client):
+        res = client.post(f'/api/operations/{self.op_id}/patch', json={})
+        assert res.status_code == 400
+
+    def test_patch_unmapped_field_is_noop(self, client):
+        """Campos não mapeados (ex: events) não devem causar erro — retorna noop."""
+        res = client.post(f'/api/operations/{self.op_id}/patch', json={
+            'events': [{'title': 'Não mapeado'}]
+        })
+        # Deve retornar 200 noop ou 400, mas nunca 500
+        assert res.status_code in (200, 400)
+
+
+# ============================================================
 # 4. TASKS
 # ============================================================
 
