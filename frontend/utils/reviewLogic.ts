@@ -23,6 +23,7 @@ export interface ReviewSaveData {
   event: Omit<Event, 'id'>;
   ratingOp: Rating;
   ratingGroup: Rating;
+  ratingMasterGroup?: Rating;  // opcional — nem todos os formulários expõem esse campo
   sentiment: Sentiment;
   videoUrl?: string;
 }
@@ -77,6 +78,7 @@ export function buildReviewUpdate(
     date: actualCompletionDate,
     ratingOperation: data.ratingOp,
     ratingGroup: data.ratingGroup,
+    ratingMasterGroup: data.ratingMasterGroup,
     watchlist: operation.watchlist,
     sentiment: data.sentiment,
     eventId: eventToAdd.id,
@@ -86,6 +88,7 @@ export function buildReviewUpdate(
     ...operation,
     ratingOperation: data.ratingOp,
     ratingGroup: data.ratingGroup,
+    ...(data.ratingMasterGroup ? { ratingMasterGroup: data.ratingMasterGroup } : {}),
     events: [...operation.events, eventToAdd],
     ratingHistory: [...operation.ratingHistory, newHistoryEntry],
     taskRules: updatedRules,

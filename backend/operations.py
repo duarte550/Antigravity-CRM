@@ -465,7 +465,8 @@ def save_operation(cursor, op_id: int, data: dict, user_name: str = 'System') ->
                 log_action(cursor, event.get('registeredBy'), 'UPDATE', 'Event', event_id, f"Evento '{event.get('title')}' atualizado.")
 
     for rh in data.get('ratingHistory', []):
-        if rh.get('id') not in db_rh_ids:
+        # Normaliza o id do cliente para string (JSON retorna int, db_rh_idsé set[str])
+        if str(rh.get('id', '')) not in db_rh_ids:
             client_event_id = rh.get('eventId')
             db_event_id_for_rh = client_event_id_to_db_id_map.get(str(client_event_id), client_event_id)
             rh_id = get_next_unique_id(cursor, 'rating_history')
@@ -499,20 +500,22 @@ def save_operation(cursor, op_id: int, data: dict, user_name: str = 'System') ->
             })
 
     cursor.execute("SELECT id, name FROM cri_cra_dev.crm.task_rules WHERE operation_id = ?", (op_id,))
-    db_rules_map = {row.id: row.name for row in cursor.fetchall()}
-    client_rule_ids = {r['id'] for r in data.get('taskRules', []) if 'id' in r and isinstance(r['id'], int)}
+    # Normaliza chaves para string — mesmo padrão dos eventos
+    db_rules_map = {str(row.id): row.name for row in cursor.fetchall()}
+    client_rule_ids = {str(r['id']) for r in data.get('taskRules', []) if 'id' in r and r['id'] is not None}
 
     for rule_id_to_delete in set(db_rules_map.keys()) - client_rule_ids:
-        cursor.execute("DELETE FROM cri_cra_dev.crm.task_rules WHERE id = ?", (rule_id_to_delete,))
+        cursor.execute("DELETE FROM cri_cra_dev.crm.task_rules WHERE id = ?", (int(rule_id_to_delete),))
         log_action(cursor, data.get('responsibleAnalyst', user_name), 'DELETE', 'TaskRule', rule_id_to_delete, f"Regra '{db_rules_map[rule_id_to_delete]}' deletada.")
 
     for rule in data.get('taskRules', []):
         rule_id = rule.get('id')
+        rule_id_str = str(rule_id) if rule_id is not None else None
         assignees_json = json.dumps(rule.get('assignees', [])) if rule.get('assignees') else None
-        if rule_id and rule_id in db_rules_map:
-            cursor.execute("UPDATE cri_cra_dev.crm.task_rules SET name=?, frequency=?, start_date=?, end_date=?, description=?, priority=?, assignees=? WHERE id=?", (rule.get('name'), rule.get('frequency'), rule.get('startDate'), rule.get('endDate'), rule.get('description'), rule.get('priority') or 'Média', assignees_json, rule_id))
-            _sync_checklist_items(cursor, rule_id, rule.get('checklistItems', []))
-        elif not rule_id or rule_id not in db_rules_map:
+        if rule_id_str and rule_id_str in db_rules_map:
+            cursor.execute("UPDATE cri_cra_dev.crm.task_rules SET name=?, frequency=?, start_date=?, end_date=?, description=?, priority=?, assignees=? WHERE id=?", (rule.get('name'), rule.get('frequency'), rule.get('startDate'), rule.get('endDate'), rule.get('description'), rule.get('priority') or 'Média', assignees_json, int(rule_id_str)))
+            _sync_checklist_items(cursor, int(rule_id_str), rule.get('checklistItems', []))
+        else:
             new_rule_id = get_next_unique_id(cursor, 'task_rules')
             cursor.execute("INSERT INTO cri_cra_dev.crm.task_rules (id, operation_id, name, frequency, start_date, end_date, description, priority, assignees) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", (new_rule_id, op_id, rule.get('name'), rule.get('frequency'), rule.get('startDate'), rule.get('endDate'), rule.get('description'), rule.get('priority') or 'Média', assignees_json))
             log_action(cursor, data.get('responsibleAnalyst', user_name), 'CREATE', 'TaskRule', 'new', f"Regra '{rule.get('name')}' adicionada.")

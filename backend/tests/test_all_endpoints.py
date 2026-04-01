@@ -663,10 +663,250 @@ class TestOperationReviewNotes:
 
 
 # ============================================================
+# 6b. ANTI-DUPLICATION (regressão para bug de comparação int vs str)
+# ============================================================
+
+class TestNoDuplication:
+    """
+    Garante que nenhum endpoint duplica dados ao ser chamado múltiplas vezes
+    com os mesmos IDs. Cobre o bug de comparação int vs str no driver ODBC
+    (Databricks retorna row.id como int, mas o JSON envia como int também,
+    e str(100) in {100, 200} == False em Python).
+    """
+
+    _OP_BASE = {
+        'area': 'CRI', 'operationType': 'CRI', 'maturityDate': '2030-01-01',
+        'responsibleAnalyst': 'System', 'reviewFrequency': 'Mensal',
+        'callFrequency': 'Mensal', 'dfFrequency': 'Mensal',
+        'segmento': 'Teste', 'ratingOperation': 'A4',
+        'ratingGroup': 'A4', 'watchlist': 'Verde',
+        'covenants': {}, 'defaultMonitoring': {},
+    }
+
+    @pytest.fixture(autouse=True)
+    def _setup(self, client):
+        res = client.post('/api/master-groups', json={
+            'name': 'MG_NODUP', 'sector': 'Teste', 'rating': 'A4'
+        })
+        self.mg = json.loads(res.data)
+        res = client.post('/api/operations', json={
+            'name': 'OP_NODUP', **self._OP_BASE,
+            'masterGroupId': self.mg['id'],
+        })
+        self.op = json.loads(res.data)
+        self.op_id = self.op['id']
+        yield
+        try:
+            client.delete(f"/api/operations/{self.op_id}")
+        except Exception:
+            pass
+        client.delete(f"/api/master-groups/{self.mg['id']}")
+
+    # ── EVENTOS via sync-events ──────────────────────────────
+
+    def test_sync_events_idempotent_no_duplicate(self, client):
+        """Chamar sync-events duas vezes com o mesmo evento não duplica."""
+        # Primeira chamada — cria o evento
+        client.post(f'/api/operations/{self.op_id}/sync-events', json={
+            'responsibleAnalyst': 'Analista',
+            'events': [{'id': 'temp-1', 'date': '2025-06-01', 'type': 'Call',
+                        'title': 'Evento Idempotente', 'description': 'X', 'registeredBy': 'Analista'}]
+        })
+        op_data = json.loads(client.get(f'/api/operations/{self.op_id}').data)
+        events_after_first = [e for e in op_data.get('events', []) if e['title'] == 'Evento Idempotente']
+        assert len(events_after_first) == 1, "Evento deve existir após a primeira chamada"
+        real_id = events_after_first[0]['id']
+
+        # Segunda chamada com o ID real do banco
+        res = client.post(f'/api/operations/{self.op_id}/sync-events', json={
+            'responsibleAnalyst': 'Analista',
+            'events': [{'id': real_id, 'date': '2025-06-01', 'type': 'Call',
+                        'title': 'Evento Idempotente', 'description': 'X', 'registeredBy': 'Analista'}]
+        })
+        assert res.status_code == 200
+        data = json.loads(res.data)
+        assert data['updated'] == 0  # sem mudança → nenhum update necessário
+        assert data['created'] == 0  # não deve ter criado duplicata
+
+        # Verifica diretamente no banco
+        op_data = json.loads(client.get(f'/api/operations/{self.op_id}').data)
+        events_final = [e for e in op_data.get('events', []) if e['title'] == 'Evento Idempotente']
+        assert len(events_final) == 1, f"Esperado 1 evento, encontrado {len(events_final)} — DUPLICAÇÃO DETECTADA!"
+
+    # ── EVENTOS via bulk-update (save_operation) ─────────────
+
+    def test_bulk_update_events_no_duplicate(self, client):
+        """Chamar bulk-update duas vezes com os mesmos eventos não duplica."""
+        # Cria um evento via sync-events (sem passar pelo bulk-update)
+        client.post(f'/api/operations/{self.op_id}/sync-events', json={
+            'responsibleAnalyst': 'Analista',
+            'events': [{'id': 'temp-bulk-1', 'date': '2025-07-01', 'type': 'Reunião',
+                        'title': 'Evento Bulk Nodup', 'description': 'Y', 'registeredBy': 'Analista'}]
+        })
+        op_data = json.loads(client.get(f'/api/operations/{self.op_id}').data)
+        existing_event = next((e for e in op_data.get('events', []) if e['title'] == 'Evento Bulk Nodup'), None)
+        assert existing_event is not None
+
+        # Envia via bulk-update com o mesmo evento (ID real do banco)
+        res = client.post('/api/operations/bulk-update', json={
+            'operations': [{
+                'id': self.op_id,
+                'name': 'OP_NODUP',
+                'ratingOperation': 'A4',
+                'ratingGroup': 'A4',
+                'watchlist': 'Verde',
+                'responsibleAnalyst': 'Analista',
+                'events': [existing_event],  # evento com ID real do banco
+                'ratingHistory': op_data.get('ratingHistory', []),
+                'taskRules': op_data.get('taskRules', []),
+                'covenants': {},
+            }]
+        })
+        assert res.status_code == 200
+
+        # Verifica que o evento NÃO foi duplicado
+        op_data = json.loads(client.get(f'/api/operations/{self.op_id}').data)
+        events = [e for e in op_data.get('events', []) if e['title'] == 'Evento Bulk Nodup']
+        assert len(events) == 1, f"DUPLICAÇÃO de evento via bulk-update: encontrado {len(events)} cópias!"
+
+    # ── RATING HISTORY via bulk-update ───────────────────────
+
+    def test_bulk_update_rating_history_no_duplicate(self, client):
+        """Chamar bulk-update duas vezes com o mesmo ratingHistory não duplica."""
+        op_data = json.loads(client.get(f'/api/operations/{self.op_id}').data)
+        initial_rh = op_data.get('ratingHistory', [])
+        assert len(initial_rh) >= 1, "Operação deve ter ao menos 1 entrada de ratingHistory ao ser criada"
+
+        # Envia o mesmo ratingHistory de volta via bulk-update
+        res = client.post('/api/operations/bulk-update', json={
+            'operations': [{
+                'id': self.op_id,
+                'name': 'OP_NODUP',
+                'ratingOperation': 'A4',
+                'ratingGroup': 'A4',
+                'watchlist': 'Verde',
+                'responsibleAnalyst': 'Analista',
+                'events': [],
+                'ratingHistory': initial_rh,  # mesmo histórico com IDs reais
+                'taskRules': op_data.get('taskRules', []),
+                'covenants': {},
+            }]
+        })
+        assert res.status_code == 200
+
+        # Verifica contagem
+        op_data_after = json.loads(client.get(f'/api/operations/{self.op_id}').data)
+        rh_after = op_data_after.get('ratingHistory', [])
+        assert len(rh_after) == len(initial_rh), (
+            f"DUPLICAÇÃO de ratingHistory via bulk-update: era {len(initial_rh)}, ficou {len(rh_after)}!"
+        )
+
+    # ── TASK RULES via bulk-update ────────────────────────────
+
+    def test_bulk_update_task_rules_no_duplicate(self, client):
+        """Chamar bulk-update com as mesmas taskRules não duplica regras."""
+        op_data = json.loads(client.get(f'/api/operations/{self.op_id}').data)
+        initial_rules = op_data.get('taskRules', [])
+        assert len(initial_rules) >= 1, "Operação deve ter ao menos 1 taskRule ao ser criada"
+
+        # Reenvia as mesmas rules via bulk-update
+        res = client.post('/api/operations/bulk-update', json={
+            'operations': [{
+                'id': self.op_id,
+                'name': 'OP_NODUP',
+                'ratingOperation': 'A4',
+                'ratingGroup': 'A4',
+                'watchlist': 'Verde',
+                'responsibleAnalyst': 'Analista',
+                'events': [],
+                'ratingHistory': op_data.get('ratingHistory', []),
+                'taskRules': initial_rules,  # mesmas rules com IDs reais
+                'covenants': {},
+            }]
+        })
+        assert res.status_code == 200
+
+        # Verifica contagem
+        op_data_after = json.loads(client.get(f'/api/operations/{self.op_id}').data)
+        rules_after = op_data_after.get('taskRules', [])
+        assert len(rules_after) == len(initial_rules), (
+            f"DUPLICAÇÃO de taskRules via bulk-update: era {len(initial_rules)}, ficou {len(rules_after)}!"
+        )
+
+    # ── TASK RULES: não exclui indevidamente ─────────────────
+
+    def test_bulk_update_preserves_existing_rules_without_id(self, client):
+        """Regras sem ID no payload (novas) não devem excluir as existentes."""
+        op_data = json.loads(client.get(f'/api/operations/{self.op_id}').data)
+        initial_rule_count = len(op_data.get('taskRules', []))
+
+        # Envia uma nova rule sem ID — não deve excluir as existentes
+        new_rule = {'name': 'Regra Extra', 'frequency': 'Mensal', 'description': 'Nova regra'}
+        all_rules = op_data.get('taskRules', []) + [new_rule]
+
+        res = client.post('/api/operations/bulk-update', json={
+            'operations': [{
+                'id': self.op_id,
+                'name': 'OP_NODUP',
+                'ratingOperation': 'A4',
+                'ratingGroup': 'A4',
+                'watchlist': 'Verde',
+                'responsibleAnalyst': 'Analista',
+                'events': [],
+                'ratingHistory': op_data.get('ratingHistory', []),
+                'taskRules': all_rules,
+                'covenants': {},
+            }]
+        })
+        assert res.status_code == 200
+
+        op_data_after = json.loads(client.get(f'/api/operations/{self.op_id}').data)
+        rules_after = op_data_after.get('taskRules', [])
+        assert len(rules_after) == initial_rule_count + 1, (
+            f"Esperado {initial_rule_count + 1} regras, encontrado {len(rules_after)}"
+        )
+
+    # ── EVENTS via sync-events: texto longo idempotente ──────
+
+    def test_sync_events_long_text_no_duplicate(self, client):
+        """Evento com texto longo (~4000 chars) não é duplicado ao ser reenviado."""
+        long_desc = "C" * 2000
+        long_steps = "D" * 1500
+
+        # Cria
+        client.post(f'/api/operations/{self.op_id}/sync-events', json={
+            'responsibleAnalyst': 'Analista',
+            'events': [{'id': 'temp-long', 'date': '2025-08-01', 'type': 'Revisão Periódica',
+                        'title': 'Evento Longo Nodup', 'description': long_desc,
+                        'nextSteps': long_steps, 'registeredBy': 'Analista'}]
+        })
+        op_data = json.loads(client.get(f'/api/operations/{self.op_id}').data)
+        evt = next((e for e in op_data.get('events', []) if e['title'] == 'Evento Longo Nodup'), None)
+        assert evt is not None
+
+        # Reenvia idêntico com ID real
+        res = client.post(f'/api/operations/{self.op_id}/sync-events', json={
+            'responsibleAnalyst': 'Analista',
+            'events': [{'id': evt['id'], 'date': '2025-08-01', 'type': 'Revisão Periódica',
+                        'title': 'Evento Longo Nodup', 'description': long_desc,
+                        'nextSteps': long_steps, 'registeredBy': 'Analista'}]
+        })
+        assert res.status_code == 200
+        data = json.loads(res.data)
+        assert data['created'] == 0
+        assert data['updated'] == 0
+
+        op_data = json.loads(client.get(f'/api/operations/{self.op_id}').data)
+        copies = [e for e in op_data.get('events', []) if e['title'] == 'Evento Longo Nodup']
+        assert len(copies) == 1, f"DUPLICAÇÃO de evento longo: {len(copies)} cópias encontradas!"
+
+
+# ============================================================
 # 7. CHANGE REQUESTS
 # ============================================================
 
 class TestChangeRequests:
+
     def test_change_request_crud(self, client):
         # POST
         res = client.post('/api/change-requests', json={
