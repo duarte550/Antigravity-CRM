@@ -303,7 +303,17 @@ def manage_operation(op_id):
 def bulk_update_operations():
     conn = db.get_db_connection()
     try:
-        data = request.json
+        # Use force=True to tolerate Content-Type variations (e.g. from Azure WAF proxy)
+        data = request.get_json(force=True, silent=True)
+        if data is None:
+            raw = request.data
+            if raw:
+                try:
+                    data = json.loads(raw)
+                except (json.JSONDecodeError, TypeError):
+                    return jsonify({"error": "Invalid JSON payload"}), 400
+            else:
+                return jsonify({"error": "Empty request body"}), 400
         operations = data.get('operations', [])
         results = {'success': [], 'failed': []}
         

@@ -42,6 +42,9 @@ export function useSyncQueue(
   const [failedOperations, setFailedOperations] = useState<{ id: number; error: string }[]>([]);
   // Internal retry counter — not exposed to callers
   const [syncTrigger, setSyncTrigger] = useState(0);
+  // Retry count to prevent infinite loops on repeated failures
+  const retryCount = useRef(0);
+  const MAX_RETRIES = 3;
 
   useEffect(() => {
     syncQueueRef.current = syncQueue;
@@ -93,47 +96,88 @@ export function useSyncQueue(
     const processQueue = async () => {
       if (syncQueue.length === 0) {
         setIsSyncing(false);
+        retryCount.current = 0;
         return;
       }
       if (processingQueue.current) return;
 
+      // Stop retrying after MAX_RETRIES to prevent infinite loops
+      if (retryCount.current >= MAX_RETRIES) {
+        console.error(`[SyncQueue] Atingiu limite de ${MAX_RETRIES} tentativas. Abortando sync.`);
+        showToast(`Falha persistente ao sincronizar. Recarregue a página para tentar novamente.`, 'error');
+        setSyncQueue([]);
+        retryCount.current = 0;
+        processingQueue.current = false;
+        setIsSyncing(false);
+        return;
+      }
+
       processingQueue.current = true;
       setIsSyncing(true);
 
+      // Process one operation at a time to avoid large payloads
+      // that trigger the Azure WAF MediaTypeBlockedUpload (403) error.
       const operationsToSync = [...syncQueue];
-      try {
-        const response = await fetchApi(`${apiBaseUrl}/api/operations/bulk-update`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ operations: operationsToSync }),
-          credentials: 'include',
-        });
-        if (!response.ok) throw new Error('Falha na sincronização em lote');
+      const allFailed: { id: number; error: string }[] = [];
+      let anySuccess = false;
+      let networkError = false;
 
-        const result = await response.json();
-        const { failed } = result;
-        setSyncQueue([]);
-        setFailedOperations(failed);
+      for (const op of operationsToSync) {
+        try {
+          const response = await fetchApi(`${apiBaseUrl}/api/operations/bulk-update`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ operations: [op] }),
+            credentials: 'include',
+          });
 
-        if (failed.length > 0) {
-          showToast(`Falha em ${failed.length} operações: ${failed.map((f: { id: number }) => f.id).join(', ')}`, 'error');
-        } else {
-          showToast('Sincronização concluída com sucesso', 'success');
+          if (!response.ok) {
+            const errText = await response.text().catch(() => response.status.toString());
+            throw new Error(`HTTP ${response.status}: ${errText}`);
+          }
+
+          const result = await response.json();
+          if (result.failed && result.failed.length > 0) {
+            allFailed.push(...result.failed);
+          } else {
+            anySuccess = true;
+          }
+        } catch (error) {
+          console.error(`[SyncQueue] Sync error for operation ${op.id}:`, error);
+          networkError = true;
+          break; // Stop on network failure; will retry the whole queue
         }
-      } catch (error) {
-        console.error('Sync error', error);
+      }
+
+      if (networkError) {
+        // Exponential backoff: 5s, 15s, 45s
+        const backoffMs = 5000 * Math.pow(3, retryCount.current);
+        retryCount.current += 1;
+        console.warn(`[SyncQueue] Falha de rede. Tentativa ${retryCount.current}/${MAX_RETRIES}. Próxima em ${backoffMs / 1000}s.`);
         setTimeout(() => {
           processingQueue.current = false;
           setSyncTrigger(prev => prev + 1);
-        }, 5000);
+        }, backoffMs);
         return;
-      } finally {
-        processingQueue.current = false;
       }
+
+      // All requests completed (some may have failed with server errors)
+      retryCount.current = 0;
+      setSyncQueue([]);
+      setFailedOperations(allFailed);
+
+      if (allFailed.length > 0) {
+        showToast(`Falha em ${allFailed.length} operações: ${allFailed.map((f: { id: number }) => f.id).join(', ')}`, 'error');
+      } else if (anySuccess) {
+        showToast('Sincronização concluída com sucesso', 'success');
+      }
+
+      processingQueue.current = false;
+      setIsSyncing(false);
     };
 
     processQueue();
-  }, [syncQueue, syncTrigger]); // apiBaseUrl and showToast are stable references
+  }, [syncQueue, syncTrigger, showToast]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Generic HTTP queue processor ──
   useEffect(() => {
