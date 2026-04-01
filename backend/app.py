@@ -261,6 +261,68 @@ def sync_all_operations():
 
 
 
+@app.route('/api/operations/<int:op_id>/patch', methods=['POST'])
+def patch_operation(op_id):
+    """
+    Lightweight field-level PATCH for a single operation.
+    Accepts a JSON body with only the fields to update (camelCase).
+    Does NOT run the full save_operation pipeline — no event/task/project syncing.
+    Ideal for quick UI changes like watchlist, status, rating fields, etc.
+    """
+    conn = db.get_db_connection()
+    FIELD_MAP = {
+        'watchlist': 'watchlist',
+        'status': 'status',
+        'ratingOperation': 'rating_operation',
+        'responsibleAnalyst': 'responsible_analyst',
+        'structuringAnalyst': 'structuring_analyst',
+        'description': 'description',
+        'area': 'area',
+        'name': 'name',
+        'segmento': 'segmento',
+        'maturityDate': 'maturity_date',
+        'estimatedDate': 'estimated_date',
+        'wasStructured': 'was_structured',
+        'movedToLegacyDate': 'moved_to_legacy_date',
+    }
+    try:
+        data = request.get_json(force=True, silent=True) or {}
+        if not data:
+            return jsonify({'error': 'Empty patch body'}), 400
+
+        updates = {}
+        for camel_key, db_col in FIELD_MAP.items():
+            if camel_key in data:
+                val = data[camel_key]
+                # Parse date strings for date columns
+                if camel_key in ('maturityDate', 'estimatedDate', 'movedToLegacyDate'):
+                    val = parse_iso_date(val) if val else None
+                updates[db_col] = val
+
+        if not updates:
+            return jsonify({'status': 'noop', 'message': 'No patchable fields found'}), 200
+
+        set_clauses = ', '.join(f'{col} = ?' for col in updates.keys())
+        values = list(updates.values()) + [op_id]
+
+        with conn.cursor() as cursor:
+            cursor.execute(
+                f'UPDATE cri_cra_dev.crm.operations SET {set_clauses} WHERE id = ?',
+                values
+            )
+            import flask
+            user_name = data.get('responsibleAnalyst') or getattr(flask.g, 'user_email', 'System')
+            details = '; '.join(f"{k}={v}" for k, v in updates.items())
+            log_action(cursor, user_name, 'PATCH', 'Operation', op_id, details[:500])
+        conn.commit()
+        return jsonify({'status': 'ok', 'updated': list(updates.keys())}), 200
+    except Exception as e:
+        app.logger.error(f'Error in PATCH /api/operations/{op_id}: {e}', exc_info=True)
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if conn: conn.close()
+
+
 @app.route('/api/operations/<int:op_id>', methods=['GET', 'PUT', 'DELETE'])
 def manage_operation(op_id):
     conn = db.get_db_connection()
@@ -299,6 +361,95 @@ def manage_operation(op_id):
         return jsonify({"error": str(e)}), 500
     finally:
         if conn: conn.close()
+@app.route('/api/operations/<int:op_id>/watchlist-update', methods=['POST'])
+def watchlist_update_operation(op_id):
+    """
+    Dedicated endpoint for watchlist status changes from WatchlistPage.
+    Executes only 3-4 SQL statements instead of the 20+ in save_operation:
+      1. UPDATE operations SET watchlist, rating_operation, rating_group, rating_master_group
+      2. INSERT INTO events
+      3. INSERT INTO rating_history
+      4. INSERT INTO audit_logs
+    """
+    conn = db.get_db_connection()
+    try:
+        data = request.get_json(force=True, silent=True) or {}
+        watchlist     = data.get('watchlist')
+        rating_op     = data.get('ratingOperation')
+        rating_group  = data.get('ratingGroup')
+        rating_master = data.get('ratingMasterGroup')
+        sentiment     = data.get('sentiment', 'Neutro')
+        user_name     = data.get('responsibleAnalyst', 'System')
+        event         = data.get('event', {})
+
+        if not watchlist:
+            return jsonify({'error': 'watchlist field is required'}), 400
+
+        with conn.cursor() as cursor:
+            # 1. Update the operation row (only the rating/watchlist fields)
+            cursor.execute(
+                """UPDATE cri_cra_dev.crm.operations
+                   SET watchlist = ?, rating_operation = ?, responsible_analyst = ?
+                   WHERE id = ?""",
+                (watchlist, rating_op, user_name, op_id)
+            )
+
+            # 2. Insert the new event (if provided)
+            new_event_id = None
+            if event.get('title') or event.get('description'):
+                new_event_id = get_next_unique_id(cursor, 'events')
+                cursor.execute(
+                    """INSERT INTO cri_cra_dev.crm.events
+                       (id, operation_id, date, type, title, description, registered_by,
+                        next_steps, completed_task_id, attention_points, our_attendees, operation_attendees)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (
+                        new_event_id, op_id,
+                        event.get('date') or datetime.now().isoformat(),
+                        event.get('type', 'Revisão Periódica'),
+                        event.get('title', f'Atualização Watchlist → {watchlist}'),
+                        event.get('description', ''),
+                        user_name,
+                        event.get('nextSteps'),
+                        event.get('completedTaskId'),
+                        event.get('attentionPoints'),
+                        event.get('ourAttendees'),
+                        event.get('operationAttendees'),
+                    )
+                )
+
+            # 3. Insert the rating history entry
+            rh_id = get_next_unique_id(cursor, 'rating_history')
+            cursor.execute(
+                """INSERT INTO cri_cra_dev.crm.rating_history
+                   (id, operation_id, date, rating_operation, rating_group,
+                    rating_master_group, watchlist, sentiment, event_id)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    rh_id, op_id,
+                    event.get('date') or datetime.now().isoformat(),
+                    rating_op, rating_group, rating_master,
+                    watchlist, sentiment, new_event_id
+                )
+            )
+
+            # 4. Audit log
+            log_action(cursor, user_name, 'UPDATE', 'Operation', op_id,
+                       f"Watchlist atualizado para '{watchlist}' (Rating Op: {rating_op}, Grupo: {rating_group})")
+
+        conn.commit()
+        return jsonify({
+            'status': 'ok',
+            'eventId': new_event_id,
+            'ratingHistoryId': rh_id,
+        }), 200
+    except Exception as e:
+        app.logger.error(f'Error in /api/operations/{op_id}/watchlist-update: {e}', exc_info=True)
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if conn: conn.close()
+
+
 @app.route('/api/operations/bulk-update', methods=['POST'])
 def bulk_update_operations():
     conn = db.get_db_connection()

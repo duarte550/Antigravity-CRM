@@ -10,14 +10,17 @@ import WatchlistReportModal from './WatchlistReportModal';
 import Modal from './Modal';
 import LitigationCommentsSection from './LitigationCommentsSection';
 import { Scale } from 'lucide-react';
+import { fetchApi } from '../utils/api';
 
 
 interface WatchlistPageProps {
   operations: Operation[];
   onUpdateOperation: (updatedOperation: Operation, syncToBackend?: boolean) => void;
+  apiUrl: string;
+  showToast: (message: string, type: 'success' | 'error') => void;
 }
 
-const WatchlistPage: React.FC<WatchlistPageProps> = ({ operations, onUpdateOperation }) => {
+const WatchlistPage: React.FC<WatchlistPageProps> = ({ operations, onUpdateOperation, apiUrl, showToast }) => {
     const [activeFilter, setActiveFilter] = useState<WatchlistStatus | 'All'>('All');
     const [masterGroupFilter, setMasterGroupFilter] = useState<string>('All');
     const [economicGroupFilter, setEconomicGroupFilter] = useState<string>('All');
@@ -136,9 +139,10 @@ const WatchlistPage: React.FC<WatchlistPageProps> = ({ operations, onUpdateOpera
         handleCloseModal();
     };
 
-    const handleSaveWatchlistChange = (op: Operation, data: { watchlist: WatchlistStatusType, ratingOp: Rating, ratingGroup: Rating, ratingMasterGroup: Rating, sentiment: SentimentType, event: Omit<Event, 'id'>}) => {
+    const handleSaveWatchlistChange = async (op: Operation, data: { watchlist: WatchlistStatusType, ratingOp: Rating, ratingGroup: Rating, ratingMasterGroup: Rating, sentiment: SentimentType, event: Omit<Event, 'id'>}) => {
         if (editingHistoryEntry && editingEvent) {
-            // Update existing entry
+            // ── Editing existing entry ──
+            // Rare operation: use full sync via onUpdateOperation (handles event UPDATE + history UPDATE)
             const updatedEvent = { ...editingEvent, ...data.event };
             const updatedHistoryEntry = { 
                 ...editingHistoryEntry, 
@@ -147,12 +151,11 @@ const WatchlistPage: React.FC<WatchlistPageProps> = ({ operations, onUpdateOpera
                 ratingGroup: data.ratingGroup,
                 ratingMasterGroup: data.ratingMasterGroup,
                 sentiment: data.sentiment,
-                date: data.event.date // Update date if changed
+                date: data.event.date
             };
-
             const updatedOp = {
                 ...op,
-                watchlist: data.watchlist, // Update current status if it's the latest entry? Ideally we recalculate, but simple update is fine for now
+                watchlist: data.watchlist,
                 ratingOperation: data.ratingOp,
                 ratingGroup: data.ratingGroup,
                 ratingMasterGroup: data.ratingMasterGroup,
@@ -160,23 +163,23 @@ const WatchlistPage: React.FC<WatchlistPageProps> = ({ operations, onUpdateOpera
                 ratingHistory: op.ratingHistory.map(h => h.id === editingHistoryEntry.id ? updatedHistoryEntry : h),
             };
             handleSaveChanges(updatedOp);
-
         } else {
-            // Create new entry
-            const newEventId = Date.now();
-            const eventToSave: Event = { ...data.event, id: newEventId };
-            
+            // ── New watchlist entry ──
+            // Use the fast /watchlist-update endpoint directly (4 SQL queries vs 20+)
+            // First apply optimistic UI update so the page feels instant
+            const tempEventId = Date.now();
+            const tempRhId = Date.now() + 1;
+            const eventToSave: Event = { ...data.event, id: tempEventId };
             const newHistoryEntry: RatingHistoryEntry = {
-                id: Date.now() + 1,
+                id: tempRhId,
                 date: eventToSave.date,
                 ratingOperation: data.ratingOp,
                 ratingGroup: data.ratingGroup,
                 ratingMasterGroup: data.ratingMasterGroup,
                 watchlist: data.watchlist,
-                sentiment: data.sentiment, // Use manually selected sentiment
-                eventId: newEventId,
+                sentiment: data.sentiment,
+                eventId: tempEventId,
             };
-    
             const updatedOp = {
                 ...op,
                 watchlist: data.watchlist,
@@ -186,7 +189,34 @@ const WatchlistPage: React.FC<WatchlistPageProps> = ({ operations, onUpdateOpera
                 events: [...op.events, eventToSave],
                 ratingHistory: [...op.ratingHistory, newHistoryEntry],
             };
-            handleSaveChanges(updatedOp);
+            // Update UI immediately (no backend sync via queue)
+            onUpdateOperation(updatedOp, false);
+            handleCloseModal();
+
+            // Fire-and-forget to the fast dedicated endpoint
+            try {
+                const response = await fetchApi(`${apiUrl}/api/operations/${op.id}/watchlist-update`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify({
+                        watchlist: data.watchlist,
+                        ratingOperation: data.ratingOp,
+                        ratingGroup: data.ratingGroup,
+                        ratingMasterGroup: data.ratingMasterGroup,
+                        sentiment: data.sentiment,
+                        responsibleAnalyst: op.responsibleAnalyst,
+                        event: data.event,
+                    }),
+                });
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                showToast('Watchlist atualizado com sucesso', 'success');
+            } catch (err) {
+                console.error('[WatchlistPage] watchlist-update failed:', err);
+                showToast('Erro ao salvar watchlist. Tente novamente.', 'error');
+                // Revert optimistic update on failure
+                onUpdateOperation(op, false);
+            }
         }
     };
 

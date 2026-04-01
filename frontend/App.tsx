@@ -74,6 +74,9 @@ const App: React.FC = () => {
   const {
     syncQueue,
     addToSyncQueue,
+    retryDeadLetter,
+    discardDeadLetter,
+    deadLetterQueue,
     genericSyncQueue,
     pushToGenericQueue,
     isSyncing,
@@ -476,6 +479,8 @@ const App: React.FC = () => {
           <WatchlistPage
             operations={filteredOperations.filter(op => op.operationType !== 'Geral')}
             onUpdateOperation={handleUpdateOperation}
+            apiUrl={API_BASE_URL}
+            showToast={showToast}
           />
         );
       case Page.ANALYST_HUB:
@@ -518,6 +523,9 @@ const App: React.FC = () => {
             genericQueue={genericSyncQueue}
             isSyncing={isSyncing}
             failedOperations={failedOperations}
+            deadLetterQueue={deadLetterQueue}
+            onRetryDeadLetter={retryDeadLetter}
+            onDiscardDeadLetter={discardDeadLetter}
           />
         );
       case Page.MASTER_GROUPS:
