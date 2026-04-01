@@ -316,25 +316,28 @@ export function useSyncQueue(
 
       for (const op of operationsToSync) {
         const retries = retryCounts.current.get(op.id) ?? 0;
+        const opEvents: any[] = (op as any).events ?? [];
 
         const eventsOnly = requiresEventsOnlySync(op);
         const useFullSync = !eventsOnly && requiresFullSync(op);
 
+        // ── IMPORTANTE: bulk-update NUNCA inclui eventos no payload. ──────────
+        // O Azure WAF bloqueia requests com texto longo (descrições de eventos)
+        // via 403 mediatypeblockedupload. Eventos sempre vão pelo endpoint
+        // dedicado /sync-events que tem payloads menores e focados.
         let url: string;
         let body: string;
 
         if (eventsOnly) {
-          // Caminho rápido: só eventos mudaram → 2-3 queries no Databricks
           url = `${apiBaseUrl}/api/operations/${op.id}/sync-events`;
           body = JSON.stringify(buildEventsPayload(op));
           console.log(`[SyncQueue] Op ${op.id} (attempt ${retries + 1}/${MAX_RETRIES_PER_OP}): events-only`);
         } else if (useFullSync) {
-          // Caminho completo: múltiplos campos mudaram
+          // Envia bulk-update SEM eventos — strip do array para não triggerar o WAF
           url = `${apiBaseUrl}/api/operations/bulk-update`;
-          body = JSON.stringify({ operations: [op] });
-          console.log(`[SyncQueue] Op ${op.id} (attempt ${retries + 1}/${MAX_RETRIES_PER_OP}): full`);
+          body = JSON.stringify({ operations: [{ ...op, events: [] }] });
+          console.log(`[SyncQueue] Op ${op.id} (attempt ${retries + 1}/${MAX_RETRIES_PER_OP}): full (events stripped)`);
         } else {
-          // Caminho leve: só campos escalares mudaram
           url = `${apiBaseUrl}/api/operations/${op.id}/patch`;
           body = JSON.stringify(buildPatchPayload(op));
           console.log(`[SyncQueue] Op ${op.id} (attempt ${retries + 1}/${MAX_RETRIES_PER_OP}): patch`);
@@ -356,9 +359,27 @@ export function useSyncQueue(
           const result = await response.json();
 
           if (result.failed && result.failed.length > 0) {
-            // Server processed it but some ops failed (server-side error, not network)
             serverFailed.push(...result.failed);
           } else {
+            // ── Se era um full-sync e a operação tem eventos, sincroniza-os agora ──
+            // Os eventos foram intencionalmente excluídos do bulk-update para evitar
+            // o bloqueio do WAF. Agora que o bulk-update teve sucesso, sincronizamos
+            // os eventos separadamente via o endpoint dedicado.
+            if (useFullSync && opEvents.length > 0) {
+              try {
+                await fetchWithTimeout(`${apiBaseUrl}/api/operations/${op.id}/sync-events`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify(buildEventsPayload(op)),
+                  credentials: 'include',
+                });
+                console.log(`[SyncQueue] Op ${op.id}: eventos sincronizados pós full-sync.`);
+              } catch (evtErr) {
+                // Falha nos eventos após bulk-update bem-sucedido: loga mas não falha a op principal
+                console.warn(`[SyncQueue] Op ${op.id}: bulk-update OK mas sync-events falhou:`, evtErr);
+              }
+            }
+
             successfulIds.add(op.id);
             retryCounts.current.delete(op.id);
             backoffMs.current.delete(op.id);
@@ -373,7 +394,6 @@ export function useSyncQueue(
           retryCounts.current.set(op.id, nextRetry);
 
           if (nextRetry >= MAX_RETRIES_PER_OP) {
-            // Exhausted retries for this specific operation → dead letter
             console.warn(`[SyncQueue] Op ${op.id} esgotou ${MAX_RETRIES_PER_OP} tentativas → dead letter.`);
             movedToDeadLetter.push({
               operation: op,
@@ -384,7 +404,6 @@ export function useSyncQueue(
             retryCounts.current.delete(op.id);
             backoffMs.current.delete(op.id);
           } else {
-            // Transient failure: schedule a retry with exponential backoff for THIS op
             const delay = BACKOFF_BASE_MS * Math.pow(3, retries); // 5s, 15s, 45s
             backoffMs.current.set(op.id, delay);
             retryLater.push({ id: op.id, delayMs: delay });
