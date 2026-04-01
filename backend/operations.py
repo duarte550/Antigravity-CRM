@@ -321,11 +321,13 @@ def save_operation(cursor, op_id: int, data: dict, user_name: str = 'System') ->
     old_op_db = format_row(old_op_row, cursor)
     
     cursor.execute("SELECT * FROM cri_cra_dev.crm.events WHERE operation_id = ?", (op_id,))
-    db_events = {row.id: format_row(row, cursor) for row in cursor.fetchall()}
-    db_event_ids = set(db_events.keys())
+    # Normaliza para string para garantir compatibilidade com tipos do driver ODBC
+    # (Databricks pode retornar ids como int, Decimal ou string)
+    db_events = {str(row.id): format_row(row, cursor) for row in cursor.fetchall()}
+    db_event_ids = set(db_events.keys())  # set de strings → comparação segura
     
     cursor.execute("SELECT id FROM cri_cra_dev.crm.rating_history WHERE operation_id = ?", (op_id,))
-    db_rh_ids = {row.id for row in cursor.fetchall()}
+    db_rh_ids = {str(row.id) for row in cursor.fetchall()}  # normalizado para string
 
     old_rating_group = old_op_db.get('rating_group')
     new_rating_group = data.get('ratingGroup', old_rating_group)
@@ -438,7 +440,7 @@ def save_operation(cursor, op_id: int, data: dict, user_name: str = 'System') ->
             client_event_id_to_db_id_map[event_id] = db_event_id
             log_action(cursor, event.get('registeredBy'), 'CREATE', 'Event', db_event_id, f"Evento '{event.get('title')}' adicionado.")
         else:
-            old_event = db_events[int(event_id)]
+            old_event = db_events[event_id]  # chave normalizada como string
             def norm(v): return str(v).strip() if v is not None else ""
             def norm_date(v): return str(v)[:10] if v is not None else ""
             

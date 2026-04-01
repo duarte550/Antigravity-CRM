@@ -468,14 +468,14 @@ def sync_operation_events(op_id):
             cursor.execute(
                 "SELECT * FROM cri_cra_dev.crm.events WHERE operation_id = ?", (op_id,)
             )
-            db_events = {row.id: format_row(row, cursor) for row in cursor.fetchall()}
-            db_event_ids = set(db_events.keys())
+            db_events = {str(row.id): format_row(row, cursor) for row in cursor.fetchall()}
+            db_event_ids = set(db_events.keys())  # set de strings → comparação segura
 
             created, updated, deleted = 0, 0, 0
 
             for event in events_payload:
                 event_id_str = str(event.get('id', ''))
-                is_existing = event_id_str.isdigit() and int(event_id_str) in db_event_ids
+                is_existing = event_id_str.isdigit() and event_id_str in db_event_ids
 
                 # Deleção explícita
                 if event.get('deleted'):
@@ -512,7 +512,7 @@ def sync_operation_events(op_id):
                     created += 1
                 else:
                     # Evento existente — atualiza apenas se mudou
-                    old = db_events[int(event_id_str)]
+                    old = db_events[event_id_str]  # chave normalizada como string
                     def norm(v): return str(v).strip() if v is not None else ""
                     def norm_date(v): return str(v)[:10] if v is not None else ""
 

@@ -44,18 +44,18 @@ const App: React.FC = () => {
   const { isEntraIdEnabled, isMsalAuthenticated, isAuthenticating, isAdmin } = useAuth();
   const [isAdminPanelOpen, setIsAdminPanelOpen] = useState(false);
 
-  // Campos pesados (arrays) são excluídos do cache slim para não estourar localStorage.
-  // O carregamento inicial exibe os dados das listas instantaneamente; os detalhes
-  // (eventos, tarefas, etc.) são buscados sob demanda via fetchOperationDetails.
+  // ── Slim cache: persiste só campos escalares para economizar localStorage ──
+  // Os campos abaixo são excluídos na gravação mas restaurados como [] na leitura,
+  // garantindo que nenhum componente quebre com "Cannot read .forEach of undefined".
   const SLIM_CACHE_KEY = 'operations_cache_slim_v1';
+
   const SLIM_EXCLUDED_FIELDS = new Set([
     'events', 'taskRules', 'ratingHistory', 'contacts', 'tasks',
     'risks', 'litigationComments', 'taskExceptions',
   ]);
 
-  // Campos de array que são removidos na serialização slim.
-  // Ao carregar, precisam ser restaurados como [] para evitar
-  // TypeError nas páginas que fazem op.tasks.forEach(...) etc.
+  // Defaults aplicados a CADA operação ao ler do cache slim.
+  // devem espelhar exatamente os campos em SLIM_EXCLUDED_FIELDS.
   const SLIM_ARRAY_DEFAULTS: Record<string, any[]> = {
     events: [], taskRules: [], ratingHistory: [], contacts: [],
     tasks: [], risks: [], litigationComments: [], taskExceptions: [],
@@ -66,7 +66,7 @@ const App: React.FC = () => {
       const raw = localStorage.getItem(SLIM_CACHE_KEY);
       if (!raw) return [];
       const parsed: any[] = JSON.parse(raw);
-      // Restaura os campos de array excluídos como [] para compatibilidade com componentes
+      // Restaura os arrays excluídos como [] — evita TypeError nos componentes
       return parsed.map(op => ({ ...SLIM_ARRAY_DEFAULTS, ...op })) as Operation[];
     } catch { return []; }
   };
@@ -87,6 +87,7 @@ const App: React.FC = () => {
       }
     }
   };
+
 
   const [operations, setOperations] = useState<Operation[]>(() => loadSlimCache());
 
