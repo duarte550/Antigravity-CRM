@@ -113,8 +113,19 @@ function buildPatchPayload(op: Operation): Record<string, any> {
   return patch;
 }
 
+/** Salva apenas os campos que determinam full vs patch sync — não o objeto inteiro. */
 function saveSnapshot(op: Operation) {
-  try { localStorage.setItem(`op_snapshot_${op.id}`, JSON.stringify(op)); } catch { /* quota */ }
+  const slim: Record<string, any> = { id: op.id };
+  for (const field of FULL_SYNC_FIELDS) {
+    slim[field] = (op as any)[field] ?? null;
+  }
+  try {
+    localStorage.setItem(`op_snapshot_${op.id}`, JSON.stringify(slim));
+  } catch (e) {
+    if (e instanceof DOMException && e.name === 'QuotaExceededError') {
+      console.warn(`[SyncQueue] localStorage quota excedida ao salvar snapshot op ${op.id}. Próximo sync será full.`);
+    }
+  }
 }
 
 function loadFromStorage<T>(key: string, fallback: T): T {
@@ -125,7 +136,13 @@ function loadFromStorage<T>(key: string, fallback: T): T {
 }
 
 function saveToStorage(key: string, value: unknown) {
-  try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* quota */ }
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch (e) {
+    if (e instanceof DOMException && e.name === 'QuotaExceededError') {
+      console.warn(`[SyncQueue] localStorage quota excedida ao salvar '${key}'. Dados de sync podem não sobreviver ao reload.`);
+    }
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

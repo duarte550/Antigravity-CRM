@@ -44,18 +44,45 @@ const App: React.FC = () => {
   const { isEntraIdEnabled, isMsalAuthenticated, isAuthenticating, isAdmin } = useAuth();
   const [isAdminPanelOpen, setIsAdminPanelOpen] = useState(false);
 
-  const [operations, setOperations] = useState<Operation[]>(() => {
-    const cached = localStorage.getItem('operations_cache');
-    if (cached) {
-      try { return JSON.parse(cached); } catch (e) { console.error('Failed to parse operations cache', e); }
+  // Campos pesados (arrays) são excluídos do cache slim para não estourar localStorage.
+  // O carregamento inicial exibe os dados das listas instantaneamente; os detalhes
+  // (eventos, tarefas, etc.) são buscados sob demanda via fetchOperationDetails.
+  const SLIM_CACHE_KEY = 'operations_cache_slim_v1';
+  const SLIM_EXCLUDED_FIELDS = new Set([
+    'events', 'taskRules', 'ratingHistory', 'contacts', 'tasks',
+    'risks', 'litigationComments', 'taskExceptions',
+  ]);
+
+  const loadSlimCache = (): Operation[] => {
+    try {
+      const raw = localStorage.getItem(SLIM_CACHE_KEY);
+      return raw ? JSON.parse(raw) : [];
+    } catch { return []; }
+  };
+
+  const saveSlimCache = (ops: Operation[]) => {
+    try {
+      const slim = ops.map(op => {
+        const entry: Record<string, any> = {};
+        for (const [k, v] of Object.entries(op)) {
+          if (!SLIM_EXCLUDED_FIELDS.has(k)) entry[k] = v;
+        }
+        return entry;
+      });
+      localStorage.setItem(SLIM_CACHE_KEY, JSON.stringify(slim));
+    } catch (e) {
+      if (e instanceof DOMException && e.name === 'QuotaExceededError') {
+        console.warn('[App] localStorage quota excedida ao salvar slim cache — cache desativado.');
+      }
     }
-    return [];
-  });
+  };
+
+  const [operations, setOperations] = useState<Operation[]>(() => loadSlimCache());
 
   const [selectedArea, setSelectedArea] = useState<Area | 'Mixed'>('Mixed');
   const [newTaskModalState, setNewTaskModalState] = useState<{ isOpen: boolean; operationId?: number; analystName?: string }>({ isOpen: false });
   const [reviewModalState, setReviewModalState] = useState<{ isOpen: boolean; task: Task | null }>({ isOpen: false, task: null });
-  const [isLoading, setIsLoading] = useState(() => !localStorage.getItem('operations_cache'));
+  const [isLoading, setIsLoading] = useState(() => loadSlimCache().length === 0);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(() => {
     const saved = localStorage.getItem('darkMode');
@@ -90,15 +117,19 @@ const App: React.FC = () => {
     localStorage.setItem('darkMode', JSON.stringify(isDarkMode));
   }, [isDarkMode]);
 
-  // ── Persist operations cache ──
+  // ── Limpa chaves legadas do localStorage e persiste slim cache ──
   useEffect(() => {
-    if (operations.length > 0) {
-      try {
-        localStorage.setItem('operations_cache', JSON.stringify(operations));
-      } catch (e) {
-        console.warn('Could not save operations to cache. Storage might be full.', e);
+    // Remove o cache antigo (não-slim) que era o maior culpado pelo estouro de quota
+    ['operations_cache'].forEach(key => {
+      if (localStorage.getItem(key)) {
+        localStorage.removeItem(key);
+        console.info(`[App] Chave legada '${key}' removida do localStorage.`);
       }
-    }
+    });
+  }, []);
+
+  useEffect(() => {
+    if (operations.length > 0) saveSlimCache(operations);
   }, [operations]);
 
   // ── Data fetching ──────────────────────────────────────────────────────────
