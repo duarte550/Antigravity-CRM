@@ -127,20 +127,87 @@ function requiresEventsOnlySync(op: Operation): boolean {
 }
 
 
+/**
+ * Computa o DELTA de eventos: apenas novos, modificados e deletados.
+ *
+ * PROBLEMA ANTERIOR: enviava TODOS os eventos da operação a cada sync.
+ * Uma operação com 150 eventos + 1 novo gerava um payload de 151 eventos
+ * codificados em Base64 → centenas de KB → Azure WAF bloqueava com 403.
+ *
+ * SOLUÇÃO: compara o estado atual com o snapshot do localStorage e envia
+ * apenas o diff, o que reduz o payload de N eventos para ≤ K eventos
+ * alterados (tipicamente 1).
+ *
+ * O backend já é idempotente: IDs numéricos existentes → UPDATE/skip,
+ * IDs temporários (não-numéricos) → INSERT, { deleted: true } → DELETE.
+ */
 function buildEventsPayload(op: Operation): Record<string, any> {
   const events = ((op as any).events ?? []) as any[];
-  // encodeHtmlField + __html_encoded via wrapWithEncoding (importado de wafEncoding.ts)
+
+  // Carrega o snapshot para calcular o delta
+  const raw = localStorage.getItem(`op_snapshot_${op.id}`);
+  const snapshotEvents: any[] = raw ? (JSON.parse(raw).events ?? []) : [];
+  const snapshotMap = new Map<string, any>(
+    snapshotEvents.map((e: any) => [String(e.id ?? ''), e])
+  );
+
+  /** Normaliza um campo para comparação — ignora diferenças de tipo null/undefined/'' */
+  const norm = (v: unknown) => (v == null || v === '' ? '' : String(v));
+
+  /** Dado um evento, retorna true se ele mudou em relação ao snapshot */
+  const eventChanged = (ev: any): boolean => {
+    const snap = snapshotMap.get(String(ev.id ?? ''));
+    if (!snap) return true; // novo evento → não estava no snapshot
+    return (
+      norm(ev.date)?.substring(0, 10) !== norm(snap.date)?.substring(0, 10) ||
+      norm(ev.type)             !== norm(snap.type) ||
+      norm(ev.title)            !== norm(snap.title) ||
+      norm(ev.description)      !== norm(snap.description) ||
+      norm(ev.nextSteps)        !== norm(snap.nextSteps) ||
+      norm(ev.attentionPoints)  !== norm(snap.attentionPoints) ||
+      norm(ev.ourAttendees)     !== norm(snap.ourAttendees) ||
+      norm(ev.operationAttendees) !== norm(snap.operationAttendees)
+    );
+  };
+
+  // Eventos novos ou modificados
+  const changedEvents = events.filter(e => {
+    const id = String(e.id ?? '');
+    // ID temporário (ex: Date.now()) → novo evento
+    const isTemporary = !id || !/^\d+$/.test(id);
+    if (isTemporary) return true;
+    // ID numérico → verifica se mudou
+    return eventChanged(e);
+  });
+
+  // Eventos deletados (estavam no snapshot mas não estão mais no estado atual)
+  const currentIds = new Set(events.map(e => String(e.id ?? '')));
+  const deletedEvents = snapshotEvents
+    .filter(e => {
+      const id = String(e.id ?? '');
+      return /^\d+$/.test(id) && !currentIds.has(id);
+    })
+    .map(e => ({ ...e, deleted: true }));
+
+  const deltaEvents = [...changedEvents, ...deletedEvents];
+
+  console.log(
+    `[SyncQueue] buildEventsPayload op ${op.id}: delta=${deltaEvents.length} ` +
+    `(total=${events.length}, snapshot=${snapshotEvents.length})`
+  );
+
+  // encodeHtmlField + __html_encoded via wrapWithEncoding
   return wrapWithEncoding(
     {
       responsibleAnalyst: op.responsibleAnalyst,
-      events: events.map(e => ({
+      events: deltaEvents.map(e => ({
         ...e,
         description:     encodeHtmlField(e.description),
         nextSteps:       encodeHtmlField(e.nextSteps),
         attentionPoints: encodeHtmlField(e.attentionPoints),
       })),
     },
-    [] // campos já codificados manualmente acima; __html_encoded é adicionado pelo wrapWithEncoding
+    [] // campos já codificados manualmente; __html_encoded adicionado pelo wrapWithEncoding
   );
 }
 
@@ -379,17 +446,45 @@ export function useSyncQueue(
             // o bloqueio do WAF. Agora que o bulk-update teve sucesso, sincronizamos
             // os eventos separadamente via o endpoint dedicado.
             if (useFullSync && opEvents.length > 0) {
-              try {
-                await fetchWithTimeout(`${apiBaseUrl}/api/operations/${op.id}/sync-events`, {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify(buildEventsPayload(op)),
-                  credentials: 'include',
-                });
-                console.log(`[SyncQueue] Op ${op.id}: eventos sincronizados pós full-sync.`);
-              } catch (evtErr) {
-                // Falha nos eventos após bulk-update bem-sucedido: loga mas não falha a op principal
-                console.warn(`[SyncQueue] Op ${op.id}: bulk-update OK mas sync-events falhou:`, evtErr);
+              // Salva o snapshot ANTES de chamar buildEventsPayload para que o delta
+              // seja vazio (bulk-update já sincronizou tudo exceto eventos) e o
+              // buildEventsPayload detecte apenas os novos/alterados eventos.
+              // Em seguida enviamos TODOS os eventos atuais em batches pequenos
+              // para garantir que o banco esteja completo após o primeiro sync.
+              const BATCH_SIZE = 10; // eventos por request — ~10-30 KB por batch
+              const batches: any[][] = [];
+              for (let i = 0; i < opEvents.length; i += BATCH_SIZE) {
+                batches.push(opEvents.slice(i, i + BATCH_SIZE));
+              }
+              let batchFailed = false;
+              for (const batch of batches) {
+                try {
+                  const batchPayload = wrapWithEncoding(
+                    {
+                      responsibleAnalyst: op.responsibleAnalyst,
+                      events: batch.map((e: any) => ({
+                        ...e,
+                        description:     encodeHtmlField(e.description),
+                        nextSteps:       encodeHtmlField(e.nextSteps),
+                        attentionPoints: encodeHtmlField(e.attentionPoints),
+                      })),
+                    },
+                    []
+                  );
+                  await fetchWithTimeout(`${apiBaseUrl}/api/operations/${op.id}/sync-events`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(batchPayload),
+                    credentials: 'include',
+                  });
+                } catch (evtErr) {
+                  console.warn(`[SyncQueue] Op ${op.id}: batch de eventos falhou:`, evtErr);
+                  batchFailed = true;
+                  break;
+                }
+              }
+              if (!batchFailed) {
+                console.log(`[SyncQueue] Op ${op.id}: ${opEvents.length} eventos sincronizados pós full-sync em ${batches.length} batch(es).`);
               }
             }
 
