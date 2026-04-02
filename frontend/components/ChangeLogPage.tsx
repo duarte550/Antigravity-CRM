@@ -6,6 +6,7 @@ import RichTextEditor from './RichTextEditor';
 import Modal from './Modal';
 import { PlusIcon, CheckCircleIcon, ClockIcon, HistoryIcon, MessageSquareIcon } from './icons/Icons';
 import { fetchApi } from '../utils/api';
+import { wrapWithEncoding } from '../utils/wafEncoding';
 
 interface ChangeLogPageProps {
     apiUrl: string;
@@ -55,11 +56,11 @@ const ChangeLogPage: React.FC<ChangeLogPageProps> = ({ apiUrl, showToast, setIsS
             const response = await fetchApi(`${apiUrl}/api/change-requests`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
+                body: JSON.stringify(wrapWithEncoding({
                     title: newRequest.title,
                     description: newRequest.description,
-                    requester: 'Usuário Atual', // In a real app, this would come from auth
-                }),
+                    requester: 'Usuário Atual',
+                }, ['description'])),
                 credentials: 'include'
             });
 

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Operation, LitigationComment } from '../types';
 import RichTextEditor from './RichTextEditor';
 import { fetchApi } from '../utils/api';
+import { wrapWithEncoding } from '../utils/wafEncoding';
 import { Users, Plus, Edit2, Trash2 } from 'lucide-react';
 
 interface Props {
@@ -37,7 +38,7 @@ const LitigationCommentsSection: React.FC<Props> = ({
             const response = await fetchApi(endpoint, {
                 method,
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ description: commentText, userName: 'Analista' }),
+                body: JSON.stringify(wrapWithEncoding({ description: commentText, userName: 'Analista' }, ['description'])),
             });
             
             if (response.ok) {

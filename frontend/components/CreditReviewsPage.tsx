@@ -5,6 +5,7 @@ import { TaskStatus } from '../types';
 import { PencilIcon, CheckCircleIcon, ArrowUpIcon, ArrowDownIcon } from './icons/Icons';
 import RichTextEditor from './RichTextEditor';
 import { fetchApi } from '../utils/api';
+import { wrapWithEncoding } from '../utils/wafEncoding';
 
 interface CreditReviewsPageProps {
   operations: Operation[];
@@ -167,11 +168,11 @@ interface CreditReviewsPageProps {
           const response = await fetchApi(`${apiUrl}/api/operation_review_notes`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
+              body: JSON.stringify(wrapWithEncoding({
                   operationId: editingOpId,
                   notes: editingNotes,
                   userName: opToUpdate.responsibleAnalyst
-              }),
+              }, ['notes'])),
               credentials: 'include'
           });
           if (!response.ok) throw new Error('Falha ao salvar a observação.');

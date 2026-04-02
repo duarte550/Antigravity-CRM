@@ -10,6 +10,7 @@ import ReviewCompletionForm from './ReviewCompletionForm';
 import AnalystCalendar from './AnalystCalendar';
 import type { WatchlistStatus, Rating, Sentiment } from '../types';
 import { fetchApi, autoCreateComiteReviewItem } from '../utils/api';
+import { wrapWithEncoding } from '../utils/wafEncoding';
 
 interface AnalystHubProps {
   operations: Operation[];
@@ -89,7 +90,7 @@ const AnalystHub: React.FC<AnalystHubProps> = ({
       const response = await fetchApi(`${apiUrl}/api/analyst-notes/${encodeURIComponent(selectedAnalyst)}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ notes: analystNotes })
+        body: JSON.stringify(wrapWithEncoding({ notes: analystNotes }, ['notes']))
       });
       if (response.ok) {
         showToast('Notas salvas!', 'success');

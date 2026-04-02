@@ -10,6 +10,7 @@ from utils import safe_isoformat, parse_iso_date, get_next_unique_id
 from operations import load_operations, save_operation, create_operation
 from collections import defaultdict
 import json
+import base64
 import logging
 
 from master_groups import master_groups_bp
@@ -71,6 +72,25 @@ FREQUENCY_VALUE_MAP = {
     'Diário': 1, 'Semanal': 7, 'Quinzenal': 15, 'Mensal': 30,
     'Trimestral': 90, 'Semestral': 180, 'Anual': 365
 }
+
+def decode_if_waf_encoded(data: dict, *fields: str) -> dict:
+    """Decodifica campos HTML que foram codificados em Base64 pelo frontend
+    para contornar o Azure WAF (que bloqueia HTML no body com 403
+    mediatypeblockedupload). Retorna um novo dict com os campos decodificados.
+
+    Uso: data = decode_if_waf_encoded(data, 'notes', 'description')
+    """
+    if not data.get('__html_encoded'):
+        return data
+    result = dict(data)
+    for field in fields:
+        v = result.get(field)
+        if v:
+            try:
+                result[field] = base64.b64decode(v).decode('utf-8')
+            except Exception:
+                pass  # Mantém o valor original em caso de falha de decodificação
+    return result
 
 
 def format_row(row, cursor):
@@ -462,6 +482,28 @@ def sync_operation_events(op_id):
         data = request.get_json(force=True, silent=True) or {}
         events_payload = data.get('events', [])
         user_name = data.get('responsibleAnalyst', 'System')
+        html_encoded = data.get('__html_encoded', False)
+
+        # Se o frontend codificou os campos HTML em Base64 para contornar o Azure WAF,
+        # decodifica antes de processar. Campos não preenchidos retornam string vazia.
+        def decode_html_field(value):
+            if not html_encoded or not value:
+                return value
+            try:
+                return base64.b64decode(value).decode('utf-8')
+            except Exception:
+                return value  # Fallback: usa o valor original se a decodificação falhar
+
+        if html_encoded:
+            decoded_events = []
+            for ev in events_payload:
+                decoded_events.append({
+                    **ev,
+                    'description':     decode_html_field(ev.get('description')),
+                    'nextSteps':       decode_html_field(ev.get('nextSteps')),
+                    'attentionPoints': decode_html_field(ev.get('attentionPoints')),
+                })
+            events_payload = decoded_events
 
         with conn.cursor() as cursor:
             # 1. Carrega os eventos atuais do banco para esta operação
@@ -749,7 +791,9 @@ def get_audit_logs():
 def manage_operation_review_notes():
     conn = db.get_db_connection()
     try:
-        data = request.json
+        data = request.get_json(force=True, silent=True) or {}
+        data = decode_if_waf_encoded(data, 'notes')
+        notes = data.get('notes', '')
         with conn.cursor() as cursor:
             # Using MERGE for "upsert" logic
             cursor.execute("""
@@ -762,13 +806,13 @@ def manage_operation_review_notes():
                     INSERT (operation_id, notes, updated_at, updated_by)
                     VALUES (?, ?, ?, ?)
             """, (
-                data['operationId'], 
-                data['notes'], datetime.now(), data.get('userName', 'System'), # for UPDATE
-                data['operationId'], data['notes'], datetime.now(), data.get('userName', 'System') # for INSERT
+                data['operationId'],
+                notes, datetime.now(), data.get('userName', 'System'), # for UPDATE
+                data['operationId'], notes, datetime.now(), data.get('userName', 'System') # for INSERT
             ))
             log_action(cursor, data.get('userName', 'System'), 'UPDATE', 'OperationReviewNote', data['operationId'], f"Nota de revisão para operação {data['operationId']} atualizada.")
         conn.commit()
-        return jsonify({'status': 'success', 'operationId': data['operationId'], 'notes': data['notes']}), 200
+        return jsonify({'status': 'success', 'operationId': data['operationId'], 'notes': notes}), 200
     except Exception as e:
         app.logger.error(f"Error saving operation review note: {e}", exc_info=True)
         return jsonify({'error': str(e)}), 500
@@ -791,7 +835,8 @@ def manage_change_requests():
                 return jsonify(requests)
         
         elif request.method == 'POST':
-            data = request.json
+            data = request.get_json(force=True, silent=True) or {}
+            data = decode_if_waf_encoded(data, 'description')
             now = datetime.now()
             with conn.cursor() as cursor:
                 new_id = get_next_unique_id(cursor, 'change_requests')
@@ -854,7 +899,8 @@ def manage_analyst_notes(analyst_name):
                 row = cursor.fetchone()
                 return jsonify({'notes': row[0] if row else ""})
             else:
-                data = request.json
+                data = request.get_json(force=True, silent=True) or {}
+                data = decode_if_waf_encoded(data, 'notes')
                 notes = data.get('notes', '')
                 cursor.execute(f"""
                     MERGE INTO cri_cra_dev.crm.analyst_notes AS target
@@ -930,7 +976,8 @@ def manage_operation_risk(op_id, risk_id):
 def add_operation_litigation_comment(op_id):
     conn = db.get_db_connection()
     try:
-        data = request.json
+        data = request.get_json(force=True, silent=True) or {}
+        data = decode_if_waf_encoded(data, 'description')
         now = datetime.now()
         with conn.cursor() as cursor:
             comment_id = get_next_unique_id(cursor, 'operation_litigation_comments')
@@ -955,7 +1002,8 @@ def manage_operation_litigation_comment(op_id, comment_id):
     conn = db.get_db_connection()
     try:
         if request.method == 'PUT':
-            data = request.json
+            data = request.get_json(force=True, silent=True) or {}
+            data = decode_if_waf_encoded(data, 'description')
             now = datetime.now()
             with conn.cursor() as cursor:
                 cursor.execute(

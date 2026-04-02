@@ -1,4 +1,5 @@
 import json
+import base64
 import logging
 from datetime import datetime, date
 from collections import defaultdict
@@ -424,6 +425,17 @@ def save_operation(cursor, op_id: int, data: dict, user_name: str = 'System') ->
 
     client_event_id_to_db_id_map = {}
     
+    html_encoded = data.get('__html_encoded', False)
+
+    def _decode_html(v):
+        """Decodifica um campo HTML codificado em Base64 pelo frontend (anti-WAF)."""
+        if not html_encoded or not v:
+            return v
+        try:
+            return base64.b64decode(v).decode('utf-8')
+        except Exception:
+            return v  # Fallback: usa o valor sem decodificar
+
     for event in data.get('events', []):
         event_id = str(event.get('id'))
         
@@ -436,7 +448,7 @@ def save_operation(cursor, op_id: int, data: dict, user_name: str = 'System') ->
 
         if event_id not in db_event_ids:
             db_event_id = get_next_unique_id(cursor, 'events')
-            cursor.execute("INSERT INTO cri_cra_dev.crm.events (id, operation_id, date, type, title, description, registered_by, next_steps, completed_task_id, attention_points, our_attendees, operation_attendees) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", (db_event_id, op_id, event.get('date'), event.get('type'), event.get('title'), event.get('description'), event.get('registeredBy'), event.get('nextSteps'), event.get('completedTaskId'), event.get('attentionPoints'), event.get('ourAttendees'), event.get('operationAttendees')))
+            cursor.execute("INSERT INTO cri_cra_dev.crm.events (id, operation_id, date, type, title, description, registered_by, next_steps, completed_task_id, attention_points, our_attendees, operation_attendees) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", (db_event_id, op_id, event.get('date'), event.get('type'), event.get('title'), _decode_html(event.get('description')), event.get('registeredBy'), _decode_html(event.get('nextSteps')), event.get('completedTaskId'), _decode_html(event.get('attentionPoints')), event.get('ourAttendees'), event.get('operationAttendees')))
             client_event_id_to_db_id_map[event_id] = db_event_id
             log_action(cursor, event.get('registeredBy'), 'CREATE', 'Event', db_event_id, f"Evento '{event.get('title')}' adicionado.")
         else:
@@ -460,7 +472,7 @@ def save_operation(cursor, op_id: int, data: dict, user_name: str = 'System') ->
             if changed:
                 cursor.execute(
                     "UPDATE cri_cra_dev.crm.events SET date=?, type=?, title=?, description=?, registered_by=?, next_steps=?, completed_task_id=?, attention_points=?, our_attendees=?, operation_attendees=? WHERE id=?",
-                    (event.get('date'), event.get('type'), event.get('title'), event.get('description'), event.get('registeredBy'), event.get('nextSteps'), event.get('completedTaskId'), event.get('attentionPoints'), event.get('ourAttendees'), event.get('operationAttendees'), event_id)
+                    (event.get('date'), event.get('type'), event.get('title'), _decode_html(event.get('description')), event.get('registeredBy'), _decode_html(event.get('nextSteps')), event.get('completedTaskId'), _decode_html(event.get('attentionPoints')), event.get('ourAttendees'), event.get('operationAttendees'), event_id)
                 )
                 log_action(cursor, event.get('registeredBy'), 'UPDATE', 'Event', event_id, f"Evento '{event.get('title')}' atualizado.")
 

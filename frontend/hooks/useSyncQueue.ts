@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import type { Operation } from '../types';
+import { encodeHtmlField, wrapWithEncoding } from '../utils/wafEncoding';
 import { fetchApi } from '../utils/api';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -125,12 +126,24 @@ function requiresEventsOnlySync(op: Operation): boolean {
   }
 }
 
+
 function buildEventsPayload(op: Operation): Record<string, any> {
-  return {
-    responsibleAnalyst: op.responsibleAnalyst,
-    events: (op as any).events ?? [],
-  };
+  const events = ((op as any).events ?? []) as any[];
+  // encodeHtmlField + __html_encoded via wrapWithEncoding (importado de wafEncoding.ts)
+  return wrapWithEncoding(
+    {
+      responsibleAnalyst: op.responsibleAnalyst,
+      events: events.map(e => ({
+        ...e,
+        description:     encodeHtmlField(e.description),
+        nextSteps:       encodeHtmlField(e.nextSteps),
+        attentionPoints: encodeHtmlField(e.attentionPoints),
+      })),
+    },
+    [] // campos já codificados manualmente acima; __html_encoded é adicionado pelo wrapWithEncoding
+  );
 }
+
 
 function buildPatchPayload(op: Operation): Record<string, any> {
   const raw = localStorage.getItem(`op_snapshot_${op.id}`);
