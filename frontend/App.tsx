@@ -33,7 +33,7 @@ import AdminPanel from './components/AdminPanel';
 import AppHeader from './components/AppHeader';
 import { useAuth } from './contexts/AuthContext';
 import { fetchApi, autoCreateComiteReviewItem, API_BASE } from './utils/api';
-import { useSyncQueue } from './hooks/useSyncQueue';
+import { useSyncQueue, saveSnapshot } from './hooks/useSyncQueue';
 import { useNavigation } from './hooks/useNavigation';
 import { buildReviewUpdate } from './utils/reviewLogic';
 import type { ReviewSaveData } from './utils/reviewLogic';
@@ -188,6 +188,10 @@ const App: React.FC = () => {
       if (response.status === 404) return null;
       if (!response.ok) throw new Error('Falha ao carregar detalhes da operação');
       const fullOperation = await response.json();
+      // Cria snapshot baseline para que buildEventsPayload calcule corretamente
+      // o delta de eventos. Sem isso, operações com 150 eventos existentes
+      // seriam todas consideradas "novas" no próximo sync.
+      saveSnapshot(fullOperation);
       setOperations(prev => prev.map(op => op.id === operationId ? fullOperation : op));
       return fullOperation;
     } catch (err) {

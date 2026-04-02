@@ -223,8 +223,12 @@ function buildPatchPayload(op: Operation): Record<string, any> {
   return patch;
 }
 
-/** Salva apenas os campos que determinam full vs patch sync — não o objeto inteiro. */
-function saveSnapshot(op: Operation) {
+/**
+ * Salva snapshot para calcular deltas futuros.
+ * EXPORTADA para que App.tsx crie a baseline ao carregar dados da API.
+ * Sem isso, o delta compara contra snapshot vazio e envia TODOS os eventos.
+ */
+export function saveSnapshot(op: Operation) {
   const slim: Record<string, any> = { id: op.id };
   for (const field of FULL_SYNC_FIELDS) {
     slim[field] = (op as any)[field] ?? null;
