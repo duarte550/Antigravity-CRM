@@ -446,46 +446,47 @@ export function useSyncQueue(
             // o bloqueio do WAF. Agora que o bulk-update teve sucesso, sincronizamos
             // os eventos separadamente via o endpoint dedicado.
             if (useFullSync && opEvents.length > 0) {
-              // Salva o snapshot ANTES de chamar buildEventsPayload para que o delta
-              // seja vazio (bulk-update já sincronizou tudo exceto eventos) e o
-              // buildEventsPayload detecte apenas os novos/alterados eventos.
-              // Em seguida enviamos TODOS os eventos atuais em batches pequenos
-              // para garantir que o banco esteja completo após o primeiro sync.
               const BATCH_SIZE = 10; // eventos por request — ~10-30 KB por batch
               const batches: any[][] = [];
               for (let i = 0; i < opEvents.length; i += BATCH_SIZE) {
                 batches.push(opEvents.slice(i, i + BATCH_SIZE));
               }
-              let batchFailed = false;
-              for (const batch of batches) {
-                try {
-                  const batchPayload = wrapWithEncoding(
-                    {
-                      responsibleAnalyst: op.responsibleAnalyst,
-                      events: batch.map((e: any) => ({
-                        ...e,
-                        description:     encodeHtmlField(e.description),
-                        nextSteps:       encodeHtmlField(e.nextSteps),
-                        attentionPoints: encodeHtmlField(e.attentionPoints),
-                      })),
-                    },
-                    []
-                  );
-                  await fetchWithTimeout(`${apiBaseUrl}/api/operations/${op.id}/sync-events`, {
+              // Itera os batches. Qualquer falha relança o erro para o catch externo,
+              // acionando o mecanismo de retry/dead-letter e IMPEDINDO que a operação
+              // seja marcada como sucesso sem que os eventos tenham sido persistidos.
+              // (bulk-update é idempotente e será re-executado na próxima tentativa.)
+              for (let bi = 0; bi < batches.length; bi++) {
+                const batch = batches[bi];
+                const batchPayload = wrapWithEncoding(
+                  {
+                    responsibleAnalyst: op.responsibleAnalyst,
+                    events: batch.map((e: any) => ({
+                      ...e,
+                      description:     encodeHtmlField(e.description),
+                      nextSteps:       encodeHtmlField(e.nextSteps),
+                      attentionPoints: encodeHtmlField(e.attentionPoints),
+                    })),
+                  },
+                  []
+                );
+                const batchResp = await fetchWithTimeout(
+                  `${apiBaseUrl}/api/operations/${op.id}/sync-events`,
+                  {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(batchPayload),
                     credentials: 'include',
-                  });
-                } catch (evtErr) {
-                  console.warn(`[SyncQueue] Op ${op.id}: batch de eventos falhou:`, evtErr);
-                  batchFailed = true;
-                  break;
+                  }
+                );
+                if (!batchResp.ok) {
+                  const errText = await batchResp.text().catch(() => String(batchResp.status));
+                  // Lança para o catch externo → retry/dead-letter normal
+                  throw new Error(`sync-events batch ${bi + 1}/${batches.length} HTTP ${batchResp.status}: ${errText}`);
                 }
               }
-              if (!batchFailed) {
-                console.log(`[SyncQueue] Op ${op.id}: ${opEvents.length} eventos sincronizados pós full-sync em ${batches.length} batch(es).`);
-              }
+              console.log(
+                `[SyncQueue] Op ${op.id}: ${opEvents.length} eventos sincronizados em ${batches.length} batch(es).`
+              );
             }
 
             successfulIds.add(op.id);
