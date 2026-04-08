@@ -202,9 +202,11 @@ function buildEventsPayload(op: Operation): Record<string, any> {
       responsibleAnalyst: op.responsibleAnalyst,
       events: deltaEvents.map(e => ({
         ...e,
-        description:     encodeHtmlField(e.description),
-        nextSteps:       encodeHtmlField(e.nextSteps),
-        attentionPoints: encodeHtmlField(e.attentionPoints),
+        description:      encodeHtmlField(e.description),
+        nextSteps:        encodeHtmlField(e.nextSteps),
+        attentionPoints:  encodeHtmlField(e.attentionPoints),
+        ourAttendees:     encodeHtmlField(e.ourAttendees),
+        operationAttendees: encodeHtmlField(e.operationAttendees),
       })),
     },
     [] // campos já codificados manualmente; __html_encoded adicionado pelo wrapWithEncoding
@@ -466,9 +468,11 @@ export function useSyncQueue(
                     responsibleAnalyst: op.responsibleAnalyst,
                     events: batch.map((e: any) => ({
                       ...e,
-                      description:     encodeHtmlField(e.description),
-                      nextSteps:       encodeHtmlField(e.nextSteps),
-                      attentionPoints: encodeHtmlField(e.attentionPoints),
+                      description:      encodeHtmlField(e.description),
+                      nextSteps:        encodeHtmlField(e.nextSteps),
+                      attentionPoints:  encodeHtmlField(e.attentionPoints),
+                      ourAttendees:     encodeHtmlField(e.ourAttendees),
+                      operationAttendees: encodeHtmlField(e.operationAttendees),
                     })),
                   },
                   []

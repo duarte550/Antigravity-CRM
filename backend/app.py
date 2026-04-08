@@ -502,6 +502,8 @@ def sync_operation_events(op_id):
                     'description':     decode_html_field(ev.get('description')),
                     'nextSteps':       decode_html_field(ev.get('nextSteps')),
                     'attentionPoints': decode_html_field(ev.get('attentionPoints')),
+                    'ourAttendees':    decode_html_field(ev.get('ourAttendees')),
+                    'operationAttendees': decode_html_field(ev.get('operationAttendees')),
                 })
             events_payload = decoded_events
 

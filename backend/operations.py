@@ -448,7 +448,7 @@ def save_operation(cursor, op_id: int, data: dict, user_name: str = 'System') ->
 
         if event_id not in db_event_ids:
             db_event_id = get_next_unique_id(cursor, 'events')
-            cursor.execute("INSERT INTO cri_cra_dev.crm.events (id, operation_id, date, type, title, description, registered_by, next_steps, completed_task_id, attention_points, our_attendees, operation_attendees) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", (db_event_id, op_id, event.get('date'), event.get('type'), event.get('title'), _decode_html(event.get('description')), event.get('registeredBy'), _decode_html(event.get('nextSteps')), event.get('completedTaskId'), _decode_html(event.get('attentionPoints')), event.get('ourAttendees'), event.get('operationAttendees')))
+            cursor.execute("INSERT INTO cri_cra_dev.crm.events (id, operation_id, date, type, title, description, registered_by, next_steps, completed_task_id, attention_points, our_attendees, operation_attendees) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", (db_event_id, op_id, event.get('date'), event.get('type'), event.get('title'), _decode_html(event.get('description')), event.get('registeredBy'), _decode_html(event.get('nextSteps')), event.get('completedTaskId'), _decode_html(event.get('attentionPoints')), _decode_html(event.get('ourAttendees')), _decode_html(event.get('operationAttendees'))))
             client_event_id_to_db_id_map[event_id] = db_event_id
             log_action(cursor, event.get('registeredBy'), 'CREATE', 'Event', db_event_id, f"Evento '{event.get('title')}' adicionado.")
         else:
@@ -472,7 +472,7 @@ def save_operation(cursor, op_id: int, data: dict, user_name: str = 'System') ->
             if changed:
                 cursor.execute(
                     "UPDATE cri_cra_dev.crm.events SET date=?, type=?, title=?, description=?, registered_by=?, next_steps=?, completed_task_id=?, attention_points=?, our_attendees=?, operation_attendees=? WHERE id=?",
-                    (event.get('date'), event.get('type'), event.get('title'), _decode_html(event.get('description')), event.get('registeredBy'), _decode_html(event.get('nextSteps')), event.get('completedTaskId'), _decode_html(event.get('attentionPoints')), event.get('ourAttendees'), event.get('operationAttendees'), event_id)
+                    (event.get('date'), event.get('type'), event.get('title'), _decode_html(event.get('description')), event.get('registeredBy'), _decode_html(event.get('nextSteps')), event.get('completedTaskId'), _decode_html(event.get('attentionPoints')), _decode_html(event.get('ourAttendees')), _decode_html(event.get('operationAttendees')), event_id)
                 )
                 log_action(cursor, event.get('registeredBy'), 'UPDATE', 'Event', event_id, f"Evento '{event.get('title')}' atualizado.")
 

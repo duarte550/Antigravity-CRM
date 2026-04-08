@@ -76,6 +76,9 @@ def fetch_full_master_group(cursor, mg_id):
         'registeredBy': e.get('registered_by'), 'nextSteps': e.get('next_steps'),
         'isOrigination': e.get('is_origination') or False,
         'completedTaskId': e.get('completed_task_id'),
+        'attentionPoints': e.get('attention_points'),
+        'ourAttendees': e.get('our_attendees'),
+        'operationAttendees': e.get('operation_attendees'),
         'operationName': e.get('operation_name')
     } for e in events]
     
@@ -385,6 +388,9 @@ def get_structuring_operations():
                     'type': e.get('type'), 'title': e.get('title'), 'description': e.get('description'),
                     'registeredBy': e.get('registered_by'), 'nextSteps': e.get('next_steps'),
                     'completedTaskId': e.get('completed_task_id'),
+                    'attentionPoints': e.get('attention_points'),
+                    'ourAttendees': e.get('our_attendees'),
+                    'operationAttendees': e.get('operation_attendees'),
                     'isOrigination': e.get('is_origination') or False,
                     'operationStageId': e.get('operation_stage_id'),
                     'structuringOperationStageId': e.get('operation_stage_id')
@@ -459,6 +465,9 @@ def manage_structuring_operation(so_id):
                     'type': e.get('type'), 'title': e.get('title'), 'description': e.get('description'),
                     'registeredBy': e.get('registered_by'), 'nextSteps': e.get('next_steps'),
                     'completedTaskId': e.get('completed_task_id'),
+                    'attentionPoints': e.get('attention_points'),
+                    'ourAttendees': e.get('our_attendees'),
+                    'operationAttendees': e.get('operation_attendees'),
                     'isOrigination': e.get('is_origination') or False,
                     'operationStageId': e.get('operation_stage_id'),
                     'structuringOperationStageId': e.get('operation_stage_id')
@@ -618,8 +627,8 @@ def add_master_group_event(mg_id):
         data = request.json
         with conn.cursor() as cursor:
             event_id = get_next_unique_id(cursor, 'events')
-            cursor.execute("INSERT INTO cri_cra_dev.crm.events (id, master_group_id, date, type, title, description, registered_by, next_steps, is_origination) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                           (event_id, mg_id, parse_iso_date(data.get('date')), data.get('type'), data.get('title'), data.get('description'), data.get('registeredBy'), data.get('nextSteps'), data.get('isOrigination', False)))
+            cursor.execute("INSERT INTO cri_cra_dev.crm.events (id, master_group_id, date, type, title, description, registered_by, next_steps, attention_points, our_attendees, operation_attendees, is_origination) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                           (event_id, mg_id, parse_iso_date(data.get('date')), data.get('type'), data.get('title'), data.get('description'), data.get('registeredBy'), data.get('nextSteps'), data.get('attentionPoints'), data.get('ourAttendees'), data.get('operationAttendees'), data.get('isOrigination', False)))
             conn.commit()
             return jsonify({"status": "success"}), 201
     except Exception as e:
@@ -634,8 +643,8 @@ def add_structuring_operation_event(so_id):
         data = request.json
         with conn.cursor() as cursor:
             new_id = get_next_unique_id(cursor, 'events')
-            cursor.execute("INSERT INTO cri_cra_dev.crm.events (id, operation_id, date, type, title, description, registered_by, next_steps, is_origination, operation_stage_id, completed_task_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                           (new_id, so_id, parse_iso_date(data.get('date')), data.get('type'), data.get('title'), data.get('description'), data.get('registeredBy'), data.get('nextSteps'), True, data.get('structuringOperationStageId'), data.get('completedTaskId')))
+            cursor.execute("INSERT INTO cri_cra_dev.crm.events (id, operation_id, date, type, title, description, registered_by, next_steps, attention_points, our_attendees, operation_attendees, is_origination, operation_stage_id, completed_task_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                           (new_id, so_id, parse_iso_date(data.get('date')), data.get('type'), data.get('title'), data.get('description'), data.get('registeredBy'), data.get('nextSteps'), data.get('attentionPoints'), data.get('ourAttendees'), data.get('operationAttendees'), True, data.get('structuringOperationStageId'), data.get('completedTaskId')))
             conn.commit()
             return jsonify({"status": "success", "id": new_id}), 201
     except Exception as e:
