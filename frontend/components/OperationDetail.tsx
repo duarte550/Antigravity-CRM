@@ -19,6 +19,7 @@ import RiskForm from './RiskForm';
 import { X, Edit2, Plus, Trash2, AlertTriangle, Users } from 'lucide-react';
 import RichTextEditor from './RichTextEditor';
 import { fetchApi, autoCreateComiteReviewItem } from '../utils/api';
+import { wrapWithEncoding } from '../utils/wafEncoding';
 
 interface OperationDetailProps {
   operation: Operation;
@@ -105,13 +106,34 @@ const OperationDetail: React.FC<OperationDetailProps> = ({ operation, onUpdateOp
 
     const handleSaveNotes = async () => {
         setIsSavingNotes(true);
+        setIsSyncing(true);
         try {
-            await onUpdateOperation({ ...operation, notes });
+            const response = await fetchApi(`${apiUrl}/api/operation_review_notes`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(wrapWithEncoding({
+                    operationId: operation.id,
+                    notes: notes,
+                    userName: operation.responsibleAnalyst
+                }, ['notes'])),
+                credentials: 'include'
+            });
+            if (!response.ok) throw new Error('Falha ao salvar as notas.');
+
+            const savedNote = await response.json();
+            
+            // Update local state only (syncToBackend = false) to avoid polluting sync queue cache
+            const updatedOperation = { ...operation, notes: savedNote.notes };
+            await onUpdateOperation(updatedOperation, false);
+            
             setIsEditingNotes(false);
+            showToast('Notas salvas com sucesso!', 'success');
         } catch (error) {
             console.error('Error saving notes:', error);
+            showToast('Erro ao salvar notas.', 'error');
         } finally {
             setIsSavingNotes(false);
+            setIsSyncing(false);
         }
     };
 
