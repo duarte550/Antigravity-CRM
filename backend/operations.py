@@ -78,7 +78,7 @@ def map_operation_base(db_row: dict) -> dict:
         'movedToLegacyDate': safe_isoformat(db_row.get('moved_to_legacy_date')),
         'wasStructured': db_row.get('was_structured') or False,
         'projects': [], 'guarantees': [], 'events': [], 'taskRules': [], 
-        'ratingHistory': [], 'tasks': [], 'contacts': [], 'litigationComments': [],
+        'ratingHistory': [], 'tasks': [], 'contacts': [], 'litigationComments': [], 'risks': [],
         'notes': None
     }
 
